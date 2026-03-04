@@ -46,3 +46,6 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
+markers = [
+    "integration: requires a running FerretDB/MongoDB instance",
+]

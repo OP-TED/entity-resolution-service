@@ -1,7 +1,16 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
+from pymongo.asynchronous.database import AsyncDatabase
 
+from ers.adapters.mongodb import (
+    MongoCanonicalEntityRepository,
+    MongoCollections,
+    MongoDecisionRepository,
+    MongoEntityMentionRepository,
+    MongoStatisticsRepository,
+    MongoUserActionRepository,
+)
 from ers.application.ports.canonical_entity_repository import (
     CanonicalEntityRepository,
 )
@@ -18,27 +27,45 @@ from ers.application.services import (
 )
 
 
+def _get_database(request: Request) -> AsyncDatabase:
+    return request.app.state.mongo_db
+
+
+def _get_collections(request: Request) -> MongoCollections:
+    return MongoCollections(_get_database(request))
+
+
 # Repository providers
 
 
-async def get_decision_repository() -> DecisionRepository:
-    raise NotImplementedError("Decision repository adapter not configured")
+async def get_decision_repository(
+    collections: Annotated[MongoCollections, Depends(_get_collections)],
+) -> DecisionRepository:
+    return MongoDecisionRepository(collections.decisions)
 
 
-async def get_entity_mention_repository() -> EntityMentionRepository:
-    raise NotImplementedError("EntityMention repository adapter not configured")
+async def get_entity_mention_repository(
+    collections: Annotated[MongoCollections, Depends(_get_collections)],
+) -> EntityMentionRepository:
+    return MongoEntityMentionRepository(collections.entity_mentions)
 
 
-async def get_canonical_entity_repository() -> CanonicalEntityRepository:
-    raise NotImplementedError("CanonicalEntity repository adapter not configured")
+async def get_canonical_entity_repository(
+    collections: Annotated[MongoCollections, Depends(_get_collections)],
+) -> CanonicalEntityRepository:
+    return MongoCanonicalEntityRepository(collections.canonical_entities)
 
 
-async def get_user_action_repository() -> UserActionRepository:
-    raise NotImplementedError("UserAction repository adapter not configured")
+async def get_user_action_repository(
+    collections: Annotated[MongoCollections, Depends(_get_collections)],
+) -> UserActionRepository:
+    return MongoUserActionRepository(collections.user_actions)
 
 
-async def get_statistics_repository() -> StatisticsRepository:
-    raise NotImplementedError("Statistics repository adapter not configured")
+async def get_statistics_repository(
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
+) -> StatisticsRepository:
+    return MongoStatisticsRepository(db)
 
 
 # Service providers

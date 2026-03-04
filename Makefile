@@ -25,6 +25,7 @@ help: ## Display available targets
 	@ echo "    install              - Install project dependencies via Poetry"
 	@ echo "    install-poetry       - Install Poetry if not present"
 	@ echo "    build                - Build the package distribution"
+	@ echo "    seed-db              - Seed the database with mock data (requires running database and config)"
 	@ echo ""
 	@ echo -e "  $(BUILD_PRINT)Testing:$(END_BUILD_PRINT)"
 	@ echo "    test                 - Run all tests"
@@ -56,6 +57,11 @@ build: ## Build the package distribution
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Building package$(END_BUILD_PRINT)"
 	@ poetry build
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Package built successfully$(END_BUILD_PRINT)"
+
+seed-db: ## Seed the database with mock data (needs running database and config)
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Seeding database with mock data$(END_BUILD_PRINT)"
+	@ poetry run python -m scripts.seed_db
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Database seeding complete$(END_BUILD_PRINT)"
 
 #-----------------------------------------------------------------------------
 # Testing commands

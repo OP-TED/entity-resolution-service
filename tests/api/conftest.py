@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 from unittest.mock import AsyncMock, create_autospec
 
@@ -19,6 +21,11 @@ from ers.entrypoints.api.dependencies import (
     get_entity_service,
     get_statistics_service,
 )
+
+
+@asynccontextmanager
+async def _noop_lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    yield
 
 
 @pytest.fixture
@@ -55,6 +62,7 @@ def app(
     statistics_service: AsyncMock,
 ) -> FastAPI:
     app = create_app(settings=settings)
+    app.router.lifespan_context = _noop_lifespan
     app.dependency_overrides[get_decision_curation_service] = lambda: (
         decision_curation_service
     )

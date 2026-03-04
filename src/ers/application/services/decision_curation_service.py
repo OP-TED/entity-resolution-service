@@ -38,9 +38,20 @@ class DecisionCurationService:
         pagination: PaginationParams,
     ) -> PaginatedResult[DecisionSummary]:
         """List decisions with filtering, pagination, and embedded entity data."""
+        mention_identifiers = None
+        if filters.search is not None:
+            mention_identifiers = (
+                await self._entity_mention_repository.search_identifiers(
+                    filters.search,
+                )
+            )
+            if not mention_identifiers:
+                return PaginatedResult(count=0, results=[])
+
         paginated = await self._decision_repository.find_with_filters(
             filters=filters,
             pagination=pagination,
+            mention_identifiers=mention_identifiers,
         )
 
         identifiers = [d.about_entity_mention for d in paginated.results]

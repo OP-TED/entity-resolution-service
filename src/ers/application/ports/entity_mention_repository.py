@@ -17,3 +17,10 @@ class EntityMentionRepository(
         limit: int | None = None,
     ) -> list[EntityMention]:
         """Batch-fetch entity mentions by their identifiers."""
+
+    @abstractmethod
+    async def search_identifiers(
+        self,
+        text: str,
+    ) -> list[EntityMentionIdentifier]:
+        """Full-text search entity mentions and return matching identifiers."""

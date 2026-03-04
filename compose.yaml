@@ -10,7 +10,11 @@ services:
     environment:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
+      - MONGO_URI=mongodb://${POSTGRES_USER:-username}:${POSTGRES_PASSWORD:-password}@ferretdb:27017
+      - MONGO_DATABASE_NAME=${MONGO_DATABASE_NAME:-ers}
     restart: unless-stopped
+    depends_on:
+      - ferretdb
     develop:
       watch:
         - action: sync
@@ -20,3 +24,32 @@ services:
           path: ./pyproject.toml
         - action: rebuild
           path: ./poetry.lock
+    networks:
+      - local
+
+  postgres:
+    image: ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0
+    restart: on-failure
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-username}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    networks:
+      - local
+
+  ferretdb:
+    image: ghcr.io/ferretdb/ferretdb:2.7.0
+    restart: on-failure
+    ports:
+      - "27017:27017"
+    environment:
+      - FERRETDB_POSTGRESQL_URL=postgres://${POSTGRES_USER:-username}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-postgres}
+    depends_on:
+      - postgres
+    networks:
+      - local
+
+networks:
+  local:

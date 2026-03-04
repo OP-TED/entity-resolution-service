@@ -27,6 +27,9 @@ class Settings(BaseSettings):
         description="Decisions with confidence below this threshold appear in curation worklist",
     )
 
+    mongo_uri: str = "mongodb://localhost:27017"
+    mongo_database_name: str = "ers"
+
 
 def get_settings() -> Settings:
     return Settings()

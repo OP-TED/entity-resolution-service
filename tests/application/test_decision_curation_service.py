@@ -20,6 +20,7 @@ from tests.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
     EntityMentionFactory,
+    EntityMentionIdentifierFactory,
 )
 
 
@@ -107,6 +108,77 @@ class TestListDecisions:
 
         assert result.count == 0
         assert result.results == []
+
+    async def test_list_decisions_with_search_delegates_to_entity_search(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+    ) -> None:
+        identifiers = EntityMentionIdentifierFactory.batch(2)
+        decision = DecisionFactory.build(about_entity_mention=identifiers[0])
+        mention = EntityMentionFactory.build(identifiedBy=identifiers[0])
+
+        entity_mention_repository.search_identifiers.return_value = identifiers
+        decision_repository.find_with_filters.return_value = PaginatedResult(
+            count=1,
+            results=[decision],
+        )
+        entity_mention_repository.find_by_identifiers.return_value = [mention]
+
+        result = await service.list_decisions(
+            filters=DecisionFilters(search="example"),
+            pagination=PaginationParams(),
+        )
+
+        entity_mention_repository.search_identifiers.assert_called_once_with("example")
+        decision_repository.find_with_filters.assert_called_once_with(
+            filters=DecisionFilters(search="example"),
+            pagination=PaginationParams(),
+            mention_identifiers=identifiers,
+        )
+        assert result.count == 1
+
+    async def test_list_decisions_with_search_no_matches_returns_empty(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+    ) -> None:
+        entity_mention_repository.search_identifiers.return_value = []
+
+        result = await service.list_decisions(
+            filters=DecisionFilters(search="nonexistent"),
+            pagination=PaginationParams(),
+        )
+
+        assert result.count == 0
+        assert result.results == []
+        decision_repository.find_with_filters.assert_not_called()
+
+    async def test_list_decisions_without_search_skips_entity_search(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+    ) -> None:
+        decision_repository.find_with_filters.return_value = PaginatedResult(
+            count=0,
+            results=[],
+        )
+        entity_mention_repository.find_by_identifiers.return_value = []
+
+        await service.list_decisions(
+            filters=DecisionFilters(),
+            pagination=PaginationParams(),
+        )
+
+        entity_mention_repository.search_identifiers.assert_not_called()
+        decision_repository.find_with_filters.assert_called_once_with(
+            filters=DecisionFilters(),
+            pagination=PaginationParams(),
+            mention_identifiers=None,
+        )
 
 
 class TestGetDecision:

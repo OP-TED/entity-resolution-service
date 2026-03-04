@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 from polyfactory.factories.pydantic_factory import ModelFactory
@@ -61,8 +62,20 @@ class EntityMentionFactory(ModelFactory):
         return '{"name": "Example Entity"}'
 
     @classmethod
+    def _payload(cls) -> dict:
+        faker = cls.__faker__
+
+        return {
+            "name": faker.company(),
+            "registration_number": faker.bothify(text="??########"),
+            "country": faker.country_code(),
+            "city": faker.city(),
+            "email": faker.company_email(),
+        }
+
+    @classmethod
     def parsed_representation(cls) -> str:
-        return '{"name": "Example Entity"}'
+        return f"{json.dumps(cls._payload())}"
 
 
 class CanonicalEntityIdentifierFactory(ModelFactory):
@@ -101,8 +114,8 @@ class DecisionFactory(ModelFactory):
         return datetime.now(timezone.utc)
 
     @classmethod
-    def updated_at(cls) -> None:
-        return None
+    def updated_at(cls) -> datetime:
+        return datetime.now(timezone.utc)
 
 
 class UserActionFactory(ModelFactory):
