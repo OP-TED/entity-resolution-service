@@ -7,9 +7,6 @@ from ers.application.dtos import (
     PaginationParams,
 )
 from ers.application.exceptions import NotFoundError
-from ers.application.ports.canonical_entity_repository import (
-    CanonicalEntityRepository,
-)
 from ers.application.ports.decision_repository import DecisionRepository
 from ers.application.ports.entity_mention_repository import EntityMentionRepository
 
@@ -22,11 +19,9 @@ class CanonicalEntityService:
     def __init__(
         self,
         decision_repository: DecisionRepository,
-        canonical_entity_repository: CanonicalEntityRepository,
         entity_mention_repository: EntityMentionRepository,
     ) -> None:
         self._decision_repository = decision_repository
-        self._canonical_entity_repository = canonical_entity_repository
         self._entity_mention_repository = entity_mention_repository
 
     async def get_proposed_canonical_entity(
@@ -36,7 +31,7 @@ class CanonicalEntityService:
         """Get the proposed (highest-confidence) canonical entity preview.
 
         Raises:
-            NotFoundError: If the decision or canonical entity does not exist.
+            NotFoundError: If the decision does not exist.
         """
         decision = await self._decision_repository.find_by_id(decision_id)
         if decision is None:
@@ -91,14 +86,13 @@ class CanonicalEntityService:
         confidence_score: float,
         similarity_score: float,
     ) -> CanonicalEntityPreview:
-        canonical_entity = await self._canonical_entity_repository.find_by_id(
+        mention_ids = await self._decision_repository.find_mention_ids_by_cluster(
             cluster_id,
+            limit=self.DEFAULT_TOP_ENTITIES_LIMIT,
         )
-        if canonical_entity is None:
-            raise NotFoundError("CanonicalEntity", cluster_id)
 
         entity_mentions = await self._entity_mention_repository.find_by_identifiers(
-            identifiers=canonical_entity.equivalent_to,
+            identifiers=mention_ids,
             limit=self.DEFAULT_TOP_ENTITIES_LIMIT,
         )
 

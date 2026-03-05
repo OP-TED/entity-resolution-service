@@ -73,15 +73,34 @@ class MongoStatisticsRepository(StatisticsRepositoryPort):
         total_entity_mentions = await self._collections.entity_mentions.count_documents(
             entity_filter
         )
-        total_canonical_entities = (
-            await self._collections.canonical_entities.count_documents({})
-        )
 
-        avg_pipeline: list[dict] = [
-            {"$project": {"size": {"$size": {"$ifNull": ["$equivalent_to", []]}}}},
-            {"$group": {"_id": None, "avg": {"$avg": "$size"}}},
-        ]
-        avg_cursor = await self._collections.canonical_entities.aggregate(avg_pipeline)
+        decision_filter: dict = {}
+        if filters.entity_type is not None:
+            decision_filter["about_entity_mention.entity_type"] = (
+                filters.entity_type.value
+            )
+
+        distinct_clusters = await self._collections.decisions.distinct(
+            "current_placement.cluster_id",
+            decision_filter,
+        )
+        total_canonical_entities = len(distinct_clusters)
+
+        avg_pipeline: list[dict] = []
+        if decision_filter:
+            avg_pipeline.append({"$match": decision_filter})
+        avg_pipeline.extend(
+            [
+                {
+                    "$group": {
+                        "_id": "$current_placement.cluster_id",
+                        "count": {"$sum": 1},
+                    }
+                },
+                {"$group": {"_id": None, "avg": {"$avg": "$count"}}},
+            ]
+        )
+        avg_cursor = await self._collections.decisions.aggregate(avg_pipeline)
         avg_result = await avg_cursor.to_list()
         average_cluster_size = avg_result[0]["avg"] if avg_result else 0.0
 

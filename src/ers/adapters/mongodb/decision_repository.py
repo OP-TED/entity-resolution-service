@@ -106,3 +106,36 @@ class MongoDecisionRepository(
             next=pagination.page + 1 if pagination.page < total_pages else None,
             results=results,
         )
+
+    async def find_mention_ids_by_cluster(
+        self,
+        cluster_id: str,
+        limit: int,
+    ) -> list[EntityMentionIdentifier]:
+        cursor = self._collection.find(
+            {"current_placement.cluster_id": cluster_id},
+            projection={"about_entity_mention": 1, "_id": 0},
+        )
+        cursor = cursor.limit(limit)
+        return [
+            EntityMentionIdentifier.model_validate(doc["about_entity_mention"])
+            async for doc in cursor
+        ]
+
+    async def count_distinct_clusters(self) -> int:
+        result = await self._collection.distinct("current_placement.cluster_id")
+        return len(result)
+
+    async def average_cluster_size(self) -> float:
+        pipeline: list[dict[str, Any]] = [
+            {
+                "$group": {
+                    "_id": "$current_placement.cluster_id",
+                    "count": {"$sum": 1},
+                }
+            },
+            {"$group": {"_id": None, "avg": {"$avg": "$count"}}},
+        ]
+        cursor = await self._collection.aggregate(pipeline)
+        result = await cursor.to_list()
+        return result[0]["avg"] if result else 0.0

@@ -4,15 +4,11 @@ from fastapi import Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.adapters.mongodb import (
-    MongoCanonicalEntityRepository,
     MongoCollections,
     MongoDecisionRepository,
     MongoEntityMentionRepository,
     MongoStatisticsRepository,
     MongoUserActionRepository,
-)
-from ers.application.ports.canonical_entity_repository import (
-    CanonicalEntityRepository,
 )
 from ers.application.ports.decision_repository import DecisionRepository
 from ers.application.ports.entity_mention_repository import EntityMentionRepository
@@ -48,12 +44,6 @@ async def get_entity_mention_repository(
     collections: Annotated[MongoCollections, Depends(_get_collections)],
 ) -> EntityMentionRepository:
     return MongoEntityMentionRepository(collections.entity_mentions)
-
-
-async def get_canonical_entity_repository(
-    collections: Annotated[MongoCollections, Depends(_get_collections)],
-) -> CanonicalEntityRepository:
-    return MongoCanonicalEntityRepository(collections.canonical_entities)
 
 
 async def get_user_action_repository(
@@ -93,16 +83,12 @@ async def get_decision_curation_service(
 
 async def get_canonical_entity_service(
     decision_repo: Annotated[DecisionRepository, Depends(get_decision_repository)],
-    canonical_repo: Annotated[
-        CanonicalEntityRepository, Depends(get_canonical_entity_repository)
-    ],
     entity_repo: Annotated[
         EntityMentionRepository, Depends(get_entity_mention_repository)
     ],
 ) -> CanonicalEntityService:
     return CanonicalEntityService(
         decision_repository=decision_repo,
-        canonical_entity_repository=canonical_repo,
         entity_mention_repository=entity_repo,
     )
 

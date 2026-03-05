@@ -8,7 +8,7 @@ from erspec.models.core import UserActionType
 from ers.adapters.mongodb import MongoCollections, MongoStatisticsRepository
 from ers.application.dtos import StatisticsFilters
 from tests.factories import (
-    CanonicalEntityIdentifierFactory,
+    ClusterReferenceFactory,
     DecisionFactory,
     EntityMentionFactory,
     UserActionFactory,
@@ -25,7 +25,6 @@ def repo(mongo_db: AsyncDatabase) -> MongoStatisticsRepository:
 async def _seed_data(db: AsyncDatabase) -> None:
     """Insert a realistic dataset across all collections."""
     from ers.adapters.mongodb import (
-        MongoCanonicalEntityRepository,
         MongoDecisionRepository,
         MongoEntityMentionRepository,
         MongoUserActionRepository,
@@ -34,7 +33,6 @@ async def _seed_data(db: AsyncDatabase) -> None:
     collections = MongoCollections(db)
     mention_repo = MongoEntityMentionRepository(collections.entity_mentions)
     decision_repo = MongoDecisionRepository(collections.decisions)
-    canonical_repo = MongoCanonicalEntityRepository(collections.canonical_entities)
     action_repo = MongoUserActionRepository(collections.user_actions)
 
     mentions = EntityMentionFactory.batch(4)
@@ -45,17 +43,25 @@ async def _seed_data(db: AsyncDatabase) -> None:
     for m in mentions:
         await mention_repo.save(m)
 
+    cluster_a = ClusterReferenceFactory.build(cluster_id="cluster-a")
+    cluster_b = ClusterReferenceFactory.build(cluster_id="cluster-b")
+
     decisions = [
-        DecisionFactory.build(about_entity_mention=mentions[0].identifiedBy),
-        DecisionFactory.build(about_entity_mention=mentions[1].identifiedBy),
-        DecisionFactory.build(about_entity_mention=mentions[2].identifiedBy),
+        DecisionFactory.build(
+            about_entity_mention=mentions[0].identifiedBy,
+            current_placement=cluster_a,
+        ),
+        DecisionFactory.build(
+            about_entity_mention=mentions[1].identifiedBy,
+            current_placement=cluster_a,
+        ),
+        DecisionFactory.build(
+            about_entity_mention=mentions[2].identifiedBy,
+            current_placement=cluster_b,
+        ),
     ]
     for d in decisions:
         await decision_repo.save(d)
-
-    canonicals = CanonicalEntityIdentifierFactory.batch(2)
-    for c in canonicals:
-        await canonical_repo.save(c)
 
     actions = [
         UserActionFactory.build(
@@ -110,7 +116,7 @@ class TestGetRegistryStatistics:
 
         assert stats.total_entity_mentions == 4
         assert stats.total_canonical_entities == 2
-        assert stats.average_cluster_size > 0
+        assert stats.average_cluster_size == 1.5
         assert stats.resolution_requests > 0
 
     async def test_empty_database(self, repo: MongoStatisticsRepository) -> None:

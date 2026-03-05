@@ -1,6 +1,6 @@
 from ers.adapters.mongodb import (
-    MongoCanonicalEntityRepository,
     MongoClientManager,
+    MongoCollections,
     MongoDecisionRepository,
     MongoEntityMentionRepository,
     MongoStatisticsRepository,
@@ -9,7 +9,7 @@ from ers.adapters.mongodb import (
 
 __all__ = [
     "MongoClientManager",
-    "MongoCanonicalEntityRepository",
+    "MongoCollections",
     "MongoDecisionRepository",
     "MongoEntityMentionRepository",
     "MongoStatisticsRepository",

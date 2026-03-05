@@ -28,3 +28,19 @@ class DecisionRepository(
                 whose ``about_entity_mention`` is in this list (used for
                 full-text search pre-filtering).
         """
+
+    @abstractmethod
+    async def find_mention_ids_by_cluster(
+        self,
+        cluster_id: str,
+        limit: int,
+    ) -> list[EntityMentionIdentifier]:
+        """Return entity mention identifiers for decisions placed in a cluster."""
+
+    @abstractmethod
+    async def count_distinct_clusters(self) -> int:
+        """Return the number of distinct cluster IDs across all decisions."""
+
+    @abstractmethod
+    async def average_cluster_size(self) -> float:
+        """Return the average number of decisions per cluster."""

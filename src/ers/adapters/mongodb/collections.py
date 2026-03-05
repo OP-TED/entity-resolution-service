@@ -7,7 +7,6 @@ class MongoCollections:
 
     DECISIONS = "decisions"
     ENTITY_MENTIONS = "entity_mentions"
-    CANONICAL_ENTITIES = "canonical_entities"
     USER_ACTIONS = "user_actions"
 
     def __init__(self, database: AsyncDatabase) -> None:
@@ -20,10 +19,6 @@ class MongoCollections:
     @property
     def entity_mentions(self) -> AsyncCollection:
         return self._db[self.ENTITY_MENTIONS]
-
-    @property
-    def canonical_entities(self) -> AsyncCollection:
-        return self._db[self.CANONICAL_ENTITIES]
 
     @property
     def user_actions(self) -> AsyncCollection:

@@ -8,14 +8,10 @@ from ers.application.dtos import (
     PaginationParams,
 )
 from ers.application.exceptions import NotFoundError
-from ers.application.ports.canonical_entity_repository import (
-    CanonicalEntityRepository,
-)
 from ers.application.ports.decision_repository import DecisionRepository
 from ers.application.ports.entity_mention_repository import EntityMentionRepository
 from ers.application.services.canonical_entity_service import CanonicalEntityService
 from tests.factories import (
-    CanonicalEntityIdentifierFactory,
     ClusterReferenceFactory,
     DecisionFactory,
     EntityMentionFactory,
@@ -29,11 +25,6 @@ def decision_repository() -> MagicMock:
 
 
 @pytest.fixture
-def canonical_entity_repository() -> MagicMock:
-    return create_autospec(CanonicalEntityRepository, instance=True)
-
-
-@pytest.fixture
 def entity_mention_repository() -> MagicMock:
     return create_autospec(EntityMentionRepository, instance=True)
 
@@ -41,12 +32,10 @@ def entity_mention_repository() -> MagicMock:
 @pytest.fixture
 def service(
     decision_repository: MagicMock,
-    canonical_entity_repository: MagicMock,
     entity_mention_repository: MagicMock,
 ) -> CanonicalEntityService:
     return CanonicalEntityService(
         decision_repository=decision_repository,
-        canonical_entity_repository=canonical_entity_repository,
         entity_mention_repository=entity_mention_repository,
     )
 
@@ -56,19 +45,14 @@ class TestGetProposedCanonicalEntity:
         self,
         service: CanonicalEntityService,
         decision_repository: MagicMock,
-        canonical_entity_repository: MagicMock,
         entity_mention_repository: MagicMock,
     ) -> None:
         member_ids = EntityMentionIdentifierFactory.batch(3)
         decision = DecisionFactory.build()
-        canonical = CanonicalEntityIdentifierFactory.build(
-            identifier=decision.current_placement.cluster_id,
-            equivalent_to=member_ids,
-        )
         mentions = [EntityMentionFactory.build(identifiedBy=mid) for mid in member_ids]
 
         decision_repository.find_by_id.return_value = decision
-        canonical_entity_repository.find_by_id.return_value = canonical
+        decision_repository.find_mention_ids_by_cluster.return_value = member_ids
         entity_mention_repository.find_by_identifiers.return_value = mentions
 
         result = await service.get_proposed_canonical_entity(decision.id)
@@ -78,6 +62,10 @@ class TestGetProposedCanonicalEntity:
         assert result.confidence_score == decision.current_placement.confidence_score
         assert result.similarity_score == decision.current_placement.similarity_score
         assert len(result.top_entities) == 3
+        decision_repository.find_mention_ids_by_cluster.assert_called_once_with(
+            decision.current_placement.cluster_id,
+            limit=service.DEFAULT_TOP_ENTITIES_LIMIT,
+        )
 
     async def test_decision_not_found_raises_error(
         self,
@@ -91,20 +79,20 @@ class TestGetProposedCanonicalEntity:
 
         assert exc_info.value.entity_type == "Decision"
 
-    async def test_canonical_entity_not_found_raises_error(
+    async def test_empty_cluster_returns_preview_with_no_entities(
         self,
         service: CanonicalEntityService,
         decision_repository: MagicMock,
-        canonical_entity_repository: MagicMock,
+        entity_mention_repository: MagicMock,
     ) -> None:
         decision = DecisionFactory.build()
         decision_repository.find_by_id.return_value = decision
-        canonical_entity_repository.find_by_id.return_value = None
+        decision_repository.find_mention_ids_by_cluster.return_value = []
+        entity_mention_repository.find_by_identifiers.return_value = []
 
-        with pytest.raises(NotFoundError) as exc_info:
-            await service.get_proposed_canonical_entity(decision.id)
+        result = await service.get_proposed_canonical_entity(decision.id)
 
-        assert exc_info.value.entity_type == "CanonicalEntity"
+        assert result.top_entities == []
 
 
 class TestGetAlternativeCanonicalEntities:
@@ -128,7 +116,9 @@ class TestGetAlternativeCanonicalEntities:
             candidates=[current, alt1, alt2],
         )
         decision_repository.find_by_id.return_value = decision
-
+        decision_repository.find_mention_ids_by_cluster.return_value = (
+            EntityMentionIdentifierFactory.batch(2)
+        )
         entity_mention_repository.find_by_identifiers.return_value = (
             EntityMentionFactory.batch(2)
         )
@@ -148,7 +138,6 @@ class TestGetAlternativeCanonicalEntities:
         self,
         service: CanonicalEntityService,
         decision_repository: MagicMock,
-        canonical_entity_repository: MagicMock,
         entity_mention_repository: MagicMock,
     ) -> None:
         current = ClusterReferenceFactory.build(
@@ -160,11 +149,9 @@ class TestGetAlternativeCanonicalEntities:
             candidates=[current, alt],
         )
         decision_repository.find_by_id.return_value = decision
-
-        canonical = CanonicalEntityIdentifierFactory.build(
-            identifier=alt.cluster_id,
+        decision_repository.find_mention_ids_by_cluster.return_value = (
+            EntityMentionIdentifierFactory.batch(2)
         )
-        canonical_entity_repository.find_by_id.return_value = canonical
         entity_mention_repository.find_by_identifiers.return_value = (
             EntityMentionFactory.batch(2)
         )
@@ -181,7 +168,6 @@ class TestGetAlternativeCanonicalEntities:
         self,
         service: CanonicalEntityService,
         decision_repository: MagicMock,
-        canonical_entity_repository: MagicMock,
         entity_mention_repository: MagicMock,
     ) -> None:
         current = ClusterReferenceFactory.build(
@@ -193,11 +179,9 @@ class TestGetAlternativeCanonicalEntities:
             candidates=[current, *alternatives],
         )
         decision_repository.find_by_id.return_value = decision
-
-        for alt in alternatives:
-            canonical_entity_repository.find_by_id.return_value = (
-                CanonicalEntityIdentifierFactory.build(identifier=alt.cluster_id)
-            )
+        decision_repository.find_mention_ids_by_cluster.return_value = (
+            EntityMentionIdentifierFactory.batch(2)
+        )
         entity_mention_repository.find_by_identifiers.return_value = (
             EntityMentionFactory.batch(2)
         )
