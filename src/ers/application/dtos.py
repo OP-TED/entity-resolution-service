@@ -14,6 +14,7 @@ T = TypeVar("T")
 
 MAX_PER_PAGE = 50
 DEFAULT_PER_PAGE = 20
+BULK_ACTION_MAX_SIZE = 200
 
 
 class FrozenDTO(BaseModel):
@@ -124,3 +125,32 @@ class AssignRequest(FrozenDTO):
     """Request body for assigning an entity to an alternative cluster."""
 
     cluster_id: str
+
+
+class BulkItemStatus(str, Enum):
+    """Outcome of an individual bulk action item."""
+
+    SUCCESS = "success"
+    NOT_FOUND = "not_found"
+    ALREADY_CURATED = "already_curated"
+    ERROR = "error"
+
+
+class BulkItemResult(FrozenDTO):
+    """Result of a single decision within a bulk action."""
+
+    decision_id: str
+    status: BulkItemStatus
+    detail: str | None = None
+
+
+class BulkActionRequest(FrozenDTO):
+    """Request body for bulk accept/reject operations."""
+
+    decision_ids: set[str] = Field(..., min_length=1, max_length=BULK_ACTION_MAX_SIZE)
+
+
+class BulkActionResponse(FrozenDTO):
+    """Response body for bulk accept/reject operations."""
+
+    results: list[BulkItemResult]

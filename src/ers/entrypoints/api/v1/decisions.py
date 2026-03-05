@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, Response, status
 
 from ers.application.dtos import (
     AssignRequest,
+    BulkActionRequest,
+    BulkActionResponse,
     CanonicalEntityPreview,
     DecisionSummary,
     PaginatedResult,
@@ -111,3 +113,23 @@ async def assign_decision(
         actor=user,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/bulk-accept", response_model=BulkActionResponse)
+async def bulk_accept_decisions(
+    body: BulkActionRequest,
+    user: CurrentUser,
+    service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
+) -> BulkActionResponse:
+    """Accept multiple decisions in a single request."""
+    return await service.bulk_accept_decisions(body.decision_ids, actor=user)
+
+
+@router.post("/bulk-reject", response_model=BulkActionResponse)
+async def bulk_reject_decisions(
+    body: BulkActionRequest,
+    user: CurrentUser,
+    service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
+) -> BulkActionResponse:
+    """Reject multiple decisions in a single request."""
+    return await service.bulk_reject_decisions(body.decision_ids, actor=user)

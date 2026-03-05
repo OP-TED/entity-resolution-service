@@ -1,6 +1,13 @@
+import asyncio
+from collections.abc import Callable, Coroutine
+from typing import Any
+
 from erspec.models.core import Decision, EntityMention
 
 from ers.application.dtos import (
+    BulkActionResponse,
+    BulkItemResult,
+    BulkItemStatus,
     DecisionFilters,
     DecisionSummary,
     EntityMentionPreview,
@@ -11,10 +18,13 @@ from ers.application.exceptions import NotFoundError
 from ers.application.ports.decision_repository import DecisionRepository
 from ers.application.ports.entity_mention_repository import EntityMentionRepository
 from ers.application.services.user_action_service import UserActionService
+from ers.domain.exceptions import AlreadyCuratedError
 
 
 class DecisionCurationService:
     """Orchestrates curation actions and decision queries."""
+
+    _BULK_CONCURRENCY = 25
 
     def __init__(
         self,
@@ -114,6 +124,63 @@ class DecisionCurationService:
         await self._user_action_service.record_assign(
             actor=actor, decision=decision, cluster_id=cluster_id
         )
+
+    async def bulk_accept_decisions(
+        self, decision_ids: list[str], actor: str
+    ) -> BulkActionResponse:
+        """Accept multiple decisions concurrently."""
+        return await self._execute_bulk_action(
+            decision_ids, actor, self.accept_decision
+        )
+
+    async def bulk_reject_decisions(
+        self, decision_ids: list[str], actor: str
+    ) -> BulkActionResponse:
+        """Reject multiple decisions concurrently."""
+        return await self._execute_bulk_action(
+            decision_ids, actor, self.reject_decision
+        )
+
+    async def _execute_bulk_action(
+        self,
+        decision_ids: list[str],
+        actor: str,
+        action: Callable[[str, str], Coroutine[Any, Any, None]],
+    ) -> BulkActionResponse:
+        semaphore = asyncio.Semaphore(self._BULK_CONCURRENCY)
+
+        async def _execute_single(decision_id: str) -> BulkItemResult:
+            async with semaphore:
+                return await self._try_single_action(decision_id, actor, action)
+
+        results = await asyncio.gather(*(_execute_single(did) for did in decision_ids))
+        return BulkActionResponse(results=list(results))
+
+    @staticmethod
+    async def _try_single_action(
+        decision_id: str,
+        actor: str,
+        action: Callable[[str, str], Coroutine[Any, Any, None]],
+    ) -> BulkItemResult:
+        try:
+            await action(decision_id, actor)
+            return BulkItemResult(
+                decision_id=decision_id, status=BulkItemStatus.SUCCESS
+            )
+        except NotFoundError:
+            return BulkItemResult(
+                decision_id=decision_id, status=BulkItemStatus.NOT_FOUND
+            )
+        except AlreadyCuratedError:
+            return BulkItemResult(
+                decision_id=decision_id, status=BulkItemStatus.ALREADY_CURATED
+            )
+        except Exception as exc:
+            return BulkItemResult(
+                decision_id=decision_id,
+                status=BulkItemStatus.ERROR,
+                detail=str(exc),
+            )
 
     @staticmethod
     def _index_by_identifier(

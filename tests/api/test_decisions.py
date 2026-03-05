@@ -4,6 +4,9 @@ from unittest.mock import AsyncMock
 from httpx import AsyncClient
 
 from ers.application.dtos import (
+    BulkActionResponse,
+    BulkItemResult,
+    BulkItemStatus,
     CanonicalEntityPreview,
     DecisionOrdering,
     DecisionSummary,
@@ -274,3 +277,99 @@ class TestGetAlternativeCanonicalEntities:
         data = response.json()
         assert data["count"] == 1
         assert data["results"][0]["cluster_id"] == "cluster-2"
+
+
+class TestBulkAcceptDecisions:
+    async def test_returns_200_with_per_item_results(
+        self,
+        client: AsyncClient,
+        decision_curation_service: AsyncMock,
+    ) -> None:
+        decision_curation_service.bulk_accept_decisions.return_value = (
+            BulkActionResponse(
+                results=[
+                    BulkItemResult(decision_id="d-1", status=BulkItemStatus.SUCCESS),
+                    BulkItemResult(
+                        decision_id="d-2", status=BulkItemStatus.ALREADY_CURATED
+                    ),
+                ]
+            )
+        )
+
+        response = await client.post(
+            f"{BASE_URL}/bulk-accept",
+            json={"decision_ids": ["d-1", "d-2"]},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["results"]) == 2
+        assert data["results"][0]["status"] == "success"
+        assert data["results"][1]["status"] == "already_curated"
+
+    async def test_passes_actor_to_service(
+        self,
+        client: AsyncClient,
+        decision_curation_service: AsyncMock,
+    ) -> None:
+        decision_curation_service.bulk_accept_decisions.return_value = (
+            BulkActionResponse(results=[])
+        )
+
+        await client.post(
+            f"{BASE_URL}/bulk-accept",
+            json={"decision_ids": ["d-1"]},
+        )
+
+        decision_curation_service.bulk_accept_decisions.assert_called_once_with(
+            {"d-1"}, actor="anonymous"
+        )
+
+    async def test_rejects_empty_list(
+        self,
+        client: AsyncClient,
+    ) -> None:
+        response = await client.post(
+            f"{BASE_URL}/bulk-accept",
+            json={"decision_ids": []},
+        )
+
+        assert response.status_code == 422
+
+
+class TestBulkRejectDecisions:
+    async def test_returns_200_with_per_item_results(
+        self,
+        client: AsyncClient,
+        decision_curation_service: AsyncMock,
+    ) -> None:
+        decision_curation_service.bulk_reject_decisions.return_value = (
+            BulkActionResponse(
+                results=[
+                    BulkItemResult(decision_id="d-1", status=BulkItemStatus.SUCCESS),
+                    BulkItemResult(decision_id="d-2", status=BulkItemStatus.NOT_FOUND),
+                ]
+            )
+        )
+
+        response = await client.post(
+            f"{BASE_URL}/bulk-reject",
+            json={"decision_ids": ["d-1", "d-2"]},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["results"]) == 2
+        assert data["results"][0]["status"] == "success"
+        assert data["results"][1]["status"] == "not_found"
+
+    async def test_rejects_empty_list(
+        self,
+        client: AsyncClient,
+    ) -> None:
+        response = await client.post(
+            f"{BASE_URL}/bulk-reject",
+            json={"decision_ids": []},
+        )
+
+        assert response.status_code == 422
