@@ -14,7 +14,8 @@ services:
       - MONGO_DATABASE_NAME=${MONGO_DATABASE_NAME:-ers}
     restart: unless-stopped
     depends_on:
-      - ferretdb
+      ferretdb:
+        condition: service_healthy
     develop:
       watch:
         - action: sync
