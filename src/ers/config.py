@@ -16,9 +16,13 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     cors_origins: list[str] = Field(default=["*"])
 
-    sso_enabled: bool = False
-    sso_issuer_url: str = ""
-    sso_client_id: str = ""
+    jwt_secret_key: str = "change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_minutes: int = 10080  # 7 days
+
+    admin_email: str = "admin@ers.local"
+    admin_password: str = "changeme"
 
     curation_confidence_threshold: float = Field(
         default=0.85,

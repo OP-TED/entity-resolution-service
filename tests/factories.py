@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from polyfactory.factories.pydantic_factory import ModelFactory
 
+from ers.domain.user import User
 from erspec.models.core import (
     CanonicalEntityIdentifier,
     ClusterReference,
@@ -151,4 +152,40 @@ class UserActionFactory(ModelFactory):
 
     @classmethod
     def metadata(cls) -> None:
+        return None
+
+
+class UserFactory(ModelFactory):
+    __model__ = User
+
+    @classmethod
+    def id(cls) -> str:
+        return f"user-{cls.__faker__.uuid4()[:8]}"
+
+    @classmethod
+    def email(cls) -> str:
+        return cls.__faker__.email()
+
+    @classmethod
+    def hashed_password(cls) -> str:
+        return "$argon2id$v=19$m=65536,t=3,p=4$fakehash"
+
+    @classmethod
+    def is_active(cls) -> bool:
+        return True
+
+    @classmethod
+    def is_superuser(cls) -> bool:
+        return False
+
+    @classmethod
+    def is_verified(cls) -> bool:
+        return False
+
+    @classmethod
+    def created_at(cls) -> datetime:
+        return datetime.now(timezone.utc)
+
+    @classmethod
+    def updated_at(cls) -> None:
         return None

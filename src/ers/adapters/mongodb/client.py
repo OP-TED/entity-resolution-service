@@ -43,3 +43,9 @@ class MongoClientManager:
             "about_entity_mention",
             name="decisions_about_entity_mention",
         )
+
+        await collections.users.create_index(
+            "email",
+            unique=True,
+            name="users_email_unique",
+        )

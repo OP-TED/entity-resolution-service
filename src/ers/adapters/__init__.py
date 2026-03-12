@@ -5,6 +5,7 @@ from ers.adapters.mongodb import (
     MongoEntityMentionRepository,
     MongoStatisticsRepository,
     MongoUserActionRepository,
+    MongoUserRepository,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "MongoEntityMentionRepository",
     "MongoStatisticsRepository",
     "MongoUserActionRepository",
+    "MongoUserRepository",
 ]

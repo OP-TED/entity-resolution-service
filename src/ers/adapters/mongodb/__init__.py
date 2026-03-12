@@ -6,6 +6,7 @@ from ers.adapters.mongodb.entity_mention_repository import (
 )
 from ers.adapters.mongodb.statistics_repository import MongoStatisticsRepository
 from ers.adapters.mongodb.user_action_repository import MongoUserActionRepository
+from ers.adapters.mongodb.user_repository import MongoUserRepository
 
 __all__ = [
     "MongoClientManager",
@@ -14,4 +15,5 @@ __all__ = [
     "MongoEntityMentionRepository",
     "MongoStatisticsRepository",
     "MongoUserActionRepository",
+    "MongoUserRepository",
 ]

@@ -11,7 +11,7 @@ from ers.application.dtos import (
     PaginatedResult,
 )
 from ers.application.services import CanonicalEntityService, DecisionCurationService
-from ers.entrypoints.api.auth import CurrentUser
+from ers.entrypoints.api.auth import VerifiedUser
 from ers.entrypoints.api.dependencies import (
     get_canonical_entity_service,
     get_decision_curation_service,
@@ -29,6 +29,7 @@ router = APIRouter(prefix="/curation/decisions", tags=["Decisions"])
 async def list_decisions(
     filters: DecisionFiltersDep,
     pagination: Pagination,
+    user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> PaginatedResult[DecisionSummary]:
     """Retrieve paginated list of decisions with optional filtering."""
@@ -42,6 +43,7 @@ async def list_decisions(
 )
 async def get_proposed_canonical_entity(
     decision_id: str,
+    user: VerifiedUser,
     service: Annotated[CanonicalEntityService, Depends(get_canonical_entity_service)],
 ) -> CanonicalEntityPreview:
     """Get the proposed canonical entity for a given decision."""
@@ -56,6 +58,7 @@ async def get_proposed_canonical_entity(
 async def get_alternative_canonical_entities(
     decision_id: str,
     pagination: Pagination,
+    user: VerifiedUser,
     service: Annotated[CanonicalEntityService, Depends(get_canonical_entity_service)],
 ) -> PaginatedResult[CanonicalEntityPreview]:
     """Get alternative canonical entities for a given decision."""
@@ -69,11 +72,11 @@ async def get_alternative_canonical_entities(
 )
 async def accept_decision(
     decision_id: str,
-    user: CurrentUser,
+    user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> Response:
     """Accept the proposed canonical entity match."""
-    await service.accept_decision(decision_id, actor=user)
+    await service.accept_decision(decision_id, actor=user.email)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -84,11 +87,11 @@ async def accept_decision(
 )
 async def reject_decision(
     decision_id: str,
-    user: CurrentUser,
+    user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> Response:
     """Reject the proposed canonical entity match."""
-    await service.reject_decision(decision_id, actor=user)
+    await service.reject_decision(decision_id, actor=user.email)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -103,14 +106,14 @@ async def reject_decision(
 async def assign_decision(
     decision_id: str,
     body: AssignRequest,
-    user: CurrentUser,
+    user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> Response:
     """Assign the subject entity mention to a specific cluster."""
     await service.assign_decision(
         decision_id,
         cluster_id=body.cluster_id,
-        actor=user,
+        actor=user.email,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -118,18 +121,18 @@ async def assign_decision(
 @router.post("/bulk-accept", response_model=BulkActionResponse)
 async def bulk_accept_decisions(
     body: BulkActionRequest,
-    user: CurrentUser,
+    user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> BulkActionResponse:
     """Accept multiple decisions in a single request."""
-    return await service.bulk_accept_decisions(body.decision_ids, actor=user)
+    return await service.bulk_accept_decisions(body.decision_ids, actor=user.email)
 
 
 @router.post("/bulk-reject", response_model=BulkActionResponse)
 async def bulk_reject_decisions(
     body: BulkActionRequest,
-    user: CurrentUser,
+    user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> BulkActionResponse:
     """Reject multiple decisions in a single request."""
-    return await service.bulk_reject_decisions(body.decision_ids, actor=user)
+    return await service.bulk_reject_decisions(body.decision_ids, actor=user.email)

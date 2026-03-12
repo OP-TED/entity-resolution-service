@@ -8,6 +8,7 @@ from erspec.models.core import (
     ClusterReference,
     EntityMentionIdentifier,
     EntityType,
+    UserActionType,
 )
 
 T = TypeVar("T")
@@ -85,6 +86,19 @@ class DecisionSummary(FrozenDTO):
     current_placement: ClusterReference
     created_at: datetime
     updated_at: datetime | None = None
+
+
+class UserActionSummary(FrozenDTO):
+    """User action summary for list display."""
+
+    id: str
+    about_entity_mention: EntityMentionPreview
+    candidates: list[ClusterReference]
+    selected_cluster: ClusterReference | None = None
+    action_type: UserActionType
+    actor: str
+    created_at: datetime
+    metadata: Any | None = None
 
 
 class CanonicalEntityPreview(FrozenDTO):

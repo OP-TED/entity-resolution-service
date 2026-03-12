@@ -198,7 +198,7 @@ class TestAssignDecision:
         assert response.status_code == 204
         assert response.content == b""
         decision_curation_service.assign_decision.assert_called_once_with(
-            "decision-1", cluster_id="cluster-abc", actor="anonymous"
+            "decision-1", cluster_id="cluster-abc", actor="test@example.com"
         )
 
     async def test_assign_invalid_cluster(
@@ -322,7 +322,7 @@ class TestBulkAcceptDecisions:
         )
 
         decision_curation_service.bulk_accept_decisions.assert_called_once_with(
-            {"d-1"}, actor="anonymous"
+            {"d-1"}, actor="test@example.com"
         )
 
     async def test_rejects_empty_list(

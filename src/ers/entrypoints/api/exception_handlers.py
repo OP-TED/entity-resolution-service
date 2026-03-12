@@ -4,6 +4,8 @@ from fastapi.responses import JSONResponse
 from ers.application.exceptions import ApplicationError, NotFoundError
 from ers.domain.exceptions import (
     AlreadyCuratedError,
+    AuthenticationError,
+    AuthorizationError,
     DomainError,
     InvalidClusterError,
 )
@@ -19,6 +21,26 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=404,
+            content={"detail": exc.message},
+        )
+
+    @app.exception_handler(AuthenticationError)
+    async def authentication_error_handler(
+        request: Request,
+        exc: AuthenticationError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": exc.message},
+        )
+
+    @app.exception_handler(AuthorizationError)
+    async def authorization_error_handler(
+        request: Request,
+        exc: AuthorizationError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
             content={"detail": exc.message},
         )
 

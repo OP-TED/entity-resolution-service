@@ -28,3 +28,11 @@ class AlreadyCuratedError(DomainError):
             f"Decision '{decision_id}' has already been curated on its current version"
         )
         super().__init__(message)
+
+
+class AuthenticationError(DomainError):
+    """Raised when authentication fails (invalid credentials, expired token)."""
+
+
+class AuthorizationError(DomainError):
+    """Raised when the user lacks required permissions."""

@@ -1,5 +1,12 @@
-from erspec.models.core import Decision
+from erspec.models.core import Decision, EntityMention, UserAction
 
+from ers.application.dtos import (
+    EntityMentionPreview,
+    PaginatedResult,
+    PaginationParams,
+    UserActionSummary,
+)
+from ers.application.ports.entity_mention_repository import EntityMentionRepository
 from ers.application.ports.user_action_repository import UserActionRepository
 from ers.domain.exceptions import AlreadyCuratedError
 from ers.domain.models import UserActionFactory
@@ -8,8 +15,13 @@ from ers.domain.models import UserActionFactory
 class UserActionService:
     """Creates and persists user action entries for curation commands."""
 
-    def __init__(self, user_action_repository: UserActionRepository) -> None:
+    def __init__(
+        self,
+        user_action_repository: UserActionRepository,
+        entity_mention_repository: EntityMentionRepository,
+    ) -> None:
         self._user_action_repository = user_action_repository
+        self._entity_mention_repository = entity_mention_repository
 
     async def _check_not_already_curated(self, decision: Decision) -> None:
         """Raise AlreadyCuratedError if decision was already curated on its current version."""
@@ -20,6 +32,28 @@ class UserActionService:
             )
             if already_curated:
                 raise AlreadyCuratedError(decision.id)
+
+    async def list_user_actions(
+        self,
+        pagination: PaginationParams,
+    ) -> PaginatedResult[UserActionSummary]:
+        """Return paginated user actions ordered by latest first."""
+        paginated = await self._user_action_repository.find_paginated(pagination)
+        identifiers = [action.about_entity_mention for action in paginated.results]
+        entity_mentions = await self._entity_mention_repository.find_by_identifiers(
+            identifiers,
+        )
+        mention_map = self._index_by_identifier(entity_mentions)
+
+        return PaginatedResult(
+            count=paginated.count,
+            previous=paginated.previous,
+            next=paginated.next,
+            results=[
+                self._to_user_action_summary(action, mention_map)
+                for action in paginated.results
+            ],
+        )
 
     async def record_accept(self, actor: str, decision: Decision) -> None:
         """Record an accept action in the user action trail."""
@@ -47,3 +81,45 @@ class UserActionService:
             actor=actor, decision=decision, cluster_id=cluster_id
         )
         await self._user_action_repository.save(user_action)
+
+    @staticmethod
+    def _index_by_identifier(
+        entity_mentions: list[EntityMention],
+    ) -> dict[tuple[str, str, str], EntityMention]:
+        return {
+            (
+                mention.identifiedBy.source_id,
+                mention.identifiedBy.request_id,
+                mention.identifiedBy.entity_type,
+            ): mention
+            for mention in entity_mentions
+        }
+
+    @staticmethod
+    def _to_user_action_summary(
+        action: UserAction,
+        mention_map: dict[tuple[str, str, str], EntityMention],
+    ) -> UserActionSummary:
+        identifier = action.about_entity_mention
+        key = (
+            identifier.source_id,
+            identifier.request_id,
+            identifier.entity_type,
+        )
+        mention = mention_map.get(key)
+
+        return UserActionSummary(
+            id=action.id,
+            about_entity_mention=EntityMentionPreview(
+                identified_by=identifier,
+                parsed_representation=(
+                    mention.parsed_representation if mention is not None else None
+                ),
+            ),
+            candidates=action.candidates,
+            selected_cluster=action.selected_cluster,
+            action_type=action.action_type,
+            actor=action.actor,
+            created_at=action.created_at,
+            metadata=action.metadata,
+        )

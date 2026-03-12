@@ -8,6 +8,7 @@ class MongoCollections:
     DECISIONS = "decisions"
     ENTITY_MENTIONS = "entity_mentions"
     USER_ACTIONS = "user_actions"
+    USERS = "users"
 
     def __init__(self, database: AsyncDatabase) -> None:
         self._db = database
@@ -23,3 +24,7 @@ class MongoCollections:
     @property
     def user_actions(self) -> AsyncCollection:
         return self._db[self.USER_ACTIONS]
+
+    @property
+    def users(self) -> AsyncCollection:
+        return self._db[self.USERS]
