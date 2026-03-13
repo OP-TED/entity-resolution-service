@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from ers.application.auth_dtos import UserContext, UserResponse
-from ers.application.dtos import PaginatedResult
-from ers.entrypoints.api.auth import get_current_user
+from ers.curation.application import PaginatedResult
+from ers.curation.application.auth_dtos import UserContext, UserResponse
+from ers.curation.entrypoints.api.auth import get_current_user
 
 USERS_URL = "/api/v1/users"
 
@@ -46,10 +46,11 @@ class TestCreateUser:
         )
         app.dependency_overrides[get_current_user] = lambda: regular
 
-        from httpx import ASGITransport
-        from httpx import AsyncClient as AC
+        from httpx import ASGITransport, AsyncClient
 
-        async with AC(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             response = await c.post(
                 USERS_URL,
                 json={"email": "x@example.com", "password": "securepassword"},
@@ -102,10 +103,11 @@ class TestListUsers:
         )
         app.dependency_overrides[get_current_user] = lambda: regular_user
 
-        from httpx import ASGITransport
-        from httpx import AsyncClient as AC
+        from httpx import ASGITransport, AsyncClient
 
-        async with AC(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             response = await c.get(USERS_URL)
 
         assert response.status_code == 403
@@ -160,10 +162,11 @@ class TestDeleteUser:
         )
         app.dependency_overrides[get_current_user] = lambda: regular
 
-        from httpx import ASGITransport
-        from httpx import AsyncClient as AC
+        from httpx import ASGITransport, AsyncClient
 
-        async with AC(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             response = await c.delete(f"{USERS_URL}/u-1")
 
         assert response.status_code == 403

@@ -1,8 +1,8 @@
 import pytest
 from erspec.models.core import UserActionType
 
-from ers.domain.exceptions import InvalidClusterError
-from ers.domain.models import UserActionFactory
+from ers.curation.domain.exceptions import InvalidClusterError
+from ers.curation.domain.models import UserActionFactory
 
 
 class TestCreateAccept:

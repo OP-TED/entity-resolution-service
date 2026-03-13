@@ -2,12 +2,15 @@ from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 
-from ers.application.auth_dtos import CreateUserRequest, UserPatchRequest
-from ers.application.dtos import PaginatedResult, PaginationParams
-from ers.application.exceptions import ApplicationError, NotFoundError
-from ers.application.ports.password_hasher import PasswordHasher
-from ers.application.ports.user_repository import UserRepository
-from ers.application.services.user_management_service import UserManagementService
+from ers.commons.application.exceptions import ApplicationError
+from ers.curation.application import NotFoundError
+from ers.curation.application.auth_dtos import CreateUserRequest, UserPatchRequest
+from ers.curation.application.dtos import PaginatedResult, PaginationParams
+from ers.curation.application.ports import UserRepository
+from ers.curation.application.ports.password_hasher import PasswordHasher
+from ers.curation.application.services.user_management_service import (
+    UserManagementService,
+)
 from tests.factories import UserFactory
 
 

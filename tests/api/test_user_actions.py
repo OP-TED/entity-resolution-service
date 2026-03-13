@@ -4,13 +4,13 @@ from unittest.mock import AsyncMock
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from ers.application.auth_dtos import UserContext
-from ers.application.dtos import (
+from ers.curation.application.auth_dtos import UserContext
+from ers.curation.application.dtos import (
     EntityMentionPreview,
     PaginatedResult,
     UserActionSummary,
 )
-from ers.entrypoints.api.auth import get_current_user
+from ers.curation.entrypoints.api.auth import get_current_user
 from tests.factories import UserActionFactory
 
 USER_ACTIONS_URL = "/api/v1/user-actions"
@@ -74,10 +74,11 @@ class TestListUserActions:
         )
         app.dependency_overrides[get_current_user] = lambda: regular_user
 
-        from httpx import ASGITransport
-        from httpx import AsyncClient as AC
+        from httpx import ASGITransport, AsyncClient
 
-        async with AC(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             response = await c.get(USER_ACTIONS_URL)
 
         assert response.status_code == 403

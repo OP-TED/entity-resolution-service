@@ -4,7 +4,7 @@ import pytest
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.adapters.mongodb import MongoCollections
+from ers.commons.adapters.mongodb import MongoCollections
 from ers.config import get_settings
 
 pytestmark = pytest.mark.integration

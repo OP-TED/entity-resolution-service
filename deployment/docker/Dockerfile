@@ -42,4 +42,4 @@ USER appuser
 EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "ers.entrypoints.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "ers.curation.entrypoints.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

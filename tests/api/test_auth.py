@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from ers.application.auth_dtos import TokenResponse, UserContext, UserResponse
-from ers.domain.exceptions import AuthenticationError
-from ers.entrypoints.api.auth import get_current_user
+from ers.curation.application.auth_dtos import TokenResponse, UserContext, UserResponse
+from ers.curation.domain.exceptions import AuthenticationError
+from ers.curation.entrypoints.api.auth import get_current_user
 
 AUTH_URL = "/api/v1/auth"
 
@@ -133,10 +133,9 @@ class TestProtectedEndpointWithoutAuth:
         # Remove the get_current_user override so auth is actually enforced
         app.dependency_overrides.pop(get_current_user, None)
 
-        from httpx import ASGITransport
-        from httpx import AsyncClient as AC
+        from httpx import ASGITransport, AsyncClient
 
-        async with AC(
+        async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as unauthed:
             response = await unauthed.get("/api/v1/curation/decisions")
@@ -157,10 +156,11 @@ class TestProtectedEndpointUnverified:
         )
         app.dependency_overrides[get_current_user] = lambda: unverified
 
-        from httpx import ASGITransport
-        from httpx import AsyncClient as AC
+        from httpx import ASGITransport, AsyncClient
 
-        async with AC(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             response = await c.get("/api/v1/curation/decisions")
 
         assert response.status_code == 403

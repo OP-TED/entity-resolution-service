@@ -2,17 +2,16 @@ from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 
-from ers.application.auth_dtos import (
+from ers.curation.application.auth_dtos import (
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
     UserContext,
 )
-from ers.application.ports.password_hasher import PasswordHasher
-from ers.application.ports.token_service import TokenService
-from ers.application.ports.user_repository import UserRepository
-from ers.application.services.auth_service import AuthService
-from ers.domain.exceptions import AuthenticationError
+from ers.curation.application.ports import TokenService, UserRepository
+from ers.curation.application.ports.password_hasher import PasswordHasher
+from ers.curation.application.services.auth_service import AuthService
+from ers.curation.domain.exceptions import AuthenticationError
 from tests.factories import UserFactory
 
 

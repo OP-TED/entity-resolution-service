@@ -7,8 +7,9 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from ers.application.auth_dtos import UserContext
-from ers.application.services import (
+from ers.config import Settings
+from ers.curation.application.auth_dtos import UserContext
+from ers.curation.application.services import (
     AuthService,
     CanonicalEntityService,
     DecisionCurationService,
@@ -17,10 +18,9 @@ from ers.application.services import (
     UserActionService,
     UserManagementService,
 )
-from ers.config import Settings
-from ers.entrypoints.api.app import create_app
-from ers.entrypoints.api.auth import get_current_user
-from ers.entrypoints.api.dependencies import (
+from ers.curation.entrypoints.api.app import create_app
+from ers.curation.entrypoints.api.auth import get_current_user
+from ers.curation.entrypoints.api.dependencies import (
     get_auth_service,
     get_canonical_entity_service,
     get_decision_curation_service,

@@ -4,8 +4,9 @@ import pytest
 from erspec.models.core import UserActionType
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.adapters.mongodb import MongoCollections, MongoStatisticsRepository
-from ers.application.dtos import StatisticsFilters
+from ers.commons.adapters.mongodb import MongoCollections
+from ers.curation.adapters import MongoStatisticsRepository
+from ers.curation.application.dtos import StatisticsFilters
 from tests.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
@@ -23,7 +24,7 @@ def repo(mongo_db: AsyncDatabase) -> MongoStatisticsRepository:
 
 async def _seed_data(db: AsyncDatabase) -> None:
     """Insert a realistic dataset across all collections."""
-    from ers.adapters.mongodb import (
+    from ers.curation.adapters import (
         MongoDecisionRepository,
         MongoEntityMentionRepository,
         MongoUserActionRepository,

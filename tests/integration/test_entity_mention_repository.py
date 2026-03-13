@@ -3,7 +3,8 @@ import json
 import pytest
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.adapters.mongodb import MongoCollections, MongoEntityMentionRepository
+from ers.commons.adapters.mongodb import MongoCollections
+from ers.curation.adapters import MongoEntityMentionRepository
 from tests.factories import EntityMentionFactory, EntityMentionIdentifierFactory
 
 pytestmark = pytest.mark.integration

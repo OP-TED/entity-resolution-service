@@ -12,7 +12,7 @@ from erspec.models.core import (
 )
 from polyfactory.factories.pydantic_factory import ModelFactory
 
-from ers.domain.user import User
+from ers.curation.domain.user import User
 
 
 class EntityMentionIdentifierFactory(ModelFactory):
@@ -50,8 +50,9 @@ class ClusterReferenceFactory(ModelFactory):
 class EntityMentionFactory(ModelFactory):
     __model__ = EntityMention
 
+    # TODO: rename field to identified_by in erspec
     @classmethod
-    def identifiedBy(cls) -> EntityMentionIdentifier:
+    def identifiedBy(cls) -> EntityMentionIdentifier:  # noqa: N802
         return EntityMentionIdentifierFactory.build()
 
     @classmethod

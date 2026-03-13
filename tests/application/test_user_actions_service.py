@@ -4,11 +4,12 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
-from ers.application.dtos import PaginatedResult, PaginationParams
-from ers.application.ports.entity_mention_repository import EntityMentionRepository
-from ers.application.ports.user_action_repository import UserActionRepository
-from ers.application.services.user_action_service import UserActionService
-from ers.domain.exceptions import AlreadyCuratedError
+from ers.curation.application import UserActionRepository, UserActionService
+from ers.curation.application.dtos import PaginatedResult, PaginationParams
+from ers.curation.application.ports.entity_mention_repository import (
+    EntityMentionRepository,
+)
+from ers.curation.domain.exceptions import AlreadyCuratedError
 from tests.factories import DecisionFactory, EntityMentionFactory, UserActionFactory
 
 
