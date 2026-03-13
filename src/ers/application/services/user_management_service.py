@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, timezone
 
-from ers.application.dtos import PaginatedResult, PaginationParams
 from ers.application.auth_dtos import CreateUserRequest, UserPatchRequest, UserResponse
+from ers.application.dtos import PaginatedResult, PaginationParams
 from ers.application.exceptions import ApplicationError, NotFoundError
 from ers.application.ports.password_hasher import PasswordHasher
 from ers.application.ports.user_repository import UserRepository

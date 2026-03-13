@@ -2,13 +2,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from ers.application.dtos import PaginatedResult
 from ers.application.auth_dtos import (
     CreateUserRequest,
     UserContext,
     UserPatchRequest,
     UserResponse,
 )
+from ers.application.dtos import PaginatedResult
 from ers.application.services import UserManagementService
 from ers.entrypoints.api.auth import AdminUser, CurrentUser
 from ers.entrypoints.api.dependencies import get_user_management_service

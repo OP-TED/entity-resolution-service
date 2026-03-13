@@ -1,11 +1,10 @@
 from datetime import datetime
 from typing import Annotated
 
+from erspec.models.core import EntityType
 from fastapi import Depends, Query
 from pydantic import BaseModel
 
-from erspec.models.core import EntityType
-from ers.config import get_settings
 from ers.application.dtos import (
     DEFAULT_PER_PAGE,
     MAX_PER_PAGE,
@@ -14,6 +13,7 @@ from ers.application.dtos import (
     PaginationParams,
     StatisticsFilters,
 )
+from ers.config import get_settings
 
 
 class ErrorResponse(BaseModel):

@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
 
 import pytest
-from pymongo.asynchronous.database import AsyncDatabase
-
 from erspec.models.core import UserActionType
+from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.adapters.mongodb import MongoCollections, MongoStatisticsRepository
 from ers.application.dtos import StatisticsFilters

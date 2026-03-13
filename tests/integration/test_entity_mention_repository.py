@@ -3,7 +3,6 @@ import json
 import pytest
 from pymongo.asynchronous.database import AsyncDatabase
 
-
 from ers.adapters.mongodb import MongoCollections, MongoEntityMentionRepository
 from tests.factories import EntityMentionFactory, EntityMentionIdentifierFactory
 

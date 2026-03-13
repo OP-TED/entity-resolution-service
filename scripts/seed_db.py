@@ -13,9 +13,8 @@ import asyncio
 import random
 from datetime import datetime, timedelta, timezone
 
-from pymongo import AsyncMongoClient
-
 from erspec.models.core import UserActionType
+from pymongo import AsyncMongoClient
 
 from ers.adapters.mongodb import (
     MongoCollections,

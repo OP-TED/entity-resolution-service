@@ -1,6 +1,6 @@
 import pytest
-
 from erspec.models.core import UserActionType
+
 from ers.domain.exceptions import InvalidClusterError
 from ers.domain.models import UserActionFactory
 

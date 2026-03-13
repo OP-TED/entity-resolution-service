@@ -4,7 +4,6 @@ from httpx import AsyncClient
 
 from ers.application.dtos import CurationStatistics, RegistryStatistics, Statistics
 
-
 BASE_URL = "/api/v1/curation/stats"
 
 

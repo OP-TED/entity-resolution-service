@@ -74,7 +74,8 @@ class TestListUserActions:
         )
         app.dependency_overrides[get_current_user] = lambda: regular_user
 
-        from httpx import ASGITransport, AsyncClient as AC
+        from httpx import ASGITransport
+        from httpx import AsyncClient as AC
 
         async with AC(transport=ASGITransport(app=app), base_url="http://test") as c:
             response = await c.get(USER_ACTIONS_URL)

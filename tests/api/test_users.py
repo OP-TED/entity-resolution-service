@@ -1,13 +1,12 @@
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
+from fastapi import FastAPI
 from httpx import AsyncClient
 
-from ers.application.dtos import PaginatedResult
 from ers.application.auth_dtos import UserContext, UserResponse
+from ers.application.dtos import PaginatedResult
 from ers.entrypoints.api.auth import get_current_user
-
-from fastapi import FastAPI
 
 USERS_URL = "/api/v1/users"
 
@@ -47,7 +46,8 @@ class TestCreateUser:
         )
         app.dependency_overrides[get_current_user] = lambda: regular
 
-        from httpx import ASGITransport, AsyncClient as AC
+        from httpx import ASGITransport
+        from httpx import AsyncClient as AC
 
         async with AC(transport=ASGITransport(app=app), base_url="http://test") as c:
             response = await c.post(
@@ -102,7 +102,8 @@ class TestListUsers:
         )
         app.dependency_overrides[get_current_user] = lambda: regular_user
 
-        from httpx import ASGITransport, AsyncClient as AC
+        from httpx import ASGITransport
+        from httpx import AsyncClient as AC
 
         async with AC(transport=ASGITransport(app=app), base_url="http://test") as c:
             response = await c.get(USERS_URL)
@@ -159,7 +160,8 @@ class TestDeleteUser:
         )
         app.dependency_overrides[get_current_user] = lambda: regular
 
-        from httpx import ASGITransport, AsyncClient as AC
+        from httpx import ASGITransport
+        from httpx import AsyncClient as AC
 
         async with AC(transport=ASGITransport(app=app), base_url="http://test") as c:
             response = await c.delete(f"{USERS_URL}/u-1")

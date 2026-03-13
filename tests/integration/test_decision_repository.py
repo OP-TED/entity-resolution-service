@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
 
 import pytest
-from pymongo.asynchronous.database import AsyncDatabase
-
 from erspec.models.core import Decision
+from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.adapters.mongodb import MongoCollections, MongoDecisionRepository
 from ers.application.dtos import DecisionFilters, DecisionOrdering, PaginationParams

@@ -2,14 +2,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, Json
-
 from erspec.models.core import (
     ClusterReference,
     EntityMentionIdentifier,
     EntityType,
     UserActionType,
 )
+from pydantic import BaseModel, ConfigDict, Field, Json
 
 T = TypeVar("T")
 

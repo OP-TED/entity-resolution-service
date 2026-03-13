@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
+from erspec.models.core import EntityType
 
 from ers.application.dtos import (
     CurationStatistics,
@@ -10,7 +11,6 @@ from ers.application.dtos import (
 )
 from ers.application.ports.statistics_repository import StatisticsRepository
 from ers.application.services.statistics_service import StatisticsService
-from erspec.models.core import EntityType
 
 
 @pytest.fixture
