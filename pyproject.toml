@@ -3,19 +3,25 @@ name = "entity-resolution-service"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "Meaningfy",email = "hi@meaningfy.ws"}
+    { name = "Meaningfy", email = "hi@meaningfy.ws" }
 ]
 readme = "README.md"
-requires-python = "~=3.14.0"
+requires-python = ">=3.12,<3.15"
 dependencies = [
     "pydantic[email] (>=2.12.5,<3.0.0)",
     "fastapi (>=0.128.5,<0.129.0)",
     "pymongo (>=4.16.0,<5.0.0)",
     "pydantic-settings (>=2.13.0,<3.0.0)",
     "uvicorn (>=0.41.0,<0.42.0)",
-    "ers-core @ git+https://github.com/meaningfy-ws/entity-resolution-spec.git@develop",
+    "ers-spec @ git+https://github.com/meaningfy-ws/entity-resolution-spec.git@0.3.0-rc.1",
     "pyjwt (>=2.11.0,<3.0.0)",
-    "argon2-cffi (>=25.1.0,<26.0.0)"
+    "argon2-cffi (>=25.1.0,<26.0.0)",
+    "linkml-runtime (>1.9.6,<2.0.0)",
+    "redis (>=7.1.0,<8.0.0)",
+    "urllib3 (>=2.0,<3.0)",
+    "charset-normalizer (>=3.0,<4.0)",
+    "chardet (>=3.0.2,<6.0.0)",
+    "pandas (>=2.0,<3.0)",
 ]
 
 [tool.poetry]
@@ -31,12 +37,19 @@ build-backend = "poetry.core.masonry.api"
 [dependency-groups]
 dev = [
     "linkml (>=1.9.6,<2.0.0)",
-    "ruff (>=0.15.0,<0.16.0)",
     "pre-commit (>=4.5.1,<5.0.0)"
 ]
 test = [
     "pytest (>=9.0.2,<10.0.0)",
     "pytest-cov (>=7.0.0,<8.0.0)",
+    "pytest-bdd (>=8.0,<9.0)",
+    "ruff (>=0.15.0,<1.0.0)",
+    "pylint (>=3.3.4,<4.0.0)",
+    "import-linter (>=2.3,<3.0)",
+    "tox (>=4.0,<5.0)",
+    "radon (>=6.0,<7.0)",
+    "xenon (>=0.9,<1.0)",
+    "testcontainers[redis] (>=4.13.3,<5.0.0)",
     "polyfactory (>=3.2.0,<4.0.0)",
     "pytest-asyncio (>=1.3.0,<2.0.0)",
     "httpx (>=0.28.1,<0.29.0)"
@@ -46,8 +59,45 @@ test = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = [
+    "-v",
+    "--basetemp=/tmp/pytest",
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-fail-under=80",
+    "--tb=short"
+]
+filterwarnings = [
+    "once",
+    "ignore",
+    "default::Warning:ere\\..*"
+]
 asyncio_mode = "auto"
 markers = [
     "integration: requires a running FerretDB/MongoDB instance",
 ]
+
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "C90"]
+ignore = ["E501"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_return_any = true
+
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/__init__.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
