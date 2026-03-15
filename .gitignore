@@ -213,9 +213,11 @@ __marimo__/
 .DS_Store
 /.pycharm_plugin/
 /docs/architecture/
-.claude/
 .pycharm_plugin/
 .idea/
 .vscode/
 .mypy_cache/
 .pyre/
+.gitnexus
+settings.local.json
+AGENTS.md

@@ -1,0 +1,63 @@
+# Project Memory — Entity Resolution Docs
+
+## Project Overview
+
+- Documentation and specification repository for Entity Resolution project.
+- Uses Antora (AsciiDoc) for technical documentation.
+- Serves as planning hub for AI-assisted development.
+- Branch model: `develop` is the main branch.
+
+## AI Coding Setup
+
+- Five agents: epic-planner (opus), gherkin-writer (sonnet), implementer (sonnet), code-reviewer (opus), documenter (haiku).
+- Skills at project level: stream-coding, clarity-gate, gitnexus (6 sub-skills).
+- Methodology: stream-coding (documentation-first), Cosmic Python (layered architecture).
+- Memory: dual approach — auto-memory (this file) + epic/task memory under epics/.
+- Docs: `docs/ai-coding/` contains runbook, setup guide, DoD quality gates, and review.
+
+## Planning Roadmap
+
+- [planning-roadmap.md](planning-roadmap.md) — Master roadmap for 10 ERS epic specifications
+- 3 phases: Foundation (EPIC-01 to 04), Core Flows (EPIC-05 to 07), Curation (EPIC-08 to 09) + cross-cutting (EPIC-X)
+- Status: Epics 1-7 written, Gherkin feature writing next
+
+## Epic Status
+
+| Epic | Component | Score | Status |
+|------|-----------|-------|--------|
+| [ERS-EPIC-01](epics/ers-epic-01-request-registry/EPIC.md) | Request Registry | 9.7 | Written |
+| [ERS-EPIC-02](epics/ers-epic-02-rdf-mention-parser/EPIC.md) | RDF Mention Parser | 9.8 | Written |
+| [ERS-EPIC-03](epics/ers-epic-03-ere-contract-client/EPIC.md) | ERE Contract Client | 9.8 | Written |
+| [ERS-EPIC-04](epics/ers-epic-04-resolution-decision-store/EPIC.md) | Decision Store | 9.8 | Written |
+| [ERS-EPIC-05](epics/ers-epic-05-ere-result-integrator/EPIC.md) | ERE Result Integrator | 9.2 | Written |
+| [ERS-EPIC-06](epics/ers-epic-06-resolution-coordinator/EPIC.md) | Resolution Coordinator | 9.8 | Written |
+| [ERS-EPIC-07](epics/ers-epic-07-ere-rest-api/EPIC.md) | ERS REST API | 9.8 | Written |
+| ERS-EPIC-08 | User Action Store | — | Pending |
+| ERS-EPIC-09 | Link Curation REST API | — | Pending |
+| ERS-EPIC-X | Observability & Config | — | Pending |
+
+## Current Phase
+
+- Branch: `feature/ERS1-137-2`, PR: #3 targeting `develop`
+- Next: Write Gherkin BDD feature files for epics 1-7 (gherkin-writer agent)
+- Then: Remaining epics 8, 9, X
+
+## Codebase Patterns
+
+- Agent files live in `.claude/agents/` with YAML frontmatter + markdown system prompt.
+- Skills live in `.claude/skills/<name>/SKILL.md`.
+- CLAUDE.md is the master entry point; kept under 200 lines.
+- GitNexus rules are inline in CLAUDE.md (within `<!-- gitnexus:start/end -->` markers).
+
+## Key Decisions
+
+- 2026-03-11: Established AI-assisted coding setup with 5 agents, stream-coding methodology.
+- 2026-03-11: Stream-coding Phases 1-2 owned by epic-planner, Phases 3-4 by implementer.
+- 2026-03-11: Clarity Gate — full 13-item for specs, lightweight 5-item for documentation.
+- 2026-03-12: All 7 core epics written; Clarity Gate scores 9.2-9.8/10.
+- 2026-03-12: EPIC-06 key design: AsyncResolutionWaiter (asyncio.Event), graceful degradation on Redis down, bulk decomposition in Coordinator.
+
+## Gotchas
+
+- epic-planner agent hits CLAUDE_CODE_MAX_OUTPUT_TOKENS (8192) when writing large EPICs. Workaround: write the EPIC directly in the main conversation instead.
+- GitNexus PostToolUse hook has MODULE_NOT_FOUND error — doesn't block work.
