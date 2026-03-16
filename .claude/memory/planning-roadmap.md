@@ -85,15 +85,15 @@ Listed in **dependency order** (implementation sequence):
 #### Phase 1 — Foundation (Spines A/B prerequisite)
 | Epic ID | Component | Spines | Status             |
 |---|---|---|--------------------|
-| **ERS-EPIC-01** | Request Registry | A, B, C, D | ✅ Written (9.7/10) |
+| **ERS-EPIC-01** | Request Registry | A, B, C, D | ✅ Gherkin Complete (9.7/10) |
 | **ERS-EPIC-02** | RDF Mention Parser | A | ✅ Written (9.8/10) |
 | **ERS-EPIC-03** | ERE Contract Client | B, D | ✅ Written (9.8/10) |
-| **ERS-EPIC-04** | Resolution Decision Store | B, C, D | ✅ Written (9.8/10) |
+| **ERS-EPIC-04** | Resolution Decision Store | B, C, D | ✅ Gherkin Complete (9.8/10) |
 
 #### Phase 2 — Core Flows (Spines A + B complete)
 | Epic ID | Component | Spines | Status |
 |---|---|---|---|
-| **ERS-EPIC-05** | ERE Result Integrator | B | ✅ Written (9.2/10) |
+| **ERS-EPIC-05** | ERE Result Integrator | B | ✅ Gherkin Complete (9.2/10) |
 | **ERS-EPIC-06** | Resolution Coordinator | A, B | ✅ Written (9.8/10) |
 | **ERS-EPIC-07** | ERS REST API (resolve + lookup + refreshBulk) | A, C | ✅ Written (9.8/10) |
 
@@ -193,4 +193,4 @@ When all 10 epics are written + Clarity Gate passes → implementation phase beg
 
 ## Next Action
 
-Proceed with **ERS-EPIC-01 (Request Registry)** by invoking epic-planner agent with the primary source documents listed above.
+Gherkin features complete for EPIC-01, EPIC-04, and EPIC-05. Next: write Gherkin features for remaining epics (02, 03, 06, 07), then begin implementation phase. EPIC-04 includes filtered queries by timestamp interval and confidence score interval beyond the original EPIC outline.

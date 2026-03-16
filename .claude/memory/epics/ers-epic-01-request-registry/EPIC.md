@@ -1,8 +1,8 @@
 # Epic: ERS-EPIC-01 — Request Registry
 
 ## Status
-- Phase: Planning
-- Last updated: 2026-03-12
+- Phase: Gherkin features complete, ready for implementation
+- Last updated: 2026-03-16
 
 ## Metadata
 | Field | Value |
@@ -530,7 +530,10 @@ These constraints are inherited from the ERS Architecture and must be respected 
 
 # Part 2 — Implementation Log
 
-<!-- Add a dated entry for each completed task. -->
+### 2026-03-16 — Gherkin features and step scaffolding
+- **Outcome:** 2 feature files created under `tests/features/request_registry/` (resolution_request_registration.feature, bulk_lookup_and_snapshot_management.feature). Step definitions scaffolded under `tests/steps/request_registry/` with TODO placeholders.
+- **Decisions:** Steps organised into `tests/steps/request_registry/` subfolder (isomorphic to features).
+- **Deviations:** None.
 
 <!-- Example entry:
 ### yyyy-mm-dd — Task 1: <task title>

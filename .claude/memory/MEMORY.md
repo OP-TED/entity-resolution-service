@@ -25,11 +25,11 @@
 
 | Epic | Component | Score | Status |
 |------|-----------|-------|--------|
-| [ERS-EPIC-01](epics/ers-epic-01-request-registry/EPIC.md) | Request Registry | 9.7 | Written |
+| [ERS-EPIC-01](epics/ers-epic-01-request-registry/EPIC.md) | Request Registry | 9.7 | Gherkin Complete |
 | [ERS-EPIC-02](epics/ers-epic-02-rdf-mention-parser/EPIC.md) | RDF Mention Parser | 9.8 | Written |
 | [ERS-EPIC-03](epics/ers-epic-03-ere-contract-client/EPIC.md) | ERE Contract Client | 9.8 | Written |
-| [ERS-EPIC-04](epics/ers-epic-04-resolution-decision-store/EPIC.md) | Decision Store | 9.8 | Written |
-| [ERS-EPIC-05](epics/ers-epic-05-ere-result-integrator/EPIC.md) | ERE Result Integrator | 9.2 | Written |
+| [ERS-EPIC-04](epics/ers-epic-04-resolution-decision-store/EPIC.md) | Decision Store | 9.8 | Gherkin Complete |
+| [ERS-EPIC-05](epics/ers-epic-05-ere-result-integrator/EPIC.md) | ERE Result Integrator | 9.2 | Gherkin Complete |
 | [ERS-EPIC-06](epics/ers-epic-06-resolution-coordinator/EPIC.md) | Resolution Coordinator | 9.8 | Written |
 | [ERS-EPIC-07](epics/ers-epic-07-ere-rest-api/EPIC.md) | ERS REST API | 9.8 | Written |
 | ERS-EPIC-08 | User Action Store | — | Pending |
@@ -38,9 +38,13 @@
 
 ## Current Phase
 
-- Branch: `feature/ERS1-137-2`, PR: #3 targeting `develop`
-- Next: Write Gherkin BDD feature files for epics 1-7 (gherkin-writer agent)
-- Then: Remaining epics 8, 9, X
+- Branch: `feature/ERS1-137-4`, implementing EPIC-01 (Request Registry)
+- **[2026-03-16] ERS-EPIC-01: Gherkin features complete** — `resolution_request_registration.feature` and `bulk_lookup_and_snapshot_management.feature` written and aligned with EPIC spec
+- **[2026-03-16] ERS-EPIC-05: Gherkin features complete** — 3 feature files + step scaffolding for ERE Result Integrator (outcome acceptance, deduplication, contract validation)
+- **[2026-03-16] ERS-EPIC-04: Gherkin features complete** — 2 feature files + step scaffolding for Decision Store (persistence, filtered queries, paginated query)
+- Steps reorganised into component subfolders: `tests/steps/request_registry/`, `tests/steps/ere_result_integrator/`, `tests/steps/decision_store/`
+- Next: Gherkin features for epics 2, 3, 6, 7, then implementation
+- Design spec: `docs/superpowers/specs/2026-03-16-epic05-gherkin-features-design.md`
 
 ## Codebase Patterns
 

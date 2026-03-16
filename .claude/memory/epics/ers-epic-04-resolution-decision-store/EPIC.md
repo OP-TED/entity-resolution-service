@@ -3,9 +3,9 @@
 ## Status
 - **Epic ID:** ERS-EPIC-04
 - **Component:** #4 — Resolution Decision Store
-- **Phase:** Planning
+- **Phase:** Gherkin features complete, ready for implementation
 - **Spines:** B (Async Engine Interaction — outcome recording), C (Bulk Sync — delta exposure queries)
-- **Last updated:** 2026-03-12
+- **Last updated:** 2026-03-16
 - **Dependencies:** er-spec library (domain models), ERS-EPIC-01 (Request Registry — triad existence)
 - **Clarity Gate:** 9.8/10
 
