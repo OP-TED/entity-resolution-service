@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
 
-from ers.curation.application.dtos import (
+from ers.curation.services.dtos import (
     CurationStatistics,
     RegistryStatistics,
     Statistics,

@@ -19,7 +19,7 @@ from pymongo import AsyncMongoClient
 
 from ers.commons.adapters.mongodb import MongoCollections
 from ers.config import get_settings
-from ers.curation.adapters import (
+from ers.curation.adapters.mongodb import (
     MongoDecisionRepository,
     MongoEntityMentionRepository,
     MongoUserActionRepository,

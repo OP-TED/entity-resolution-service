@@ -4,13 +4,13 @@ from unittest.mock import AsyncMock
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from ers.curation.application.auth_dtos import UserContext
-from ers.curation.application.dtos import (
+from ers.commons.services.dtos import PaginatedResult
+from ers.curation.entrypoints.api.auth import get_current_user
+from ers.curation.services.dtos import (
     EntityMentionPreview,
-    PaginatedResult,
     UserActionSummary,
 )
-from ers.curation.entrypoints.api.auth import get_current_user
+from ers.users.services.auth_dtos import UserContext
 from tests.factories import UserActionFactory
 
 USER_ACTIONS_URL = "/api/v1/user-actions"

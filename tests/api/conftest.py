@@ -8,16 +8,6 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from ers.config import Settings
-from ers.curation.application.auth_dtos import UserContext
-from ers.curation.application.services import (
-    AuthService,
-    CanonicalEntityService,
-    DecisionCurationService,
-    EntityService,
-    StatisticsService,
-    UserActionService,
-    UserManagementService,
-)
 from ers.curation.entrypoints.api.app import create_app
 from ers.curation.entrypoints.api.auth import get_current_user
 from ers.curation.entrypoints.api.dependencies import (
@@ -29,6 +19,15 @@ from ers.curation.entrypoints.api.dependencies import (
     get_user_action_service,
     get_user_management_service,
 )
+from ers.curation.services import (
+    CanonicalEntityService,
+    DecisionCurationService,
+    EntityService,
+    StatisticsService,
+    UserActionService,
+)
+from ers.users.services import AuthService, UserManagementService
+from ers.users.services.auth_dtos import UserContext
 
 TEST_USER_CONTEXT = UserContext(
     id="test-user-id",

@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from ers.curation.application import PaginatedResult
-from ers.curation.application.auth_dtos import UserContext, UserResponse
+from ers.commons.services.dtos import PaginatedResult
 from ers.curation.entrypoints.api.auth import get_current_user
+from ers.users.services.auth_dtos import UserContext, UserResponse
 
 USERS_URL = "/api/v1/users"
 

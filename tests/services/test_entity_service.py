@@ -2,11 +2,11 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
-from ers.curation.application import NotFoundError
-from ers.curation.application.ports.entity_mention_repository import (
+from ers.commons.services.exceptions import NotFoundError
+from ers.curation.adapters.ports import (
     EntityMentionRepository,
 )
-from ers.curation.application.services.entity_service import EntityService
+from ers.curation.services import EntityService
 from tests.factories import EntityMentionFactory, EntityMentionIdentifierFactory
 
 

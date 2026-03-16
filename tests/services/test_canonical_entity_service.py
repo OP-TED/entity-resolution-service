@@ -2,19 +2,11 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
-from ers.curation.application import NotFoundError
-from ers.curation.application.dtos import (
-    CanonicalEntityPreview,
-    PaginatedResult,
-    PaginationParams,
-)
-from ers.curation.application.ports.decision_repository import DecisionRepository
-from ers.curation.application.ports.entity_mention_repository import (
-    EntityMentionRepository,
-)
-from ers.curation.application.services.canonical_entity_service import (
-    CanonicalEntityService,
-)
+from ers.commons.services.dtos import PaginatedResult, PaginationParams
+from ers.commons.services.exceptions import NotFoundError
+from ers.curation.adapters.ports import DecisionRepository, EntityMentionRepository
+from ers.curation.services import CanonicalEntityService
+from ers.curation.services.dtos import CanonicalEntityPreview
 from tests.factories import (
     ClusterReferenceFactory,
     DecisionFactory,

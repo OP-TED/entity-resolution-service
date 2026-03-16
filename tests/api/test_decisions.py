@@ -3,8 +3,10 @@ from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
 
-from ers.curation.application import NotFoundError
-from ers.curation.application.dtos import (
+from ers.commons.services.dtos import PaginatedResult
+from ers.commons.services.exceptions import NotFoundError
+from ers.curation.domain.exceptions import AlreadyCuratedError, InvalidClusterError
+from ers.curation.services.dtos import (
     BulkActionResponse,
     BulkItemResult,
     BulkItemStatus,
@@ -12,9 +14,7 @@ from ers.curation.application.dtos import (
     DecisionOrdering,
     DecisionSummary,
     EntityMentionPreview,
-    PaginatedResult,
 )
-from ers.curation.domain.exceptions import AlreadyCuratedError, InvalidClusterError
 from tests.factories import (
     ClusterReferenceFactory,
     EntityMentionIdentifierFactory,

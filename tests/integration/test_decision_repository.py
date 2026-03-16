@@ -5,11 +5,11 @@ from erspec.models.core import Decision
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.commons.adapters.mongodb import MongoCollections
-from ers.curation.adapters import MongoDecisionRepository
-from ers.curation.application.dtos import (
+from ers.commons.services.dtos import PaginationParams
+from ers.curation.adapters.mongodb import MongoDecisionRepository
+from ers.curation.services.dtos import (
     DecisionFilters,
     DecisionOrdering,
-    PaginationParams,
 )
 from tests.factories import (
     ClusterReferenceFactory,
