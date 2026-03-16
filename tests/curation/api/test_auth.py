@@ -5,8 +5,8 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from ers.curation.entrypoints.api.auth import get_current_user
+from ers.users.domain.dtos import TokenResponse, UserContext, UserResponse
 from ers.users.domain.exceptions import AuthenticationError
-from ers.users.services.auth_dtos import TokenResponse, UserContext, UserResponse
 
 AUTH_URL = "/api/v1/auth"
 

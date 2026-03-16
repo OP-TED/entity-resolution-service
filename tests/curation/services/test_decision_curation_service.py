@@ -3,17 +3,17 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
-from ers.commons.services.dtos import PaginatedResult, PaginationParams
+from ers.commons.domain.dtos import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters.ports import DecisionRepository, EntityMentionRepository
-from ers.curation.domain.exceptions import AlreadyCuratedError
-from ers.curation.services import DecisionCurationService, UserActionService
-from ers.curation.services.dtos import (
+from ers.curation.domain.dtos import (
     BulkActionResponse,
     BulkItemStatus,
     DecisionFilters,
     DecisionSummary,
 )
+from ers.curation.domain.exceptions import AlreadyCuratedError
+from ers.curation.services import DecisionCurationService, UserActionService
 from tests.factories import (
     ClusterReferenceFactory,
     DecisionFactory,

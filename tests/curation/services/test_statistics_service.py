@@ -4,13 +4,13 @@ import pytest
 from erspec.models.core import EntityType
 
 from ers.curation.adapters.ports import StatisticsRepository
-from ers.curation.services import StatisticsService
-from ers.curation.services.dtos import (
+from ers.curation.domain.dtos import (
     CurationStatistics,
     RegistryStatistics,
     Statistics,
     StatisticsFilters,
 )
+from ers.curation.services import StatisticsService
 
 
 @pytest.fixture

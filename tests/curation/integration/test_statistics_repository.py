@@ -6,7 +6,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.commons.adapters.mongodb import MongoCollections
 from ers.curation.adapters.mongodb import MongoStatisticsRepository
-from ers.curation.services.dtos import StatisticsFilters
+from ers.curation.domain.dtos import StatisticsFilters
 from tests.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
