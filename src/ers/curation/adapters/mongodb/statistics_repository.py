@@ -1,13 +1,13 @@
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.commons.adapters.mongodb.collections import MongoCollections
-from ers.curation.application.dtos import (
+from ers.curation.adapters.ports.statistics_repository import (
+    StatisticsRepository as StatisticsRepositoryPort,
+)
+from ers.curation.services.dtos import (
     CurationStatistics,
     RegistryStatistics,
     StatisticsFilters,
-)
-from ers.curation.application.ports.statistics_repository import (
-    StatisticsRepository as StatisticsRepositoryPort,
 )
 
 

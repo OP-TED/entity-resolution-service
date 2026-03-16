@@ -2,15 +2,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from ers.curation.application.auth_dtos import (
+from ers.curation.entrypoints.api.dependencies import get_auth_service
+from ers.users.services import AuthService
+from ers.users.services.auth_dtos import (
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
     UserResponse,
 )
-from ers.curation.application.services import AuthService
-from ers.curation.entrypoints.api.dependencies import get_auth_service
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 

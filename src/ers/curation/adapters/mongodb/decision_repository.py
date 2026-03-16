@@ -3,14 +3,13 @@ from typing import Any
 from erspec.models.core import Decision, EntityMentionIdentifier
 
 from ers.commons.adapters.mongodb.base import BaseMongoRepository
-from ers.curation.application.dtos import (
+from ers.commons.services.dtos import PaginatedResult, PaginationParams
+from ers.curation.adapters.ports.decision_repository import (
+    DecisionRepository as DecisionRepositoryPort,
+)
+from ers.curation.services.dtos import (
     DecisionFilters,
     DecisionOrdering,
-    PaginatedResult,
-    PaginationParams,
-)
-from ers.curation.application.ports.decision_repository import (
-    DecisionRepository as DecisionRepositoryPort,
 )
 
 

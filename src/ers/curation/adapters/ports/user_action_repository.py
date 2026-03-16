@@ -3,8 +3,8 @@ from datetime import datetime
 
 from erspec.models.core import EntityMentionIdentifier, UserAction
 
-from ers.commons.application.ports.repositories import AsyncWriteRepository
-from ers.curation.application.dtos import PaginatedResult, PaginationParams
+from ers.commons.adapters.ports.repositories import AsyncWriteRepository
+from ers.commons.services.dtos import PaginatedResult, PaginationParams
 
 
 class UserActionRepository(AsyncWriteRepository[UserAction, str]):

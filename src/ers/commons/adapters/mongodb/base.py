@@ -3,7 +3,7 @@ from typing import Any, Generic, TypeVar
 from pydantic import BaseModel
 from pymongo.asynchronous.collection import AsyncCollection
 
-from ers.commons.application.ports import AsyncReadRepository, AsyncWriteRepository
+from ers.commons.adapters.ports import AsyncReadRepository, AsyncWriteRepository
 
 T = TypeVar("T", bound=BaseModel)
 ID = TypeVar("ID")

@@ -2,11 +2,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from ers.curation.application.dtos import Statistics
-from ers.curation.application.services import StatisticsService
 from ers.curation.entrypoints.api.auth import VerifiedUser
 from ers.curation.entrypoints.api.dependencies import get_statistics_service
 from ers.curation.entrypoints.api.v1.schemas import StatisticsFiltersDep
+from ers.curation.services import StatisticsService
+from ers.curation.services.dtos import Statistics
 
 router = APIRouter(prefix="/curation/stats", tags=["Statistics"])
 

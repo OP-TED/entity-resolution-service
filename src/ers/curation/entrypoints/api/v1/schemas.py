@@ -5,13 +5,11 @@ from erspec.models.core import EntityType
 from fastapi import Depends, Query
 from pydantic import BaseModel
 
+from ers.commons.services.dtos import DEFAULT_PER_PAGE, MAX_PER_PAGE, PaginationParams
 from ers.config import get_settings
-from ers.curation.application.dtos import (
-    DEFAULT_PER_PAGE,
-    MAX_PER_PAGE,
+from ers.curation.services.dtos import (
     DecisionFilters,
     DecisionOrdering,
-    PaginationParams,
     StatisticsFilters,
 )
 

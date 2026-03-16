@@ -5,33 +5,30 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.commons.adapters.mongodb import MongoCollections
 from ers.config import Settings, get_settings
-from ers.curation.adapters.argon2_hasher import Argon2PasswordHasher
-from ers.curation.adapters.jwt_token_service import JWTTokenService
 from ers.curation.adapters.mongodb import (
     MongoDecisionRepository,
     MongoEntityMentionRepository,
     MongoStatisticsRepository,
     MongoUserActionRepository,
-    MongoUserRepository,
 )
-from ers.curation.application.ports.decision_repository import DecisionRepository
-from ers.curation.application.ports.entity_mention_repository import (
+from ers.curation.adapters.ports import (
+    DecisionRepository,
     EntityMentionRepository,
+    StatisticsRepository,
+    UserActionRepository,
 )
-from ers.curation.application.ports.password_hasher import PasswordHasher
-from ers.curation.application.ports.statistics_repository import StatisticsRepository
-from ers.curation.application.ports.token_service import TokenService
-from ers.curation.application.ports.user_action_repository import UserActionRepository
-from ers.curation.application.ports.user_repository import UserRepository
-from ers.curation.application.services import (
-    AuthService,
+from ers.curation.services import (
     CanonicalEntityService,
     DecisionCurationService,
     EntityService,
     StatisticsService,
     UserActionService,
-    UserManagementService,
 )
+from ers.users.adapters.argon2_hasher import Argon2PasswordHasher
+from ers.users.adapters.jwt_token_service import JWTTokenService
+from ers.users.adapters.mongodb import MongoUserRepository
+from ers.users.adapters.ports import PasswordHasher, TokenService, UserRepository
+from ers.users.services import AuthService, UserManagementService
 
 
 def _get_database(request: Request) -> AsyncDatabase:

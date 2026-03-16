@@ -1,4 +1,4 @@
-from ers.commons.application.ports.repositories import (
+from ers.commons.adapters.ports.repositories import (
     AsyncReadRepository,
     AsyncWriteRepository,
 )

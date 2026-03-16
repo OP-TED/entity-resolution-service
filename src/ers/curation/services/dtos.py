@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from erspec.models.core import (
     ClusterReference,
@@ -8,35 +8,12 @@ from erspec.models.core import (
     EntityType,
     UserActionType,
 )
-from pydantic import BaseModel, ConfigDict, Field, Json
+from pydantic import Field, Json
+
+from ers.commons.services.dtos import FrozenDTO
 
 T = TypeVar("T")
-
-MAX_PER_PAGE = 50
-DEFAULT_PER_PAGE = 20
 BULK_ACTION_MAX_SIZE = 200
-
-
-class FrozenDTO(BaseModel):
-    """Base model for all application-layer DTOs."""
-
-    model_config = ConfigDict(frozen=True)
-
-
-class PaginationParams(FrozenDTO):
-    """Pagination query parameters."""
-
-    page: int = Field(default=1, ge=1)
-    per_page: int = Field(default=DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE)
-
-
-class PaginatedResult(FrozenDTO, Generic[T]):
-    """Paginated query result."""
-
-    count: int
-    previous: int | None = None
-    next: int | None = None
-    results: list[T]
 
 
 class DecisionOrdering(str, Enum):

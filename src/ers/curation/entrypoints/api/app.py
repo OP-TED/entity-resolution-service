@@ -10,13 +10,13 @@ from ers.commons.adapters.mongodb import (
     MongoCollections,
 )
 from ers.config import Settings, get_settings
-from ers.curation.adapters.argon2_hasher import Argon2PasswordHasher
-from ers.curation.adapters.mongodb import (
-    MongoUserRepository,
-)
 from ers.curation.entrypoints.api.exception_handlers import register_exception_handlers
 from ers.curation.entrypoints.api.health import router as health_router
 from ers.curation.entrypoints.api.v1.router import v1_router
+from ers.users.adapters.argon2_hasher import Argon2PasswordHasher
+from ers.users.adapters.mongodb import (
+    MongoUserRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ async def _seed_admin_user(
     import uuid
     from datetime import datetime, timezone
 
-    from ers.curation.domain.user import User
+    from ers.users.domain.user import User
 
     collections = MongoCollections(db)  # type: ignore[arg-type]
     repo = MongoUserRepository(collections.users)

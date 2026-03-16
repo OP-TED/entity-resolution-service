@@ -8,12 +8,10 @@ from ers.curation.adapters.mongodb.statistics_repository import (
 from ers.curation.adapters.mongodb.user_action_repository import (
     MongoUserActionRepository,
 )
-from ers.curation.adapters.mongodb.user_repository import MongoUserRepository
 
 __all__ = [
     "MongoDecisionRepository",
     "MongoEntityMentionRepository",
     "MongoStatisticsRepository",
     "MongoUserActionRepository",
-    "MongoUserRepository",
 ]

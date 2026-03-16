@@ -2,14 +2,13 @@ from abc import abstractmethod
 
 from erspec.models.core import Decision, EntityMentionIdentifier
 
-from ers.commons.application.ports.repositories import (
+from ers.commons.adapters.ports.repositories import (
     AsyncReadRepository,
     AsyncWriteRepository,
 )
-from ers.curation.application.dtos import (
+from ers.commons.services.dtos import PaginatedResult, PaginationParams
+from ers.curation.services.dtos import (
     DecisionFilters,
-    PaginatedResult,
-    PaginationParams,
 )
 
 

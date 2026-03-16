@@ -2,17 +2,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from ers.curation.application.auth_dtos import (
+from ers.commons.services.dtos import PaginatedResult
+from ers.curation.entrypoints.api.auth import AdminUser, CurrentUser
+from ers.curation.entrypoints.api.dependencies import get_user_management_service
+from ers.curation.entrypoints.api.v1.schemas import Pagination
+from ers.users.services import UserManagementService
+from ers.users.services.auth_dtos import (
     CreateUserRequest,
     UserContext,
     UserPatchRequest,
     UserResponse,
 )
-from ers.curation.application.dtos import PaginatedResult
-from ers.curation.application.services import UserManagementService
-from ers.curation.entrypoints.api.auth import AdminUser, CurrentUser
-from ers.curation.entrypoints.api.dependencies import get_user_management_service
-from ers.curation.entrypoints.api.v1.schemas import Pagination
 
 router = APIRouter(prefix="/users", tags=["Users"])
 

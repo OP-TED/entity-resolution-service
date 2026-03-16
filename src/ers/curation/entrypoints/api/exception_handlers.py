@@ -1,15 +1,13 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from ers.commons.application.exceptions import ApplicationError
 from ers.commons.domain.exceptions import DomainError
-from ers.curation.application.exceptions import NotFoundError
+from ers.commons.services.exceptions import ApplicationError, NotFoundError
 from ers.curation.domain.exceptions import (
     AlreadyCuratedError,
-    AuthenticationError,
-    AuthorizationError,
     InvalidClusterError,
 )
+from ers.users.domain.exceptions import AuthenticationError, AuthorizationError
 
 
 def register_exception_handlers(app: FastAPI) -> None:

@@ -1,7 +1,7 @@
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 
-from ers.curation.application.exceptions import NotFoundError
-from ers.curation.application.ports.entity_mention_repository import (
+from ers.commons.services.exceptions import NotFoundError
+from ers.curation.adapters.ports.entity_mention_repository import (
     EntityMentionRepository,
 )
 
