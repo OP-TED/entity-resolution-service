@@ -3,9 +3,9 @@
 ## Status
 - **Epic ID:** ERS-EPIC-03
 - **Component:** #3 — ERE Contract Client
-- **Phase:** Planning
+- **Phase:** Gherkin features complete, ready for implementation
 - **Spines:** B (Async Engine Interaction), D (Manual Curation — forwarding curator recommendations)
-- **Last updated:** 2026-03-12
+- **Last updated:** 2026-03-16
 - **Dependencies:** er-spec library (domain models), ERS-ERE contract specification (interface.adoc)
 - **Clarity Gate:** 9.7/10
 
