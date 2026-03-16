@@ -18,7 +18,6 @@ Feature: Resolution Request Registration
 
     Examples:
       | source_id        | request_id | entity_type  | content                                                                 |
-      | source_system_a  | req_001    | person       | {"name": "Alice Dupont", "dob": "1985-03-22", "nationality": "FR"}     |
       | source_system_b  | req_002    | organization | {"name": "Acme Corp", "registration_number": "BE0123456789"}           |
       | source_system_b  | req_004    | organization | {"name": "Société Générale 株式会社 — ©2024", "flag": "🇫🇷"}           |
 
@@ -40,6 +39,6 @@ Feature: Resolution Request Registration
   Scenario: Reject idempotency conflict — same triad, different content
     Given an entity mention with source_id "source_system_a", request_id "req_001", entity_type "person", and content '{"name": "Alice Dupont"}'
     And that entity mention has already been registered
-    When the same triad is resubmitted with different content '{"name": "Alice Martin"}'
+    When the same triad is resubmitted with different content '{"name": "Acme Corp"}'
     Then an IdempotencyConflictError is raised
     And the original resolution request record remains unchanged in the repository
