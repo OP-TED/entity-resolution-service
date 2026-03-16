@@ -46,7 +46,7 @@ async def _seed_admin_user(
     import uuid
     from datetime import datetime, timezone
 
-    from ers.users.domain.user import User
+    from ers.users.domain.models import User
 
     collections = MongoCollections(db)  # type: ignore[arg-type]
     repo = MongoUserRepository(collections.users)
