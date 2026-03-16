@@ -1,11 +1,11 @@
 from abc import abstractmethod
 
-from ers.commons.application.ports.repositories import (
+from ers.commons.adapters.ports.repositories import (
     AsyncReadRepository,
     AsyncWriteRepository,
 )
-from ers.curation.application.dtos import PaginatedResult, PaginationParams
-from ers.curation.domain.user import User
+from ers.commons.services.dtos import PaginatedResult, PaginationParams
+from ers.users.domain.user import User
 
 
 class UserRepository(AsyncReadRepository[User, str], AsyncWriteRepository[User, str]):

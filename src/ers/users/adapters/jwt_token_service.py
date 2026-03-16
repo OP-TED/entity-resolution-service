@@ -3,8 +3,8 @@ from typing import Any
 
 import jwt
 
-from ers.curation.application.ports.token_service import TokenService
-from ers.curation.domain.exceptions import AuthenticationError
+from ers.users.adapters.ports import TokenService
+from ers.users.domain.exceptions import AuthenticationError
 
 
 class JWTTokenService(TokenService):

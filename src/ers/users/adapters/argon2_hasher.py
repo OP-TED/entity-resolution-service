@@ -1,7 +1,7 @@
 from argon2 import PasswordHasher as Argon2Hasher
 from argon2.exceptions import VerifyMismatchError
 
-from ers.curation.application.ports.password_hasher import PasswordHasher
+from ers.users.adapters.ports import PasswordHasher
 
 
 class Argon2PasswordHasher(PasswordHasher):

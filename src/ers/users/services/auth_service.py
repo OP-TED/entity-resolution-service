@@ -1,7 +1,12 @@
 import uuid
 from datetime import datetime, timezone
 
-from ers.curation.application.auth_dtos import (
+from ers.users.adapters.ports.password_hasher import PasswordHasher
+from ers.users.adapters.ports.token_service import TokenService
+from ers.users.adapters.ports.user_repository import UserRepository
+from ers.users.domain.exceptions import AuthenticationError
+from ers.users.domain.user import User
+from ers.users.services.auth_dtos import (
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
@@ -9,11 +14,6 @@ from ers.curation.application.auth_dtos import (
     UserContext,
     UserResponse,
 )
-from ers.curation.application.ports.password_hasher import PasswordHasher
-from ers.curation.application.ports.token_service import TokenService
-from ers.curation.application.ports.user_repository import UserRepository
-from ers.curation.domain.exceptions import AuthenticationError
-from ers.curation.domain.user import User
 
 
 def _to_user_response(user: User) -> UserResponse:

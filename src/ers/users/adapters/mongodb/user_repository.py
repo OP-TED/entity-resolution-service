@@ -1,7 +1,7 @@
 from ers.commons.adapters.mongodb.base import BaseMongoRepository
-from ers.curation.application.dtos import PaginatedResult, PaginationParams
-from ers.curation.application.ports.user_repository import UserRepository
-from ers.curation.domain.user import User
+from ers.commons.services.dtos import PaginatedResult, PaginationParams
+from ers.users.adapters.ports import UserRepository
+from ers.users.domain.user import User
 
 
 class MongoUserRepository(BaseMongoRepository[User, str], UserRepository):
