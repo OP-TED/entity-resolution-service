@@ -1,16 +1,16 @@
 import uuid
 from datetime import datetime, timezone
 
-from ers.commons.services.dtos import PaginatedResult, PaginationParams
+from ers.commons.domain.dtos import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import ApplicationError, NotFoundError
 from ers.users.adapters.ports.password_hasher import PasswordHasher
 from ers.users.adapters.ports.user_repository import UserRepository
-from ers.users.domain.models import User
-from ers.users.services.auth_dtos import (
+from ers.users.domain.dtos import (
     CreateUserRequest,
     UserPatchRequest,
     UserResponse,
 )
+from ers.users.domain.models import User
 
 
 def _to_user_response(user: User) -> UserResponse:

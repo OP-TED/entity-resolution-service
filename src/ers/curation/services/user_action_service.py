@@ -1,16 +1,16 @@
 from erspec.models.core import Decision, EntityMention, UserAction
 
-from ers.commons.services.dtos import PaginatedResult, PaginationParams
+from ers.commons.domain.dtos import PaginatedResult, PaginationParams
 from ers.curation.adapters.ports.entity_mention_repository import (
     EntityMentionRepository,
 )
 from ers.curation.adapters.ports.user_action_repository import UserActionRepository
-from ers.curation.domain.exceptions import AlreadyCuratedError
-from ers.curation.domain.models import UserActionFactory
-from ers.curation.services.dtos import (
+from ers.curation.domain.dtos import (
     EntityMentionPreview,
     UserActionSummary,
 )
+from ers.curation.domain.exceptions import AlreadyCuratedError
+from ers.curation.domain.models import UserActionFactory
 
 
 class UserActionService:

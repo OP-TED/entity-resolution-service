@@ -3,14 +3,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from ers.curation.entrypoints.api.dependencies import get_auth_service
-from ers.users.services import AuthService
-from ers.users.services.auth_dtos import (
+from ers.users.domain.dtos import (
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
     UserResponse,
 )
+from ers.users.services import AuthService
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 

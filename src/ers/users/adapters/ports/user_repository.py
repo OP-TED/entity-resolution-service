@@ -4,7 +4,7 @@ from ers.commons.adapters.ports.repositories import (
     AsyncReadRepository,
     AsyncWriteRepository,
 )
-from ers.commons.services.dtos import PaginatedResult, PaginationParams
+from ers.commons.domain.dtos import PaginatedResult, PaginationParams
 from ers.users.domain.models import User
 
 

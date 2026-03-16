@@ -4,7 +4,7 @@ from ers.commons.adapters.mongodb.collections import MongoCollections
 from ers.curation.adapters.ports.statistics_repository import (
     StatisticsRepository as StatisticsRepositoryPort,
 )
-from ers.curation.services.dtos import (
+from ers.curation.domain.dtos import (
     CurationStatistics,
     RegistryStatistics,
     StatisticsFilters,

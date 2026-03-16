@@ -4,14 +4,13 @@ from typing import Any
 
 from erspec.models.core import Decision, EntityMention
 
-from ers.commons.services.dtos import PaginatedResult, PaginationParams
+from ers.commons.domain.dtos import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters.ports.decision_repository import DecisionRepository
 from ers.curation.adapters.ports.entity_mention_repository import (
     EntityMentionRepository,
 )
-from ers.curation.domain.exceptions import AlreadyCuratedError
-from ers.curation.services.dtos import (
+from ers.curation.domain.dtos import (
     BulkActionResponse,
     BulkItemResult,
     BulkItemStatus,
@@ -19,6 +18,7 @@ from ers.curation.services.dtos import (
     DecisionSummary,
     EntityMentionPreview,
 )
+from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.services.user_action_service import UserActionService
 
 

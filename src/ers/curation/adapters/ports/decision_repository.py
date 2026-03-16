@@ -6,8 +6,8 @@ from ers.commons.adapters.ports.repositories import (
     AsyncReadRepository,
     AsyncWriteRepository,
 )
-from ers.commons.services.dtos import PaginatedResult, PaginationParams
-from ers.curation.services.dtos import (
+from ers.commons.domain.dtos import PaginatedResult, PaginationParams
+from ers.curation.domain.dtos import (
     DecisionFilters,
 )
 

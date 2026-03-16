@@ -4,9 +4,7 @@ from datetime import datetime, timezone
 from ers.users.adapters.ports.password_hasher import PasswordHasher
 from ers.users.adapters.ports.token_service import TokenService
 from ers.users.adapters.ports.user_repository import UserRepository
-from ers.users.domain.exceptions import AuthenticationError
-from ers.users.domain.models import User
-from ers.users.services.auth_dtos import (
+from ers.users.domain.dtos import (
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
@@ -14,6 +12,8 @@ from ers.users.services.auth_dtos import (
     UserContext,
     UserResponse,
 )
+from ers.users.domain.exceptions import AuthenticationError
+from ers.users.domain.models import User
 
 
 def _to_user_response(user: User) -> UserResponse:

@@ -2,7 +2,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from ers.commons.services.dtos import PaginatedResult
+from ers.commons.domain.dtos import PaginatedResult
+from ers.curation.domain.dtos import (
+    AssignRequest,
+    BulkActionRequest,
+    BulkActionResponse,
+    CanonicalEntityPreview,
+    DecisionSummary,
+)
 from ers.curation.entrypoints.api.auth import VerifiedUser
 from ers.curation.entrypoints.api.dependencies import (
     get_canonical_entity_service,
@@ -16,13 +23,6 @@ from ers.curation.entrypoints.api.v1.schemas import (
 from ers.curation.services import (
     CanonicalEntityService,
     DecisionCurationService,
-)
-from ers.curation.services.dtos import (
-    AssignRequest,
-    BulkActionRequest,
-    BulkActionResponse,
-    CanonicalEntityPreview,
-    DecisionSummary,
 )
 
 router = APIRouter(prefix="/curation/decisions", tags=["Decisions"])

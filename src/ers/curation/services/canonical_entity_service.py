@@ -1,12 +1,9 @@
 from erspec.models.core import EntityMention
 
-from ers.commons.services.dtos import PaginatedResult, PaginationParams
+from ers.commons.domain.dtos import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import NotFoundError
-from ers.curation.adapters.ports.decision_repository import DecisionRepository
-from ers.curation.adapters.ports.entity_mention_repository import (
-    EntityMentionRepository,
-)
-from ers.curation.services.dtos import (
+from ers.curation.adapters.ports import DecisionRepository, EntityMentionRepository
+from ers.curation.domain.dtos import (
     CanonicalEntityPreview,
     EntityMentionPreview,
 )
