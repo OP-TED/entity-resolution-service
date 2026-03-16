@@ -94,7 +94,7 @@ Listed in **dependency order** (implementation sequence):
 | Epic ID | Component | Spines | Status |
 |---|---|---|---|
 | **ERS-EPIC-05** | ERE Result Integrator | B | ✅ Gherkin Complete (9.2/10) |
-| **ERS-EPIC-06** | Resolution Coordinator | A, B | ✅ Written (9.8/10) |
+| **ERS-EPIC-06** | Resolution Coordinator | A, B | ✅ Gherkin Complete (9.8/10) |
 | **ERS-EPIC-07** | ERS REST API (resolve + lookup + refreshBulk) | A, C | ✅ Written (9.8/10) |
 
 **Milestone:** Spine A + B testable end-to-end after EPIC-07.
@@ -193,4 +193,4 @@ When all 10 epics are written + Clarity Gate passes → implementation phase beg
 
 ## Next Action
 
-Gherkin features complete for EPIC-01 through EPIC-05. Next: write Gherkin features for EPIC-06 and EPIC-07, then begin implementation phase. EPIC-04 includes filtered queries by timestamp interval and confidence score interval beyond the original EPIC outline.
+Gherkin features complete for EPIC-01 through EPIC-06. Next: write Gherkin features for EPIC-07, then begin implementation phase. EPIC-04 includes filtered queries by timestamp interval and confidence score interval beyond the original EPIC outline.

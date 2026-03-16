@@ -30,7 +30,7 @@
 | [ERS-EPIC-03](epics/ers-epic-03-ere-contract-client/EPIC.md) | ERE Contract Client | 9.8 | Gherkin Complete |
 | [ERS-EPIC-04](epics/ers-epic-04-resolution-decision-store/EPIC.md) | Decision Store | 9.8 | Gherkin Complete |
 | [ERS-EPIC-05](epics/ers-epic-05-ere-result-integrator/EPIC.md) | ERE Result Integrator | 9.2 | Gherkin Complete |
-| [ERS-EPIC-06](epics/ers-epic-06-resolution-coordinator/EPIC.md) | Resolution Coordinator | 9.8 | Written |
+| [ERS-EPIC-06](epics/ers-epic-06-resolution-coordinator/EPIC.md) | Resolution Coordinator | 9.8 | Gherkin Complete |
 | [ERS-EPIC-07](epics/ers-epic-07-ere-rest-api/EPIC.md) | ERS REST API | 9.8 | Written |
 | ERS-EPIC-08 | User Action Store | — | Pending |
 | ERS-EPIC-09 | Link Curation REST API | — | Pending |
@@ -45,7 +45,8 @@
 - Steps reorganised into component subfolders: `tests/steps/request_registry/`, `tests/steps/ere_result_integrator/`, `tests/steps/decision_store/`
 - **[2026-03-16] ERS-EPIC-03: Gherkin features complete** — 2 feature files + step scaffolding for ERE Contract Client (request publishing, validation and transport)
 - **[2026-03-16] ERS-EPIC-02: Gherkin features complete** — 2 feature files + step scaffolding for RDF Mention Parser (config loading/validation, RDF parsing with all 6 error types)
-- Next: Gherkin features for epics 6, 7, then implementation
+- **[2026-03-16] ERS-EPIC-06: Gherkin features complete** — 3 feature files + step scaffolding for Resolution Coordinator (single-mention resolution, bulk decomposition, async waiter coordination)
+- Next: Gherkin features for EPIC-07, then implementation
 - Design spec: `docs/superpowers/specs/2026-03-16-epic05-gherkin-features-design.md`
 
 ## Codebase Patterns

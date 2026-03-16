@@ -3,9 +3,9 @@
 ## Status
 - **Epic ID:** ERS-EPIC-06
 - **Component:** #6 — Resolution Coordinator
-- **Phase:** Planning
+- **Phase:** Gherkin features complete, ready for implementation
 - **Spines:** A (Resolution Intake), B (Async Engine Interaction)
-- **Last updated:** 2026-03-12
+- **Last updated:** 2026-03-16
 - **Dependencies:** EPIC-01 (Request Registry), EPIC-02 (RDF Mention Parser), EPIC-03 (ERE Contract Client), EPIC-04 (Resolution Decision Store)
 - **Clarity Gate:** Score: 9.85/10
 
