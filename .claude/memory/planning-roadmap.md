@@ -86,7 +86,7 @@ Listed in **dependency order** (implementation sequence):
 | Epic ID | Component | Spines | Status             |
 |---|---|---|--------------------|
 | **ERS-EPIC-01** | Request Registry | A, B, C, D | ✅ Gherkin Complete (9.7/10) |
-| **ERS-EPIC-02** | RDF Mention Parser | A | ✅ Written (9.8/10) |
+| **ERS-EPIC-02** | RDF Mention Parser | A | ✅ Gherkin Complete (9.8/10) |
 | **ERS-EPIC-03** | ERE Contract Client | B, D | ✅ Gherkin Complete (9.8/10) |
 | **ERS-EPIC-04** | Resolution Decision Store | B, C, D | ✅ Gherkin Complete (9.8/10) |
 
@@ -193,4 +193,4 @@ When all 10 epics are written + Clarity Gate passes → implementation phase beg
 
 ## Next Action
 
-Gherkin features complete for EPIC-01, EPIC-03, EPIC-04, and EPIC-05. Next: write Gherkin features for remaining epics (02, 06, 07), then begin implementation phase. EPIC-04 includes filtered queries by timestamp interval and confidence score interval beyond the original EPIC outline.
+Gherkin features complete for EPIC-01 through EPIC-05. Next: write Gherkin features for EPIC-06 and EPIC-07, then begin implementation phase. EPIC-04 includes filtered queries by timestamp interval and confidence score interval beyond the original EPIC outline.

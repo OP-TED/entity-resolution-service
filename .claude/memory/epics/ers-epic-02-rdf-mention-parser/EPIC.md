@@ -3,9 +3,9 @@
 ## Status
 - **Epic ID:** ERS-EPIC-02
 - **Component:** #2 — RDF Mention Parser
-- **Phase:** Planning
+- **Phase:** Gherkin features complete, ready for implementation
 - **Spines:** A (Resolution Intake)
-- **Last updated:** 2026-03-12
+- **Last updated:** 2026-03-16
 - **Dependencies:** ERS-EPIC-01 (JSONRepresentation model), er-spec library (domain models)
 
 ---
