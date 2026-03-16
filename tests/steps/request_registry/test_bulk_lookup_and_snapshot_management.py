@@ -26,7 +26,7 @@ from erspec.models.core import LookupState
 # Scenario bindings — link each scenario title to its .feature file.
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(Path(__file__).parent.parent / "features" / "request_registry" / "bulk_lookup_and_snapshot_management.feature")
+FEATURE_FILE = str(Path(__file__).parent.parent.parent / "features" / "request_registry" / "bulk_lookup_and_snapshot_management.feature")
 
 
 @scenario(FEATURE_FILE, "Register a bulk lookup request")
