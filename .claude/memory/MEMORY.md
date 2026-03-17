@@ -58,6 +58,8 @@
 - 2026-03-17: Toolchain: Ruff (replaces pylint/black/isort), mypy, pytest, import-linter, radon/xenon. No tox.
 - 2026-03-17: `pyproject.toml` kept minimal — tool configs in dedicated files. Dep groups: dev/test/lint.
 - 2026-03-17: Infrastructure moved to `infra/` (compose, Dockerfile, scripts, .env.example).
+- 2026-03-17: `.dockerignore` moved to `infra/docker/Dockerfile.dockerignore`; `data/` excluded to avoid permission errors on postgres volume.
+- 2026-03-17: `.env` lives at `infra/.env`; all `docker compose` make targets use `--env-file infra/.env` explicitly.
 
 ## Codebase Patterns
 
@@ -70,4 +72,5 @@
 
 - epic-planner agent hits CLAUDE_CODE_MAX_OUTPUT_TOKENS (8192) when writing large EPICs. Workaround: write the EPIC directly in the main conversation instead.
 - GitNexus PostToolUse hook has MODULE_NOT_FOUND error — doesn't block work.
-- `.dockerignore` must stay at repo root (Docker requirement). Cannot move to `infra/`.
+- Docker port 8000 may stay in `TIME_WAIT` briefly after `make down`; if `make up` fails immediately, wait a few seconds and retry.
+- `.dockerignore` is at `infra/docker/Dockerfile.dockerignore`, not repo root.

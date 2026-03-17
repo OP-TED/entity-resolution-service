@@ -114,4 +114,4 @@ All deployment files live in `infra/`: `compose.yaml`, `docker/Dockerfile`, `scr
 | `rebuild` | Rebuild images and start |
 | `logs` | Follow service logs |
 
-`.dockerignore` stays at repo root (Docker requirement). `.env` stays at repo root (Compose default), template at `infra/.env.example`.
+`.dockerignore` lives at `infra/docker/Dockerfile.dockerignore` (co-located with Dockerfile; Docker auto-discovers it). `.env` lives at `infra/.env`, template at `infra/.env.example`. All `docker compose` make targets pass `--env-file $(ENV_FILE)` explicitly.
