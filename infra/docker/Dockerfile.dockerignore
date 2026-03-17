@@ -33,3 +33,4 @@ tests
 # Build artifacts
 dist
 build
+data
