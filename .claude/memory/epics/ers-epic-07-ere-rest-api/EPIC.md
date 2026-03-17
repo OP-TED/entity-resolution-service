@@ -1,6 +1,6 @@
 # EPIC-07: ERS REST API
 
-**Status:** Written (Clarity Gate: 9.8/10)
+**Status:** Gherkin Complete (Clarity Gate: 9.8/10)
 **Last Updated:** 2026-03-12
 **Component:** ERS REST API (entrypoint layer)
 **Spines Covered:** Spine A (Resolution Intake & Canonical Identifier Issuance), Spine C (Canonical Assignment Lookup / Bulk-Delta)
@@ -355,6 +355,6 @@ This EPIC synthesizes requirements from:
 ## Next Actions
 
 1. ✅ **EPIC-07 written** — Ready for implementation
-2. **Pending:** Gherkin feature writing (gherkin-writer agent)
+2. **Done:** Gherkin feature writing (gherkin-writer agent) — 3 feature files + step scaffolding under `tests/features/ers_rest_api/` and `tests/steps/ers_rest_api/`
 3. **Pending:** EPIC-06 and EPIC-04 completion (prereqs for implementation)
 4. **Pending:** Implementer agent to code the three layers and pass Clarity Gate

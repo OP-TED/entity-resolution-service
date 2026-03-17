@@ -31,7 +31,7 @@
 | [ERS-EPIC-04](epics/ers-epic-04-resolution-decision-store/EPIC.md) | Decision Store | 9.8 | Gherkin Complete |
 | [ERS-EPIC-05](epics/ers-epic-05-ere-result-integrator/EPIC.md) | ERE Result Integrator | 9.2 | Gherkin Complete |
 | [ERS-EPIC-06](epics/ers-epic-06-resolution-coordinator/EPIC.md) | Resolution Coordinator | 9.8 | Gherkin Complete |
-| [ERS-EPIC-07](epics/ers-epic-07-ere-rest-api/EPIC.md) | ERS REST API | 9.8 | Written |
+| [ERS-EPIC-07](epics/ers-epic-07-ere-rest-api/EPIC.md) | ERS REST API | 9.8 | Gherkin Complete |
 | ERS-EPIC-08 | User Action Store | — | Pending |
 | ERS-EPIC-09 | Link Curation REST API | — | Pending |
 | ERS-EPIC-X | Observability & Config | — | Pending |
@@ -46,7 +46,11 @@
 - **[2026-03-16] ERS-EPIC-03: Gherkin features complete** — 2 feature files + step scaffolding for ERE Contract Client (request publishing, validation and transport)
 - **[2026-03-16] ERS-EPIC-02: Gherkin features complete** — 2 feature files + step scaffolding for RDF Mention Parser (config loading/validation, RDF parsing with all 6 error types)
 - **[2026-03-16] ERS-EPIC-06: Gherkin features complete** — 3 feature files + step scaffolding for Resolution Coordinator (single-mention resolution, bulk decomposition, async waiter coordination)
-- Next: Gherkin features for EPIC-07, then implementation
+- **[2026-03-17] ERS-EPIC-07: Gherkin features complete** — 2 feature files + step definitions for ERS REST API:
+  - `resolve_entity_mention.feature` (16 scenarios): single + bulk resolve, 200 canonical / 202 provisional / 207 mixed, idempotency, validation
+  - `lookup_cluster_assignment.feature` (11 scenarios): merged single GET /lookup + bulk POST /refreshBulk, pagination, synchronisation snapshot, read-only contract
+- Key EPIC-07 design decisions: 202 Accepted for provisional outcomes, 207 Multi-Status for mixed bulk, POST /resolveBulk as separate endpoint, content is RDF Turtle (mock fixtures), context field optional (NoticeID)
+- Next: Implementation of EPIC-07 (requires EPIC-04 and EPIC-06 to be complete)
 - Design spec: `docs/superpowers/specs/2026-03-16-epic05-gherkin-features-design.md`
 
 ## Codebase Patterns
