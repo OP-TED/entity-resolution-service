@@ -13,10 +13,7 @@ from ers.config import Settings, get_settings
 from ers.curation.entrypoints.api.exception_handlers import register_exception_handlers
 from ers.curation.entrypoints.api.health import router as health_router
 from ers.curation.entrypoints.api.v1.router import v1_router
-from ers.users.adapters.argon2_hasher import Argon2PasswordHasher
-from ers.users.adapters.mongodb import (
-    MongoUserRepository,
-)
+from ers.users.adapters import Argon2PasswordHasher, MongoUserRepository
 
 logger = logging.getLogger(__name__)
 

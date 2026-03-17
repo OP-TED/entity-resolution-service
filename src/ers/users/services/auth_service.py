@@ -1,9 +1,8 @@
 import uuid
 from datetime import datetime, timezone
 
-from ers.users.adapters.ports.password_hasher import PasswordHasher
-from ers.users.adapters.ports.token_service import TokenService
-from ers.users.adapters.ports.user_repository import UserRepository
+from ers.users.adapters.hasher import PasswordHasher
+from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.data_transfer_objects import (
     LoginRequest,
     RefreshRequest,
@@ -14,6 +13,7 @@ from ers.users.domain.data_transfer_objects import (
 )
 from ers.users.domain.exceptions import AuthenticationError
 from ers.users.domain.users import User
+from ers.users.services.token_service import TokenService
 
 
 def _to_user_response(user: User) -> UserResponse:

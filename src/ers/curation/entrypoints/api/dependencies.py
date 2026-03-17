@@ -24,11 +24,10 @@ from ers.curation.services import (
     StatisticsService,
     UserActionService,
 )
-from ers.users.adapters.argon2_hasher import Argon2PasswordHasher
-from ers.users.adapters.jwt_token_service import JWTTokenService
-from ers.users.adapters.mongodb import MongoUserRepository
-from ers.users.adapters.ports import PasswordHasher, TokenService, UserRepository
+from ers.users.adapters import MongoUserRepository, UserRepository
+from ers.users.adapters.hasher import Argon2PasswordHasher, PasswordHasher
 from ers.users.services import AuthService, UserManagementService
+from ers.users.services.token_service import JWTTokenService, TokenService
 
 
 def _get_database(request: Request) -> AsyncDatabase:

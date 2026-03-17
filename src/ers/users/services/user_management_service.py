@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import ApplicationError, NotFoundError
-from ers.users.adapters.ports.password_hasher import PasswordHasher
-from ers.users.adapters.ports.user_repository import UserRepository
+from ers.users.adapters.hasher import PasswordHasher
+from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.data_transfer_objects import (
     CreateUserRequest,
     UserPatchRequest,
