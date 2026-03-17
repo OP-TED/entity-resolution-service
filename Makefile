@@ -9,6 +9,7 @@ TEST_PATH = ${PROJECT_PATH}/tests
 BUILD_PATH = ${PROJECT_PATH}/dist
 PACKAGE_NAME = ers
 COMPOSE_FILE = ${PROJECT_PATH}/infra/compose.yaml
+ENV_FILE = ${PROJECT_PATH}/infra/.env
 
 ICON_DONE = [✔]
 ICON_ERROR = [x]
@@ -182,7 +183,7 @@ ci-full: check-all clean-code ## CI full: quality + all tests + clean-code
 coverage-report: ## Generate HTML coverage report in reports/
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Generating coverage report$(END_BUILD_PRINT)"
 	@ mkdir -p reports
-	@ poetry run pytest $(TEST_PATH) $(COV_FLAGS) --cov-report=html:reports/htmlcov
+	@ poetry run pytest $(TEST_PATH) $(COV_FLAGS) --cov-report=html:reports/htmlcov -m "not integration"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Coverage report at reports/htmlcov/index.html$(END_BUILD_PRINT)"
 
 quality-report: ## Generate Radon quality report in reports/
@@ -219,21 +220,21 @@ clean-code: ## Xenon threshold checks
 
 up: ## Start services (docker compose up -d)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Starting services$(END_BUILD_PRINT)"
-	@ docker compose -f $(COMPOSE_FILE) up -d
+	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up -d
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services started$(END_BUILD_PRINT)"
 
 down: ## Stop services (docker compose down)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Stopping services$(END_BUILD_PRINT)"
-	@ docker compose -f $(COMPOSE_FILE) down
+	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) down
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services stopped$(END_BUILD_PRINT)"
 
 rebuild: ## Rebuild and start services
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Rebuilding services$(END_BUILD_PRINT)"
-	@ docker compose -f $(COMPOSE_FILE) up -d --build
+	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up -d --build
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services rebuilt and started$(END_BUILD_PRINT)"
 
 logs: ## Follow service logs
-	@ docker compose -f $(COMPOSE_FILE) logs -f
+	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) logs -f
 
 #-----------------------------------------------------------------------------
 # Utilities

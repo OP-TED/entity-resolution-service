@@ -6,7 +6,7 @@ services:
     ports:
       - "${UVICORN_PORT:-8000}:8000"
     env_file:
-      - ../.env
+      - .env
     environment:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
