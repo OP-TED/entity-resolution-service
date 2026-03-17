@@ -3,10 +3,7 @@ from datetime import datetime
 
 from erspec.models.core import EntityMentionIdentifier, UserAction
 
-from ers.commons.adapters.user_action_repository import (
-    MongoUserActionRepository,
-    UserActionRepository,
-)
+from ers.commons.adapters import MongoUserActionRepository, UserActionRepository
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 
 

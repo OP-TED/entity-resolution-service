@@ -1,7 +1,10 @@
 from abc import abstractmethod
 
-from ers.commons.adapters import BaseMongoRepository
-from ers.commons.adapters.repository import AsyncReadRepository, AsyncWriteRepository
+from ers.commons.adapters import (
+    AsyncReadRepository,
+    AsyncWriteRepository,
+    BaseMongoRepository,
+)
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.users.domain.users import User
 
