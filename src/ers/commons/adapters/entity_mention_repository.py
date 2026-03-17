@@ -20,18 +20,9 @@ class MongoEntityMentionRepository(
     _model_class = EntityMention
     _id_field = "identifiedBy"
 
-    def _identifier_to_id(self, identifier: EntityMentionIdentifier) -> dict[str, str]:
-        return {
-            "source_id": identifier.source_id,
-            "request_id": identifier.request_id,
-            "entity_type": identifier.entity_type,
-        }
-
     def _to_document(self, entity: EntityMention) -> dict[str, Any]:
-        doc = entity.model_dump(mode="python")
-        doc.pop("object_description", None)
-        doc["_id"] = self._identifier_to_id(entity.identifiedBy)
-        del doc["identifiedBy"]
+        doc = entity.model_dump(exclude={"identifiedBy", "object_description"})
+        doc["_id"] = entity.identifiedBy.model_dump()
         return doc
 
     def _from_document(self, doc: dict[str, Any]) -> EntityMention:
@@ -42,9 +33,7 @@ class MongoEntityMentionRepository(
     async def find_by_id(
         self, entity_id: EntityMentionIdentifier
     ) -> EntityMention | None:
-        doc = await self._collection.find_one(
-            {"_id": self._identifier_to_id(entity_id)}
-        )
+        doc = await self._collection.find_one({"_id": entity_id.model_dump()})
         if doc is None:
             return None
         return self._from_document(doc)

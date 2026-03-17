@@ -36,7 +36,7 @@ class MongoEntityMentionCurationRepository(
         identifiers: list[EntityMentionIdentifier],
         limit: int | None = None,
     ) -> list[EntityMention]:
-        id_docs = [self._identifier_to_id(i) for i in identifiers]
+        id_docs = [i.model_dump() for i in identifiers]
         cursor = self._collection.find({"_id": {"$in": id_docs}})
         if limit is not None:
             cursor = cursor.limit(limit)

@@ -37,8 +37,7 @@ class BaseMongoRepository(AsyncReadRepository[T, ID], AsyncWriteRepository[T, ID
         self._collection = collection
 
     def _to_document(self, entity: T) -> dict[str, Any]:
-        doc = entity.model_dump(mode="python")
-        doc.pop("object_description", None)
+        doc = entity.model_dump(exclude={"object_description"})
         doc["_id"] = doc.pop(self._id_field)
         return doc
 
