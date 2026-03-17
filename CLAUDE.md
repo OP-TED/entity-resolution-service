@@ -154,7 +154,7 @@ make clean-docs       # Remove build artifacts
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **entity-resolution-docs** (77 symbols, 71 relationships, 0 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **entity-resolution-service** (1443 symbols, 2524 relationships, 42 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -170,7 +170,7 @@ This project is indexed by GitNexus as **entity-resolution-docs** (77 symbols, 7
 
 1. `gitnexus_query({query: "<error or symptom>"})` — find execution flows related to the issue
 2. `gitnexus_context({name: "<suspect function>"})` — see all callers, callees, and process participation
-3. `READ gitnexus://repo/entity-resolution-docs/process/{processName}` — trace the full execution flow step by step
+3. `READ gitnexus://repo/entity-resolution-service/process/{processName}` — trace the full execution flow step by step
 4. For regressions: `gitnexus_detect_changes({scope: "compare", base_ref: "main"})` — see what your branch changed
 
 ## When Refactoring
@@ -209,10 +209,10 @@ This project is indexed by GitNexus as **entity-resolution-docs** (77 symbols, 7
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/entity-resolution-docs/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/entity-resolution-docs/clusters` | All functional areas |
-| `gitnexus://repo/entity-resolution-docs/processes` | All execution flows |
-| `gitnexus://repo/entity-resolution-docs/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/entity-resolution-service/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/entity-resolution-service/clusters` | All functional areas |
+| `gitnexus://repo/entity-resolution-service/processes` | All execution flows |
+| `gitnexus://repo/entity-resolution-service/process/{name}` | Step-by-step execution trace |
 
 ## Self-Check Before Finishing
 
