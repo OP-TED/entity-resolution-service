@@ -50,6 +50,14 @@
   - `resolve_entity_mention.feature` (16 scenarios): single + bulk resolve, 200 canonical / 202 provisional / 207 mixed, idempotency, validation
   - `lookup_cluster_assignment.feature` (11 scenarios): merged single GET /lookup + bulk POST /refreshBulk, pagination, synchronisation snapshot, read-only contract
 - Key EPIC-07 design decisions: 202 Accepted for provisional outcomes, 207 Multi-Status for mixed bulk, POST /resolveBulk as separate endpoint, content is RDF Turtle (mock fixtures), context field optional (NoticeID)
+- **[2026-03-17] UC-level Gherkin features complete** — `tests/features/ucs/` + `tests/steps/ucs/`:
+  - `ucb11_resolve_entity_mention.feature` (10 scenarios): full resolve integration, SHA256 draft ID determinism (ADR-A1N), idempotency, validation, dependency failures
+  - `ucb12_integrate_ere_outcomes.feature` (10 scenarios): async outcome integration, draft replacement/confirmation, reclustering, duplicate handling, score preservation
+  - `ucb21_submit_user_reevaluation.feature` (5 scenarios): placement + exclusion recommendations forwarded to ERE, no direct Decision Store modification
+  - `ucb22_bulk_curator_reevaluation.feature` (4 scenarios): bulk decomposition, partial validation failure, independent per-mention forwarding
+  - `ucw4_consult_resolution_statistics.feature` (5 scenarios): aggregated read-only statistics per entity type
+  - `e2e_resolution_cycle.feature` (4 scenarios): black-box 3-phase cycle (resolve → ERE outcome → lookup/refreshBulk)
+- UC coverage decisions: UCW3 (reclustering) covered by UCB12; UCB21/UCB22 trimmed to avoid duplicating UCB12 ERE outcome integration; E2E trimmed to 4 non-redundant cross-phase scenarios
 - Next: Implementation of EPIC-07 (requires EPIC-04 and EPIC-06 to be complete)
 - Design spec: `docs/superpowers/specs/2026-03-16-epic05-gherkin-features-design.md`
 
