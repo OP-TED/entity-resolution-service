@@ -6,9 +6,9 @@ from erspec.models.core import Decision, EntityMention
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import NotFoundError
-from ers.curation.adapters.decision_repository import DecisionRepository
+from ers.curation.adapters.decision_repository import DecisionCurationRepository
 from ers.curation.adapters.entity_mention_repository import (
-    EntityMentionRepository,
+    EntityMentionCurationRepository,
 )
 from ers.curation.domain.data_transfer_objects import (
     BulkActionResponse,
@@ -29,8 +29,8 @@ class DecisionCurationService:
 
     def __init__(
         self,
-        decision_repository: DecisionRepository,
-        entity_mention_repository: EntityMentionRepository,
+        decision_repository: DecisionCurationRepository,
+        entity_mention_repository: EntityMentionCurationRepository,
         user_action_service: UserActionService,
     ) -> None:
         self._decision_repository = decision_repository

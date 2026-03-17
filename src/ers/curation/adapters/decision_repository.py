@@ -3,8 +3,10 @@ from typing import Any
 
 from erspec.models.core import Decision, EntityMentionIdentifier
 
-from ers.commons.adapters import BaseMongoRepository
-from ers.commons.adapters.repository import AsyncReadRepository, AsyncWriteRepository
+from ers.commons.adapters.decision_repository import (
+    DecisionRepository,
+    MongoDecisionRepository,
+)
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.curation.domain.data_transfer_objects import (
     DecisionFilters,
@@ -12,11 +14,8 @@ from ers.curation.domain.data_transfer_objects import (
 )
 
 
-class DecisionRepository(
-    AsyncReadRepository[Decision, str],
-    AsyncWriteRepository[Decision, str],
-):
-    """Repository for decision projection persistence and querying."""
+class DecisionCurationRepository(DecisionRepository):
+    """Repository for decision projection persistence and curation specific querying."""
 
     @abstractmethod
     async def find_with_filters(
@@ -52,12 +51,11 @@ class DecisionRepository(
         """Return the average number of decisions per cluster."""
 
 
-class MongoDecisionRepository(
-    BaseMongoRepository[Decision, str],
-    DecisionRepository,
+class MongoDecisionCurationRepository(
+    MongoDecisionRepository,
+    DecisionCurationRepository,
 ):
-    _model_class = Decision
-    _id_field = "id"
+    """MongoDB repository for decision projections with curation-specific queries."""
 
     def _build_query(self, filters: DecisionFilters) -> dict[str, Any]:
         query: dict[str, Any] = {}

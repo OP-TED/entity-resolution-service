@@ -3,12 +3,14 @@ from datetime import datetime
 
 from erspec.models.core import EntityMentionIdentifier, UserAction
 
-from ers.commons.adapters import BaseMongoRepository
-from ers.commons.adapters.repository import AsyncWriteRepository
+from ers.commons.adapters.user_action_repository import (
+    MongoUserActionRepository,
+    UserActionRepository,
+)
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 
 
-class UserActionRepository(AsyncWriteRepository[UserAction, str]):
+class UserActionCurationRepository(UserActionRepository):
     """Repository for persisting user action (curation) entries."""
 
     @abstractmethod
@@ -27,9 +29,9 @@ class UserActionRepository(AsyncWriteRepository[UserAction, str]):
         """Check if a UserAction exists for this entity mention since the given timestamp."""
 
 
-class MongoUserActionRepository(
-    BaseMongoRepository[UserAction, str],
-    UserActionRepository,
+class MongoUserActionCurationRepository(
+    MongoUserActionRepository,
+    UserActionCurationRepository,
 ):
     _model_class = UserAction
     _id_field = "id"

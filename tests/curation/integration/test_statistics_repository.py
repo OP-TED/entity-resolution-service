@@ -24,16 +24,20 @@ def repo(mongo_db: AsyncDatabase) -> MongoStatisticsRepository:
 
 async def _seed_data(db: AsyncDatabase) -> None:
     """Insert a realistic dataset across all collections."""
-    from ers.curation.adapters.decision_repository import MongoDecisionRepository
-    from ers.curation.adapters.entity_mention_repository import (
-        MongoEntityMentionRepository,
+    from ers.curation.adapters.decision_repository import (
+        MongoDecisionCurationRepository,
     )
-    from ers.curation.adapters.user_action_repository import MongoUserActionRepository
+    from ers.curation.adapters.entity_mention_repository import (
+        MongoEntityMentionCurationRepository,
+    )
+    from ers.curation.adapters.user_action_repository import (
+        MongoUserActionCurationRepository,
+    )
 
     collections = MongoCollections(db)
-    mention_repo = MongoEntityMentionRepository(collections.entity_mentions)
-    decision_repo = MongoDecisionRepository(collections.decisions)
-    action_repo = MongoUserActionRepository(collections.user_actions)
+    mention_repo = MongoEntityMentionCurationRepository(collections.entity_mentions)
+    decision_repo = MongoDecisionCurationRepository(collections.decisions)
+    action_repo = MongoUserActionCurationRepository(collections.user_actions)
 
     mentions = EntityMentionFactory.batch(4)
     mentions[0].identifiedBy.entity_type = "ORGANISATION"

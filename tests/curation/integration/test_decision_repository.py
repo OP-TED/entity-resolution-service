@@ -6,7 +6,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.commons.adapters import MongoCollections
 from ers.commons.domain.data_transfer_objects import PaginationParams
-from ers.curation.adapters.decision_repository import MongoDecisionRepository
+from ers.curation.adapters.decision_repository import MongoDecisionCurationRepository
 from ers.curation.domain.data_transfer_objects import (
     DecisionFilters,
     DecisionOrdering,
@@ -21,12 +21,14 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def repo(mongo_db: AsyncDatabase) -> MongoDecisionRepository:
-    return MongoDecisionRepository(MongoCollections(mongo_db).decisions)
+def repo(mongo_db: AsyncDatabase) -> MongoDecisionCurationRepository:
+    return MongoDecisionCurationRepository(MongoCollections(mongo_db).decisions)
 
 
 class TestSaveAndFindById:
-    async def test_save_and_retrieve(self, repo: MongoDecisionRepository) -> None:
+    async def test_save_and_retrieve(
+        self, repo: MongoDecisionCurationRepository
+    ) -> None:
         decision = DecisionFactory.build()
         await repo.save(decision)
 
@@ -39,11 +41,15 @@ class TestSaveAndFindById:
             == decision.about_entity_mention.source_id
         )
 
-    async def test_find_by_id_not_found(self, repo: MongoDecisionRepository) -> None:
+    async def test_find_by_id_not_found(
+        self, repo: MongoDecisionCurationRepository
+    ) -> None:
         result = await repo.find_by_id("nonexistent")
         assert result is None
 
-    async def test_save_upserts_on_same_id(self, repo: MongoDecisionRepository) -> None:
+    async def test_save_upserts_on_same_id(
+        self, repo: MongoDecisionCurationRepository
+    ) -> None:
         decision = DecisionFactory.build()
         await repo.save(decision)
 
@@ -63,7 +69,7 @@ class TestSaveAndFindById:
 
 
 class TestFindWithFilters:
-    async def _seed(self, repo: MongoDecisionRepository) -> list[Decision]:
+    async def _seed(self, repo: MongoDecisionCurationRepository) -> list[Decision]:
         decisions = [
             DecisionFactory.build(
                 id="d-1",
@@ -97,12 +103,16 @@ class TestFindWithFilters:
             await repo.save(d)
         return decisions
 
-    async def test_no_filters_returns_all(self, repo: MongoDecisionRepository) -> None:
+    async def test_no_filters_returns_all(
+        self, repo: MongoDecisionCurationRepository
+    ) -> None:
         await self._seed(repo)
         result = await repo.find_with_filters(DecisionFilters(), PaginationParams())
         assert result.count == 3
 
-    async def test_filter_by_entity_type(self, repo: MongoDecisionRepository) -> None:
+    async def test_filter_by_entity_type(
+        self, repo: MongoDecisionCurationRepository
+    ) -> None:
         await self._seed(repo)
         result = await repo.find_with_filters(
             DecisionFilters(entity_type="ORGANISATION"), PaginationParams()
@@ -113,7 +123,7 @@ class TestFindWithFilters:
         )
 
     async def test_filter_by_confidence_range(
-        self, repo: MongoDecisionRepository
+        self, repo: MongoDecisionCurationRepository
     ) -> None:
         await self._seed(repo)
         result = await repo.find_with_filters(
@@ -124,7 +134,7 @@ class TestFindWithFilters:
             0.70 <= r.current_placement.confidence_score <= 0.99 for r in result.results
         )
 
-    async def test_pagination(self, repo: MongoDecisionRepository) -> None:
+    async def test_pagination(self, repo: MongoDecisionCurationRepository) -> None:
         await self._seed(repo)
         page1 = await repo.find_with_filters(
             DecisionFilters(), PaginationParams(page=1, per_page=2)
@@ -141,7 +151,7 @@ class TestFindWithFilters:
         assert page2.previous == 1
 
     async def test_ordering_by_confidence_asc(
-        self, repo: MongoDecisionRepository
+        self, repo: MongoDecisionCurationRepository
     ) -> None:
         await self._seed(repo)
         result = await repo.find_with_filters(
@@ -152,7 +162,7 @@ class TestFindWithFilters:
         assert scores == sorted(scores)
 
     async def test_filter_by_mention_identifiers(
-        self, repo: MongoDecisionRepository
+        self, repo: MongoDecisionCurationRepository
     ) -> None:
         decisions = await self._seed(repo)
         target = decisions[0].about_entity_mention
@@ -167,7 +177,7 @@ class TestFindWithFilters:
         assert result.results[0].id == decisions[0].id
 
     async def test_filter_by_mention_identifiers_empty_list_returns_none(
-        self, repo: MongoDecisionRepository
+        self, repo: MongoDecisionCurationRepository
     ) -> None:
         await self._seed(repo)
 

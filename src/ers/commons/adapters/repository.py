@@ -23,9 +23,7 @@ class AsyncWriteRepository(ABC, Generic[T, ID]):
         """Persist an entity. Handles both creation and updates."""
 
 
-class BaseMongoRepository(
-    Generic[T, ID], AsyncReadRepository[T, ID], AsyncWriteRepository[T, ID]
-):
+class BaseMongoRepository(AsyncReadRepository[T, ID], AsyncWriteRepository[T, ID]):
     """Generic base for MongoDB repositories backed by Pydantic models.
 
     Handles bidirectional conversion between Pydantic models and MongoDB documents,

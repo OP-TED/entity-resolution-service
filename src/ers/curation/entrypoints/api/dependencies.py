@@ -6,14 +6,14 @@ from pymongo.asynchronous.database import AsyncDatabase
 from ers.commons.adapters import MongoCollections
 from ers.config import Settings, get_settings
 from ers.curation.adapters import (
-    DecisionRepository,
-    EntityMentionRepository,
-    MongoDecisionRepository,
-    MongoEntityMentionRepository,
+    DecisionCurationRepository,
+    EntityMentionCurationRepository,
+    MongoDecisionCurationRepository,
+    MongoEntityMentionCurationRepository,
     MongoStatisticsRepository,
-    MongoUserActionRepository,
+    MongoUserActionCurationRepository,
     StatisticsRepository,
-    UserActionRepository,
+    UserActionCurationRepository,
 )
 from ers.curation.services import (
     CanonicalEntityService,
@@ -59,20 +59,20 @@ def get_token_service(
 
 async def get_decision_repository(
     collections: Annotated[MongoCollections, Depends(_get_collections)],
-) -> DecisionRepository:
-    return MongoDecisionRepository(collections.decisions)
+) -> DecisionCurationRepository:
+    return MongoDecisionCurationRepository(collections.decisions)
 
 
 async def get_entity_mention_repository(
     collections: Annotated[MongoCollections, Depends(_get_collections)],
-) -> EntityMentionRepository:
-    return MongoEntityMentionRepository(collections.entity_mentions)
+) -> EntityMentionCurationRepository:
+    return MongoEntityMentionCurationRepository(collections.entity_mentions)
 
 
 async def get_user_action_repository(
     collections: Annotated[MongoCollections, Depends(_get_collections)],
-) -> UserActionRepository:
-    return MongoUserActionRepository(collections.user_actions)
+) -> UserActionCurationRepository:
+    return MongoUserActionCurationRepository(collections.user_actions)
 
 
 async def get_statistics_repository(
@@ -91,9 +91,9 @@ async def get_user_repository(
 
 
 async def get_user_action_service(
-    repo: Annotated[UserActionRepository, Depends(get_user_action_repository)],
+    repo: Annotated[UserActionCurationRepository, Depends(get_user_action_repository)],
     entity_repo: Annotated[
-        EntityMentionRepository, Depends(get_entity_mention_repository)
+        EntityMentionCurationRepository, Depends(get_entity_mention_repository)
     ],
 ) -> UserActionService:
     return UserActionService(
@@ -103,9 +103,11 @@ async def get_user_action_service(
 
 
 async def get_decision_curation_service(
-    decision_repo: Annotated[DecisionRepository, Depends(get_decision_repository)],
+    decision_repo: Annotated[
+        DecisionCurationRepository, Depends(get_decision_repository)
+    ],
     entity_repo: Annotated[
-        EntityMentionRepository, Depends(get_entity_mention_repository)
+        EntityMentionCurationRepository, Depends(get_entity_mention_repository)
     ],
     user_action_service: Annotated[UserActionService, Depends(get_user_action_service)],
 ) -> DecisionCurationService:
@@ -117,9 +119,11 @@ async def get_decision_curation_service(
 
 
 async def get_canonical_entity_service(
-    decision_repo: Annotated[DecisionRepository, Depends(get_decision_repository)],
+    decision_repo: Annotated[
+        DecisionCurationRepository, Depends(get_decision_repository)
+    ],
     entity_repo: Annotated[
-        EntityMentionRepository, Depends(get_entity_mention_repository)
+        EntityMentionCurationRepository, Depends(get_entity_mention_repository)
     ],
 ) -> CanonicalEntityService:
     return CanonicalEntityService(
@@ -130,7 +134,7 @@ async def get_canonical_entity_service(
 
 async def get_entity_service(
     entity_repo: Annotated[
-        EntityMentionRepository, Depends(get_entity_mention_repository)
+        EntityMentionCurationRepository, Depends(get_entity_mention_repository)
     ],
 ) -> EntityService:
     return EntityService(entity_mention_repository=entity_repo)

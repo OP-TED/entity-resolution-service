@@ -19,9 +19,13 @@ from pymongo import AsyncMongoClient
 
 from ers.commons.adapters import MongoCollections
 from ers.config import get_settings
-from ers.curation.adapters.decision_repository import MongoDecisionRepository
-from ers.curation.adapters.entity_mention_repository import MongoEntityMentionRepository
-from ers.curation.adapters.user_action_repository import MongoUserActionRepository
+from ers.curation.adapters.decision_repository import MongoDecisionCurationRepository
+from ers.curation.adapters.entity_mention_repository import (
+    MongoEntityMentionCurationRepository,
+)
+from ers.curation.adapters.user_action_repository import (
+    MongoUserActionCurationRepository,
+)
 
 # only used for seeding/testing
 from tests.factories import (
@@ -55,7 +59,7 @@ async def _drop_seed_collections(db: Any) -> None:
 
 
 async def _create_mentions(
-    mention_repo: MongoEntityMentionRepository,
+    mention_repo: MongoEntityMentionCurationRepository,
     num_mentions: int,
     num_requests: int,
 ) -> list[Any]:
@@ -117,7 +121,7 @@ async def _create_decisions(
     mentions: list[Any],
     cluster_refs_by_mention: dict[str, list[Any]],
     cluster_ids: list[str],
-    decision_repo: MongoDecisionRepository,
+    decision_repo: MongoDecisionCurationRepository,
 ) -> list[Any]:
     decisions: list[Any] = []
     for mention in mentions:
@@ -149,7 +153,7 @@ def _selected_cluster_for_action(
 
 async def _create_user_actions(
     decisions: list[Any],
-    action_repo: MongoUserActionRepository,
+    action_repo: MongoUserActionCurationRepository,
 ) -> int:
     curated_decisions = random.sample(
         decisions, k=min(len(decisions) // 3, len(decisions))
@@ -181,9 +185,9 @@ async def seed(
     collections = MongoCollections(db)
     await _drop_seed_collections(db)
 
-    mention_repo = MongoEntityMentionRepository(collections.entity_mentions)
-    decision_repo = MongoDecisionRepository(collections.decisions)
-    action_repo = MongoUserActionRepository(collections.user_actions)
+    mention_repo = MongoEntityMentionCurationRepository(collections.entity_mentions)
+    decision_repo = MongoDecisionCurationRepository(collections.decisions)
+    action_repo = MongoUserActionCurationRepository(collections.user_actions)
 
     mentions = await _create_mentions(mention_repo, num_mentions, num_requests)
     cluster_ids, cluster_refs_by_mention = _build_cluster_references(

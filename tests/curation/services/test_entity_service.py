@@ -4,7 +4,7 @@ import pytest
 
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters import (
-    EntityMentionRepository,
+    EntityMentionCurationRepository,
 )
 from ers.curation.services import EntityService
 from tests.factories import EntityMentionFactory, EntityMentionIdentifierFactory
@@ -12,7 +12,7 @@ from tests.factories import EntityMentionFactory, EntityMentionIdentifierFactory
 
 @pytest.fixture
 def entity_mention_repository() -> MagicMock:
-    return create_autospec(EntityMentionRepository, instance=True)
+    return create_autospec(EntityMentionCurationRepository, instance=True)
 
 
 @pytest.fixture

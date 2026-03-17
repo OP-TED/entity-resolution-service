@@ -2,9 +2,9 @@ from erspec.models.core import Decision, EntityMention, UserAction
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.curation.adapters.entity_mention_repository import (
-    EntityMentionRepository,
+    EntityMentionCurationRepository,
 )
-from ers.curation.adapters.user_action_repository import UserActionRepository
+from ers.curation.adapters.user_action_repository import UserActionCurationRepository
 from ers.curation.domain.data_transfer_objects import (
     EntityMentionPreview,
     UserActionSummary,
@@ -18,8 +18,8 @@ class UserActionService:
 
     def __init__(
         self,
-        user_action_repository: UserActionRepository,
-        entity_mention_repository: EntityMentionRepository,
+        user_action_repository: UserActionCurationRepository,
+        entity_mention_repository: EntityMentionCurationRepository,
     ) -> None:
         self._user_action_repository = user_action_repository
         self._entity_mention_repository = entity_mention_repository

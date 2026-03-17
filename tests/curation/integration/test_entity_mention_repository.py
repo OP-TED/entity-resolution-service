@@ -4,19 +4,25 @@ import pytest
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.commons.adapters import MongoCollections
-from ers.curation.adapters.entity_mention_repository import MongoEntityMentionRepository
+from ers.curation.adapters.entity_mention_repository import (
+    MongoEntityMentionCurationRepository,
+)
 from tests.factories import EntityMentionFactory, EntityMentionIdentifierFactory
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def repo(mongo_db: AsyncDatabase) -> MongoEntityMentionRepository:
-    return MongoEntityMentionRepository(MongoCollections(mongo_db).entity_mentions)
+def repo(mongo_db: AsyncDatabase) -> MongoEntityMentionCurationRepository:
+    return MongoEntityMentionCurationRepository(
+        MongoCollections(mongo_db).entity_mentions
+    )
 
 
 class TestSaveAndFindById:
-    async def test_save_and_retrieve(self, repo: MongoEntityMentionRepository) -> None:
+    async def test_save_and_retrieve(
+        self, repo: MongoEntityMentionCurationRepository
+    ) -> None:
         mention = EntityMentionFactory.build()
         await repo.save(mention)
 
@@ -27,7 +33,7 @@ class TestSaveAndFindById:
         assert found.content == mention.content
 
     async def test_find_by_id_not_found(
-        self, repo: MongoEntityMentionRepository
+        self, repo: MongoEntityMentionCurationRepository
     ) -> None:
         missing = EntityMentionIdentifierFactory.build()
         result = await repo.find_by_id(missing)
@@ -35,7 +41,9 @@ class TestSaveAndFindById:
 
 
 class TestFindByIdentifiers:
-    async def test_batch_fetch(self, repo: MongoEntityMentionRepository) -> None:
+    async def test_batch_fetch(
+        self, repo: MongoEntityMentionCurationRepository
+    ) -> None:
         mentions = EntityMentionFactory.batch(3)
         for m in mentions:
             await repo.save(m)
@@ -46,7 +54,7 @@ class TestFindByIdentifiers:
         assert len(results) == 3
 
     async def test_batch_fetch_with_limit(
-        self, repo: MongoEntityMentionRepository
+        self, repo: MongoEntityMentionCurationRepository
     ) -> None:
         mentions = EntityMentionFactory.batch(3)
         for m in mentions:
@@ -58,7 +66,7 @@ class TestFindByIdentifiers:
         assert len(results) == 2
 
     async def test_batch_fetch_partial_match(
-        self, repo: MongoEntityMentionRepository
+        self, repo: MongoEntityMentionCurationRepository
     ) -> None:
         mention = EntityMentionFactory.build()
         await repo.save(mention)
@@ -72,7 +80,7 @@ class TestFindByIdentifiers:
 
 class TestSearchIdentifiers:
     async def test_search_by_content_match(
-        self, repo: MongoEntityMentionRepository
+        self, repo: MongoEntityMentionCurationRepository
     ) -> None:
         mention = EntityMentionFactory.build(
             content='{"name": "Acme Corporation"}',
@@ -85,7 +93,7 @@ class TestSearchIdentifiers:
         assert results[0].source_id == mention.identifiedBy.source_id
 
     async def test_search_by_parsed_representation_match(
-        self, repo: MongoEntityMentionRepository
+        self, repo: MongoEntityMentionCurationRepository
     ) -> None:
         payload = {"name": "UniqueTestCompany", "country": "US"}
         mention = EntityMentionFactory.build(
@@ -99,7 +107,7 @@ class TestSearchIdentifiers:
         assert results[0].source_id == mention.identifiedBy.source_id
 
     async def test_search_no_match_returns_empty(
-        self, repo: MongoEntityMentionRepository
+        self, repo: MongoEntityMentionCurationRepository
     ) -> None:
         mention = EntityMentionFactory.build(
             content='{"name": "Known Entity"}',
@@ -111,7 +119,7 @@ class TestSearchIdentifiers:
         assert results == []
 
     async def test_search_returns_multiple_matches(
-        self, repo: MongoEntityMentionRepository
+        self, repo: MongoEntityMentionCurationRepository
     ) -> None:
         m1 = EntityMentionFactory.build(
             content='{"name": "Alpha Corp"}',

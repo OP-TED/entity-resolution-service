@@ -2,7 +2,7 @@ from erspec.models.core import EntityMention, EntityMentionIdentifier
 
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters.entity_mention_repository import (
-    EntityMentionRepository,
+    EntityMentionCurationRepository,
 )
 
 
@@ -11,7 +11,7 @@ class EntityService:
 
     def __init__(
         self,
-        entity_mention_repository: EntityMentionRepository,
+        entity_mention_repository: EntityMentionCurationRepository,
     ) -> None:
         self._entity_mention_repository = entity_mention_repository
 
