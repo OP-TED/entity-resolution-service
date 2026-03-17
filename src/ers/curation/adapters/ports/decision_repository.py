@@ -2,10 +2,7 @@ from abc import abstractmethod
 
 from erspec.models.core import Decision, EntityMentionIdentifier
 
-from ers.commons.adapters.ports.repositories import (
-    AsyncReadRepository,
-    AsyncWriteRepository,
-)
+from ers.commons.adapters.repository import AsyncReadRepository, AsyncWriteRepository
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.curation.domain.data_transfer_objects import (
     DecisionFilters,

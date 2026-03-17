@@ -4,7 +4,7 @@ import pytest
 from erspec.models.core import Decision
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.adapters.mongodb import MongoCollections
+from ers.commons.adapters import MongoCollections
 from ers.commons.domain.data_transfer_objects import PaginationParams
 from ers.curation.adapters.mongodb import MongoDecisionRepository
 from ers.curation.domain.data_transfer_objects import (

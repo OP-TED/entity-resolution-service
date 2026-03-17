@@ -2,7 +2,7 @@ from typing import Any
 
 from erspec.models.core import Decision, EntityMentionIdentifier
 
-from ers.commons.adapters.mongodb.base import BaseMongoRepository
+from ers.commons.adapters.repository import BaseMongoRepository
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.curation.adapters.ports.decision_repository import (
     DecisionRepository as DecisionRepositoryPort,

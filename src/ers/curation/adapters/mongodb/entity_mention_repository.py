@@ -2,7 +2,7 @@ from typing import Any
 
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 
-from ers.commons.adapters.mongodb.base import BaseMongoRepository
+from ers.commons.adapters.repository import BaseMongoRepository
 from ers.curation.adapters.ports.entity_mention_repository import (
     EntityMentionRepository as EntityMentionRepositoryPort,
 )

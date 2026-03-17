@@ -3,7 +3,7 @@ from datetime import datetime
 
 from erspec.models.core import EntityMentionIdentifier, UserAction
 
-from ers.commons.adapters.ports.repositories import AsyncWriteRepository
+from ers.commons.adapters.repository import AsyncWriteRepository
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 
 

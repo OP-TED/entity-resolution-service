@@ -1,7 +1,7 @@
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.adapters.mongodb.collections import MongoCollections
+from ers.commons.adapters.mongo_collections_manager import MongoCollections
 
 
 class MongoClientManager:

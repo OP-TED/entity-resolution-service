@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ers.commons.adapters.mongodb import (
+from ers.commons.adapters import (
     MongoClientManager,
     MongoCollections,
 )
@@ -46,7 +46,7 @@ async def _seed_admin_user(
     import uuid
     from datetime import datetime, timezone
 
-    from ers.users.domain.models import User
+    from ers.users.domain.users import User
 
     collections = MongoCollections(db)  # type: ignore[arg-type]
     repo = MongoUserRepository(collections.users)

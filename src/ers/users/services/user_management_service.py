@@ -10,7 +10,7 @@ from ers.users.domain.data_transfer_objects import (
     UserPatchRequest,
     UserResponse,
 )
-from ers.users.domain.models import User
+from ers.users.domain.users import User
 
 
 def _to_user_response(user: User) -> UserResponse:

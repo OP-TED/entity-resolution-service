@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.adapters.mongodb import MongoCollections
+from ers.commons.adapters import MongoCollections
 from ers.config import Settings, get_settings
 from ers.curation.adapters.mongodb import (
     MongoDecisionRepository,

@@ -12,7 +12,7 @@ from erspec.models.core import (
 )
 from polyfactory.factories.pydantic_factory import ModelFactory
 
-from ers.users.domain.models import User
+from ers.users.domain.users import User
 
 
 class EntityMentionIdentifierFactory(ModelFactory):

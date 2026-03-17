@@ -2,7 +2,7 @@ from abc import abstractmethod
 
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 
-from ers.commons.adapters.ports.repositories import AsyncReadRepository
+from ers.commons.adapters.repository import AsyncReadRepository
 
 
 class EntityMentionRepository(
