@@ -2,8 +2,11 @@ from typing import Any
 
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 
-from ers.commons.adapters import BaseMongoRepository
-from ers.commons.adapters.repository import AsyncReadRepository, AsyncWriteRepository
+from ers.commons.adapters.repository import (
+    AsyncReadRepository,
+    AsyncWriteRepository,
+    BaseMongoRepository,
+)
 
 
 class EntityMentionRepository(

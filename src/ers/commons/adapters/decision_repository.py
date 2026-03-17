@@ -1,7 +1,10 @@
 from erspec.models.core import Decision
 
-from ers.commons.adapters import BaseMongoRepository
-from ers.commons.adapters.repository import AsyncReadRepository, AsyncWriteRepository
+from ers.commons.adapters.repository import (
+    AsyncReadRepository,
+    AsyncWriteRepository,
+    BaseMongoRepository,
+)
 
 
 class DecisionRepository(

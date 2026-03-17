@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from ers.commons.adapters import (
+from ers.commons.adapters.repository import (
     AsyncReadRepository,
     AsyncWriteRepository,
     BaseMongoRepository,
