@@ -136,9 +136,9 @@ def mention_content(ctx, content_fixture, context):
 
 
 @given(
-    parsers.parse(
-        'ERE will respond with cluster "{cluster_id}" and {alt_count:d} '
-        "alternatives within the execution window"
+    parsers.re(
+        r'ERE will respond with cluster "(?P<cluster_id>[^"]+)" and (?P<alt_count>\d+) '
+        r"alternatives? within the execution window"
     )
 )
 def ere_responds_canonical(ctx, cluster_id, alt_count):
@@ -146,6 +146,7 @@ def ere_responds_canonical(ctx, cluster_id, alt_count):
     TODO: Configure ERE mock to return cluster_id with alt_count alternatives.
     """
     ctx["expected_cluster_id"] = cluster_id
+    ctx["expected_alt_count"] = int(alt_count)
 
 
 @given("ERE will not respond within the execution window")
@@ -165,7 +166,9 @@ def batch_submit_and_resolve(ctx, datatable):
           verify success.
     """
     ctx["batch_results"] = []
-    for row in datatable:
+    headers = datatable[0]
+    for row_values in datatable[1:]:
+        row = dict(zip(headers, row_values))
         ctx["batch_results"].append(
             {
                 "source_id": row["source_id"],

@@ -182,7 +182,7 @@ def mention_is_registered(ctx, source_id, request_id, entity_type):
     ctx["entity_type"] = entity_type
 
 
-@given(parsers.parse('the Decision Store holds "{cluster_id}" for that triad'))
+@given(parsers.re(r'the Decision Store holds "(?P<cluster_id>[^"]*)" for that triad'))
 def decision_store_holds_cluster(ctx, cluster_id):
     """
     Seed the Decision Store with an existing decision for the current triad.
@@ -328,7 +328,9 @@ def ere_emits_outcome_with_score_table(ctx, cluster_id, datatable):
     """
     ctx["outcome_cluster_id"] = cluster_id
     ctx["outcome_alternatives"] = []
-    for row in datatable:
+    headers = datatable[0]
+    for row_values in datatable[1:]:
+        row = dict(zip(headers, row_values))
         ctx["outcome_alternatives"].append(
             {
                 "cluster_id": row["cluster_id"],
@@ -408,8 +410,9 @@ def decision_store_reflects_cluster(ctx, cluster_id, source_id, request_id, enti
     assert True  # TODO: implement
 
 
-@then(parsers.parse("the Decision Store stores exactly {count:d} alternative candidates"))
+@then(parsers.re(r"the Decision Store stores exactly (?P<count>\d+) alternative candidates?"))
 def decision_has_n_alternatives(ctx, count):
+    count = int(count)
     """
     TODO: assert len(decision.candidates) == count
     """

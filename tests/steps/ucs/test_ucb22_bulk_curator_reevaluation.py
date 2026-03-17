@@ -129,7 +129,9 @@ def mentions_exist(ctx, datatable):
     TODO: For each row, store a decision in ctx["decision_store"].
     """
     ctx["bulk_mentions"] = []
-    for row in datatable:
+    headers = datatable[0]
+    for row_values in datatable[1:]:
+        row = dict(zip(headers, row_values))
         mention = {
             "source_id": row["source_id"],
             "request_id": row["request_id"],

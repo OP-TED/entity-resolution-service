@@ -164,7 +164,9 @@ def ere_delivers_outcomes_in_order(ctx, datatable):
           Track which were accepted vs rejected.
     """
     ctx["delivery_sequence"] = []
-    for row in datatable:
+    headers = datatable[0]
+    for row_values in datatable[1:]:
+        row = dict(zip(headers, row_values))
         ctx["delivery_sequence"].append(
             {
                 "outcome_marker": row["outcome_marker"],

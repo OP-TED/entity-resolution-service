@@ -191,7 +191,7 @@ def entity_mention_with_triad(ctx, source_id, request_id, entity_type):
     }
 
 
-@given(parsers.parse('the mention content is "{content_fixture}" with context "{context}"'))
+@given(parsers.re(r'the mention content is "(?P<content_fixture>[^"]+)" with context "(?P<context>[^"]*)"'))
 def mention_content_with_context(ctx, content_fixture, context):
     """
     Set content (RDF Turtle fixture reference) and optional context on the request.
@@ -231,6 +231,7 @@ def ere_responds_canonical(ctx, cluster_id, alt_count):
 
 
 @given("ERE will not respond within the execution window")
+@when("ERE will not respond within the execution window")
 def ere_timeout(ctx):
     """
     Configure the mocked ERE to not respond (simulate execution window timeout).

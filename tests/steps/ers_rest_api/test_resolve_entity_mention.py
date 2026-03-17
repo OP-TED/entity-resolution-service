@@ -316,7 +316,7 @@ def mention_previously_resolved(ctx, source_id, request_id, entity_type):
     ctx["prior_triad"] = (source_id, request_id, entity_type)
 
 
-@given(parsers.parse('the original content was "{content_fixture}" with context "{context}"'))
+@given(parsers.re(r'the original content was "(?P<content_fixture>[^"]+)" with context "(?P<context>[^"]*)"'))
 def original_content_with_context(ctx, content_fixture, context):
     """
     Record the original content and context for the previously resolved mention.
@@ -420,7 +420,9 @@ def batch_with_count_and_datatable(ctx, count, entity_type, datatable):
     """
     ctx["batch_entity_type"] = entity_type
     ctx["batch_mentions"] = []
-    for row in datatable:
+    headers = datatable[0]
+    for row_values in datatable[1:]:
+        row = dict(zip(headers, row_values))
         mention = {
             "source_id": row["source_id"],
             "request_id": row["request_id"],
@@ -441,7 +443,9 @@ def batch_without_count(ctx, entity_type, datatable):
     """
     ctx["batch_entity_type"] = entity_type
     ctx["batch_mentions"] = []
-    for row in datatable:
+    headers = datatable[0]
+    for row_values in datatable[1:]:
+        row = dict(zip(headers, row_values))
         mention = {
             "source_id": row["source_id"],
             "request_id": row["request_id"],
@@ -481,7 +485,9 @@ def coordinator_returns_per_mention_outcomes(ctx, datatable):
           ctx["resolve_bulk_service"] accordingly.
     """
     ctx["per_mention_outcomes"] = {}
-    for row in datatable:
+    headers = datatable[0]
+    for row_values in datatable[1:]:
+        row = dict(zip(headers, row_values))
         ctx["per_mention_outcomes"][row["request_id"]] = {
             "outcome": row["outcome"],
             "cluster_id": row["cluster_id"],

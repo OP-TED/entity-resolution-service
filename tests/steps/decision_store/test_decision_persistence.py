@@ -314,7 +314,9 @@ def store_has_decisions_with_timestamps(ctx, datatable):
           triad and updated_at, and store via the service.
     """
     ctx["seeded_decisions"] = []
-    for row in datatable:
+    headers = datatable[0]
+    for row_values in datatable[1:]:
+        row = dict(zip(headers, row_values))
         decision = MagicMock()
         decision.triad = row["triad"]
         decision.updated_at = row["outcome_timestamp"]
@@ -330,7 +332,9 @@ def store_has_decisions_with_confidence(ctx, datatable):
           triad and current.confidence_score, and store via the service.
     """
     ctx["seeded_decisions"] = []
-    for row in datatable:
+    headers = datatable[0]
+    for row_values in datatable[1:]:
+        row = dict(zip(headers, row_values))
         decision = MagicMock()
         decision.triad = row["triad"]
         decision.current.confidence_score = float(row["confidence"])
