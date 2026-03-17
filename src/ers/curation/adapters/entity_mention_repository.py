@@ -1,16 +1,36 @@
+from abc import abstractmethod
 from typing import Any
 
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 
-from ers.commons.adapters.repository import BaseMongoRepository
-from ers.curation.adapters.ports.entity_mention_repository import (
-    EntityMentionRepository as EntityMentionRepositoryPort,
-)
+from ers.commons.adapters import BaseMongoRepository
+from ers.commons.adapters.repository import AsyncReadRepository
+
+
+class EntityMentionRepository(
+    AsyncReadRepository[EntityMention, EntityMentionIdentifier],
+):
+    """Read-only repository for entity mention retrieval."""
+
+    @abstractmethod
+    async def find_by_identifiers(
+        self,
+        identifiers: list[EntityMentionIdentifier],
+        limit: int | None = None,
+    ) -> list[EntityMention]:
+        """Batch-fetch entity mentions by their identifiers."""
+
+    @abstractmethod
+    async def search_identifiers(
+        self,
+        text: str,
+    ) -> list[EntityMentionIdentifier]:
+        """Full-text search entity mentions and return matching identifiers."""
 
 
 class MongoEntityMentionRepository(
     BaseMongoRepository[EntityMention, EntityMentionIdentifier],
-    EntityMentionRepositoryPort,
+    EntityMentionRepository,
 ):
     _model_class = EntityMention
     _id_field = "identifiedBy"

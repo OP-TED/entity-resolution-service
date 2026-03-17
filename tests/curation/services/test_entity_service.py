@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 
 from ers.commons.services.exceptions import NotFoundError
-from ers.curation.adapters.ports import (
+from ers.curation.adapters import (
     EntityMentionRepository,
 )
 from ers.curation.services import EntityService

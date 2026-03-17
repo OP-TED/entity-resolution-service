@@ -5,15 +5,13 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.commons.adapters import MongoCollections
 from ers.config import Settings, get_settings
-from ers.curation.adapters.mongodb import (
+from ers.curation.adapters import (
+    DecisionRepository,
+    EntityMentionRepository,
     MongoDecisionRepository,
     MongoEntityMentionRepository,
     MongoStatisticsRepository,
     MongoUserActionRepository,
-)
-from ers.curation.adapters.ports import (
-    DecisionRepository,
-    EntityMentionRepository,
     StatisticsRepository,
     UserActionRepository,
 )

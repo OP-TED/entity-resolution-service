@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
-from ers.curation.adapters.ports import EntityMentionRepository, UserActionRepository
+from ers.curation.adapters import EntityMentionRepository, UserActionRepository
 from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.services import UserActionService
 from tests.factories import DecisionFactory, EntityMentionFactory, UserActionFactory

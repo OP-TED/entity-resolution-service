@@ -4,7 +4,7 @@ import pytest
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.commons.adapters import MongoCollections
-from ers.curation.adapters.mongodb import MongoUserActionRepository
+from ers.curation.adapters.user_action_repository import MongoUserActionRepository
 from tests.factories import EntityMentionIdentifierFactory, UserActionFactory
 
 pytestmark = pytest.mark.integration

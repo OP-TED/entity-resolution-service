@@ -1,9 +1,8 @@
+from abc import ABC, abstractmethod
+
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.adapters.mongo_collections_manager import MongoCollections
-from ers.curation.adapters.ports.statistics_repository import (
-    StatisticsRepository as StatisticsRepositoryPort,
-)
+from ers.commons.adapters import MongoCollections
 from ers.curation.domain.data_transfer_objects import (
     CurationStatistics,
     RegistryStatistics,
@@ -11,7 +10,25 @@ from ers.curation.domain.data_transfer_objects import (
 )
 
 
-class MongoStatisticsRepository(StatisticsRepositoryPort):
+class StatisticsRepository(ABC):
+    """Repository for aggregated statistics queries."""
+
+    @abstractmethod
+    async def get_curation_statistics(
+        self,
+        filters: StatisticsFilters,
+    ) -> CurationStatistics:
+        """Aggregate curation action counts."""
+
+    @abstractmethod
+    async def get_registry_statistics(
+        self,
+        filters: StatisticsFilters,
+    ) -> RegistryStatistics:
+        """Aggregate entity mention and canonical entity counts."""
+
+
+class MongoStatisticsRepository(StatisticsRepository):
     """Aggregates statistics across multiple collections."""
 
     def __init__(self, database: AsyncDatabase) -> None:

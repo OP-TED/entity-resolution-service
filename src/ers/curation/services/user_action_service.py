@@ -1,10 +1,10 @@
 from erspec.models.core import Decision, EntityMention, UserAction
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
-from ers.curation.adapters.ports.entity_mention_repository import (
+from ers.curation.adapters.entity_mention_repository import (
     EntityMentionRepository,
 )
-from ers.curation.adapters.ports.user_action_repository import UserActionRepository
+from ers.curation.adapters.user_action_repository import UserActionRepository
 from ers.curation.domain.data_transfer_objects import (
     EntityMentionPreview,
     UserActionSummary,

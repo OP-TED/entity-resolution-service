@@ -19,11 +19,9 @@ from pymongo import AsyncMongoClient
 
 from ers.commons.adapters import MongoCollections
 from ers.config import get_settings
-from ers.curation.adapters.mongodb import (
-    MongoDecisionRepository,
-    MongoEntityMentionRepository,
-    MongoUserActionRepository,
-)
+from ers.curation.adapters.decision_repository import MongoDecisionRepository
+from ers.curation.adapters.entity_mention_repository import MongoEntityMentionRepository
+from ers.curation.adapters.user_action_repository import MongoUserActionRepository
 
 # only used for seeding/testing
 from tests.factories import (

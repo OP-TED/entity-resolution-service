@@ -5,7 +5,7 @@ import pytest
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import NotFoundError
-from ers.curation.adapters.ports import DecisionRepository, EntityMentionRepository
+from ers.curation.adapters import DecisionRepository, EntityMentionRepository
 from ers.curation.domain.data_transfer_objects import (
     BulkActionResponse,
     BulkItemStatus,
