@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+from erspec.models.core import UserActionType
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.commons.adapters import MongoCollections
@@ -74,9 +75,9 @@ class MongoStatisticsRepository(StatisticsRepository):
 
         return CurationStatistics(
             total_decisions=total_decisions,
-            selected_top=counts.get("ACCEPT_TOP", 0),
-            selected_alternative=counts.get("ACCEPT_ALTERNATIVE", 0),
-            rejected_all=counts.get("REJECT_ALL", 0),
+            selected_top=counts.get(UserActionType.ACCEPT_TOP, 0),
+            selected_alternative=counts.get(UserActionType.ACCEPT_ALTERNATIVE, 0),
+            rejected_all=counts.get(UserActionType.REJECT_ALL, 0),
         )
 
     async def get_registry_statistics(
