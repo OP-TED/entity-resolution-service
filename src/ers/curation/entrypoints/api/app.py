@@ -5,10 +5,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ers.commons.adapters import (
-    MongoClientManager,
-    MongoCollections,
-)
+from ers.commons.adapters.mongo_client import MongoClientManager
+from ers.commons.adapters.mongo_collections_manager import MongoCollections
 from ers.config import Settings, get_settings
 from ers.curation.entrypoints.api.exception_handlers import register_exception_handlers
 from ers.curation.entrypoints.api.health import router as health_router

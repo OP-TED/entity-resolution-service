@@ -2,7 +2,10 @@ from abc import abstractmethod
 
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 
-from ers.commons.adapters import EntityMentionRepository, MongoEntityMentionRepository
+from ers.commons.adapters.entity_mention_repository import (
+    EntityMentionRepository,
+    MongoEntityMentionRepository,
+)
 
 
 class EntityMentionCurationRepository(EntityMentionRepository):

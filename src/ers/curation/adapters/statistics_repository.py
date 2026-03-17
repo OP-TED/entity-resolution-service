@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from erspec.models.core import UserActionType
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.adapters import MongoCollections
+from ers.commons.adapters.mongo_collections_manager import MongoCollections
 from ers.curation.domain.data_transfer_objects import (
     CurationStatistics,
     RegistryStatistics,

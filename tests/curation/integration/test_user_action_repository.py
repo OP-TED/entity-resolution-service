@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.adapters import MongoCollections
+from ers.commons.adapters.mongo_collections_manager import MongoCollections
 from ers.curation.adapters.user_action_repository import (
     MongoUserActionCurationRepository,
 )
