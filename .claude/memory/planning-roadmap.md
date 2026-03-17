@@ -95,7 +95,7 @@ Listed in **dependency order** (implementation sequence):
 |---|---|---|---|
 | **ERS-EPIC-05** | ERE Result Integrator | B | ✅ Gherkin Complete (9.2/10) |
 | **ERS-EPIC-06** | Resolution Coordinator | A, B | ✅ Gherkin Complete (9.8/10) |
-| **ERS-EPIC-07** | ERS REST API (resolve + lookup + refreshBulk) | A, C | ✅ Written (9.8/10) |
+| **ERS-EPIC-07** | ERS REST API (resolve + lookup + refreshBulk) | A, C | ✅ Gherkin Complete (9.8/10) |
 
 **Milestone:** Spine A + B testable end-to-end after EPIC-07.
 
@@ -126,10 +126,21 @@ For each epic in order:
 3. **Run Clarity Gate** (epic-planner includes this in skill)
 4. **Update status** in this roadmap when complete
 
-### Step 2: Gherkin Features (After all epics approved)
+### Step 2: Gherkin Features ✅ Complete (EPICs 01–07)
 For each epic:
 1. **Invoke gherkin-writer agent** to produce feature files at `tests/features/<component>/`
 2. **Integration Gherkin:** After each spine's components are complete, write end-to-end spine features
+
+**Component-level features:** 22 feature files under `tests/features/<component>/` (EPICs 01–07)
+**UC-level integration features:** 6 feature files under `tests/features/ucs/`:
+- `ucb11_resolve_entity_mention.feature` (10 scenarios) — full resolve integration
+- `ucb12_integrate_ere_outcomes.feature` (10 scenarios) — async ERE outcome integration
+- `ucb21_submit_user_reevaluation.feature` (5 scenarios) — curation recommendations
+- `ucb22_bulk_curator_reevaluation.feature` (4 scenarios) — bulk curation decomposition
+- `ucw4_consult_resolution_statistics.feature` (5 scenarios) — read-only statistics
+- `e2e_resolution_cycle.feature` (4 scenarios) — black-box 3-phase cycle
+
+**Coverage decisions:** UCW3 (reclustering) covered by UCB12. UCB21/UCB22 trimmed to avoid duplicating UCB12 outcome integration. E2E trimmed to 4 non-redundant cross-phase scenarios.
 
 ### Step 3: Planning Phase Complete
 When all 10 epics are written + Clarity Gate passes → implementation phase begins.
@@ -193,4 +204,4 @@ When all 10 epics are written + Clarity Gate passes → implementation phase beg
 
 ## Next Action
 
-Gherkin features complete for EPIC-01 through EPIC-06. Next: write Gherkin features for EPIC-07, then begin implementation phase. EPIC-04 includes filtered queries by timestamp interval and confidence score interval beyond the original EPIC outline.
+All component-level Gherkin features (EPICs 01–07) and UC-level integration features complete. EPICs 08–09 (curation) and EPIC-X (observability) pending. Next: begin implementation phase starting with foundation EPICs (01–04), or write remaining curation EPICs (08–09) if needed before implementation.

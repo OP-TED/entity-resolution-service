@@ -28,7 +28,10 @@ FEATURE_FILE = str(
 )
 
 
-@scenario(FEATURE_FILE, "Return decisions changed since the last lookup and advance the last notification date")
+@scenario(
+    FEATURE_FILE,
+    "Return decisions changed since the last lookup and advance the last notification date",
+)
 def test_return_changed_decisions():
     pass
 
@@ -84,11 +87,7 @@ def registry_tracks_lookup_state(ctx):
 # ---------------------------------------------------------------------------
 
 
-@given(
-    parsers.parse(
-        'source "{source_id}" "{prior_lookup_state}"'
-    )
-)
+@given(parsers.parse('source "{source_id}" "{prior_lookup_state}"'))
 def source_with_prior_state(ctx, source_id, prior_lookup_state):
     """
     Configure registry mock based on prior lookup state from Examples table.
@@ -122,11 +121,7 @@ def decision_store_has_decisions(ctx, total, source_id, changed):
     ctx["changed_count"] = changed
 
 
-@given(
-    parsers.parse(
-        'source "{source_id}" last performed a bulk lookup at {timestamp}'
-    )
-)
+@given(parsers.parse('source "{source_id}" last performed a bulk lookup at {timestamp}'))
 def source_last_lookup(ctx, source_id, timestamp):
     """
     For the read-only scenario.
@@ -141,11 +136,7 @@ def source_last_lookup(ctx, source_id, timestamp):
 # ---------------------------------------------------------------------------
 
 
-@when(
-    parsers.parse(
-        'a bulk lookup is requested for source "{source_id}"'
-    )
-)
+@when(parsers.parse('a bulk lookup is requested for source "{source_id}"'))
 def request_bulk_lookup(ctx, source_id):
     """
     TODO: try:
@@ -185,11 +176,7 @@ def assert_notification_date_action(ctx, notification_date_action):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        'a "{error_type}" error is returned'
-    )
-)
+@then(parsers.parse('a "{error_type}" error is returned'))
 def typed_error_returned(ctx, error_type):
     """
     TODO: assert ctx["raised_exception"] is not None

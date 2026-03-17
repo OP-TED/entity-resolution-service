@@ -39,9 +39,7 @@ class TestCreateAccept:
             actor="curator-1", decision=decision_with_candidates
         )
 
-        assert (
-            action.about_entity_mention == decision_with_candidates.about_entity_mention
-        )
+        assert action.about_entity_mention == decision_with_candidates.about_entity_mention
 
 
 class TestCreateReject:
@@ -61,9 +59,7 @@ class TestCreateReject:
 
 
 class TestCreateAssign:
-    def test_creates_user_action_with_accept_alternative_type(
-        self, decision_with_candidates
-    ):
+    def test_creates_user_action_with_accept_alternative_type(self, decision_with_candidates):
         target_id = decision_with_candidates.candidates[1].cluster_id
 
         action = UserActionFactory.create_assign(

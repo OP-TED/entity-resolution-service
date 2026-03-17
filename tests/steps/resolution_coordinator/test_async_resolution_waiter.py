@@ -82,7 +82,7 @@ def waiter_available(ctx):
 
 @given(
     parsers.parse(
-        '{waiter_count:d} waiters are registered for correlation triad '
+        "{waiter_count:d} waiters are registered for correlation triad "
         '("{source_id}", "{request_id}", "Organization")'
     )
 )
@@ -124,7 +124,7 @@ def no_signal_timeout(ctx):
 
 @when(
     parsers.parse(
-        'the ERE Result Integrator signals an outcome for triad '
+        "the ERE Result Integrator signals an outcome for triad "
         '("{source_id}", "{request_id}", "Organization") with no registered waiters'
     )
 )

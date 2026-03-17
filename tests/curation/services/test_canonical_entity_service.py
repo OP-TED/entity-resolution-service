@@ -101,15 +101,9 @@ class TestGetAlternativeCanonicalEntities:
         decision_repository: MagicMock,
         entity_mention_repository: MagicMock,
     ) -> None:
-        current = ClusterReferenceFactory.build(
-            confidence_score=0.9, similarity_score=0.85
-        )
-        alt1 = ClusterReferenceFactory.build(
-            confidence_score=0.7, similarity_score=0.65
-        )
-        alt2 = ClusterReferenceFactory.build(
-            confidence_score=0.5, similarity_score=0.45
-        )
+        current = ClusterReferenceFactory.build(confidence_score=0.9, similarity_score=0.85)
+        alt1 = ClusterReferenceFactory.build(confidence_score=0.7, similarity_score=0.65)
+        alt2 = ClusterReferenceFactory.build(confidence_score=0.5, similarity_score=0.45)
         decision = DecisionFactory.build(
             current_placement=current,
             candidates=[current, alt1, alt2],
@@ -118,9 +112,7 @@ class TestGetAlternativeCanonicalEntities:
         decision_repository.find_mention_ids_by_cluster.return_value = (
             EntityMentionIdentifierFactory.batch(2)
         )
-        entity_mention_repository.find_by_identifiers.return_value = (
-            EntityMentionFactory.batch(2)
-        )
+        entity_mention_repository.find_by_identifiers.return_value = EntityMentionFactory.batch(2)
 
         result = await service.get_alternative_canonical_entities(
             decision.id,
@@ -139,9 +131,7 @@ class TestGetAlternativeCanonicalEntities:
         decision_repository: MagicMock,
         entity_mention_repository: MagicMock,
     ) -> None:
-        current = ClusterReferenceFactory.build(
-            confidence_score=0.9, similarity_score=0.85
-        )
+        current = ClusterReferenceFactory.build(confidence_score=0.9, similarity_score=0.85)
         alt = ClusterReferenceFactory.build(confidence_score=0.6, similarity_score=0.55)
         decision = DecisionFactory.build(
             current_placement=current,
@@ -151,9 +141,7 @@ class TestGetAlternativeCanonicalEntities:
         decision_repository.find_mention_ids_by_cluster.return_value = (
             EntityMentionIdentifierFactory.batch(2)
         )
-        entity_mention_repository.find_by_identifiers.return_value = (
-            EntityMentionFactory.batch(2)
-        )
+        entity_mention_repository.find_by_identifiers.return_value = EntityMentionFactory.batch(2)
 
         result = await service.get_alternative_canonical_entities(
             decision.id,
@@ -169,9 +157,7 @@ class TestGetAlternativeCanonicalEntities:
         decision_repository: MagicMock,
         entity_mention_repository: MagicMock,
     ) -> None:
-        current = ClusterReferenceFactory.build(
-            confidence_score=0.95, similarity_score=0.9
-        )
+        current = ClusterReferenceFactory.build(confidence_score=0.95, similarity_score=0.9)
         alternatives = ClusterReferenceFactory.batch(5)
         decision = DecisionFactory.build(
             current_placement=current,
@@ -181,9 +167,7 @@ class TestGetAlternativeCanonicalEntities:
         decision_repository.find_mention_ids_by_cluster.return_value = (
             EntityMentionIdentifierFactory.batch(2)
         )
-        entity_mention_repository.find_by_identifiers.return_value = (
-            EntityMentionFactory.batch(2)
-        )
+        entity_mention_repository.find_by_identifiers.return_value = EntityMentionFactory.batch(2)
 
         result = await service.get_alternative_canonical_entities(
             decision.id,

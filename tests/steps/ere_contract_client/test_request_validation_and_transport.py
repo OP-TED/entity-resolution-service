@@ -79,11 +79,7 @@ def ere_contract_client_available(ctx):
 # ---------------------------------------------------------------------------
 
 
-@given(
-    parsers.parse(
-        'a resolution request with "{missing_field}" absent'
-    )
-)
+@given(parsers.parse('a resolution request with "{missing_field}" absent'))
 def request_with_missing_field(ctx, missing_field):
     """
     Build a request with the specified field missing.
@@ -104,11 +100,7 @@ def messaging_channel_reachable(ctx):
     ctx["adapter"].ping = AsyncMock(return_value=True)
 
 
-@given(
-    parsers.parse(
-        'the transport will fail with "{failure_mode}"'
-    )
-)
+@given(parsers.parse('the transport will fail with "{failure_mode}"'))
 def transport_will_fail(ctx, failure_mode):
     """
     Configure the mock adapter to simulate the given failure.
@@ -134,11 +126,7 @@ def transport_will_fail(ctx, failure_mode):
         ctx["adapter"].push_request = AsyncMock(return_value=0)
 
 
-@given(
-    parsers.parse(
-        'the messaging channel is "{channel_state}"'
-    )
-)
+@given(parsers.parse('the messaging channel is "{channel_state}"'))
 def messaging_channel_state(ctx, channel_state):
     """
     Configure the mock adapter for health check scenarios.
@@ -176,7 +164,7 @@ def publish_request(ctx):
 
 @when(
     parsers.parse(
-        'a resolution request is published for triad '
+        "a resolution request is published for triad "
         '("{source_id}", "{request_id}", "Organization")'
     )
 )
@@ -224,11 +212,7 @@ def no_request_enqueued(ctx):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        'a "{error_type}" error is raised'
-    )
-)
+@then(parsers.parse('a "{error_type}" error is raised'))
 def specific_error_raised(ctx, error_type):
     """
     Assert the correct domain error type was raised.
@@ -244,11 +228,7 @@ def specific_error_raised(ctx, error_type):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        'the result is "{health_result}"'
-    )
-)
+@then(parsers.parse('the result is "{health_result}"'))
 def assert_health_result(ctx, health_result):
     """
     TODO:

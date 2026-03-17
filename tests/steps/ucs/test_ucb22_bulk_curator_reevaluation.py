@@ -147,9 +147,7 @@ def mentions_exist(ctx, datatable):
 )
 def mention_not_exists(ctx, source_id, request_id, entity_type):
     """Record a triad that is NOT in the Decision Store (for partial failure)."""
-    ctx.setdefault("missing_mentions", []).append(
-        (source_id, request_id, entity_type)
-    )
+    ctx.setdefault("missing_mentions", []).append((source_id, request_id, entity_type))
 
 
 @given("the curator selects all three mentions for bulk re-evaluation")
@@ -175,8 +173,7 @@ def empty_selection(ctx):
 
 @given(
     parsers.parse(
-        'the curator recommends placement into cluster "{cluster_id}" '
-        "for all selected mentions"
+        'the curator recommends placement into cluster "{cluster_id}" for all selected mentions'
     )
 )
 def curator_recommends_placement(ctx, cluster_id):
@@ -187,8 +184,7 @@ def curator_recommends_placement(ctx, cluster_id):
 
 @given(
     parsers.parse(
-        'the curator recommends excluding clusters "{excluded_clusters}" '
-        "for all selected mentions"
+        'the curator recommends excluding clusters "{excluded_clusters}" for all selected mentions'
     )
 )
 def curator_recommends_exclusion(ctx, excluded_clusters):
@@ -273,8 +269,7 @@ def per_mention_rejection(ctx, source_id, request_id, entity_type, error_code):
 
 @then(
     parsers.parse(
-        "{count:d} individual resolveConsideringRecommendation messages "
-        "are forwarded to ERE"
+        "{count:d} individual resolveConsideringRecommendation messages are forwarded to ERE"
     )
 )
 def n_recommendation_messages(ctx, count):
@@ -294,11 +289,7 @@ def each_message_recommends(ctx, cluster_id):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        "{count:d} individual resolveWithExclusions messages are forwarded to ERE"
-    )
-)
+@then(parsers.parse("{count:d} individual resolveWithExclusions messages are forwarded to ERE"))
 def n_exclusion_messages(ctx, count):
     """
     TODO: assert ctx["ere_client"].publish.call_count == count

@@ -48,9 +48,7 @@ class TestCreateUser:
 
         from httpx import ASGITransport, AsyncClient
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             response = await c.post(
                 USERS_URL,
                 json={"email": "x@example.com", "password": "securepassword"},
@@ -105,9 +103,7 @@ class TestListUsers:
 
         from httpx import ASGITransport, AsyncClient
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             response = await c.get(USERS_URL)
 
         assert response.status_code == 403
@@ -164,9 +160,7 @@ class TestDeleteUser:
 
         from httpx import ASGITransport, AsyncClient
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             response = await c.delete(f"{USERS_URL}/u-1")
 
         assert response.status_code == 403

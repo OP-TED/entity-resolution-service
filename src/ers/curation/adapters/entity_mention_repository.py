@@ -47,6 +47,4 @@ class MongoEntityMentionCurationRepository(
             {"$text": {"$search": text}},
             projection={"_id": 1},
         )
-        return [
-            EntityMentionIdentifier.model_validate(doc["_id"]) async for doc in cursor
-        ]
+        return [EntityMentionIdentifier.model_validate(doc["_id"]) async for doc in cursor]

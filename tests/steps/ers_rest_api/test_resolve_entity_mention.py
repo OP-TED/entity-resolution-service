@@ -108,9 +108,7 @@ def test_bulk_uniform_outcomes():
     pass
 
 
-@scenario(
-    FEATURE_FILE, "Bulk resolve with mixed canonical and provisional outcomes"
-)
+@scenario(FEATURE_FILE, "Bulk resolve with mixed canonical and provisional outcomes")
 def test_bulk_mixed_outcomes():
     pass
 
@@ -128,16 +126,12 @@ def test_bulk_all_fail_validation():
     pass
 
 
-@scenario(
-    FEATURE_FILE, "Bulk resolve with an idempotent replay and a new mention"
-)
+@scenario(FEATURE_FILE, "Bulk resolve with an idempotent replay and a new mention")
 def test_bulk_idempotent_replay():
     pass
 
 
-@scenario(
-    FEATURE_FILE, "Bulk resolve with an idempotency conflict within the batch"
-)
+@scenario(FEATURE_FILE, "Bulk resolve with an idempotency conflict within the batch")
 def test_bulk_idempotency_conflict():
     pass
 
@@ -207,11 +201,7 @@ def coordinator_available(ctx):
 # ---------------------------------------------------------------------------
 
 
-@given(
-    parsers.parse(
-        'an entity mention with triad "{source_id}", "{request_id}", "{entity_type}"'
-    )
-)
+@given(parsers.parse('an entity mention with triad "{source_id}", "{request_id}", "{entity_type}"'))
 def entity_mention_with_triad(ctx, source_id, request_id, entity_type):
     """
     Build the base request body for POST /resolve with the correlation triad.
@@ -261,11 +251,7 @@ def mention_context_empty(ctx):
     ctx.setdefault("request_body", {})["context"] = None
 
 
-@given(
-    parsers.parse(
-        'the Resolution Coordinator returns canonical identifier "{canonical_id}"'
-    )
-)
+@given(parsers.parse('the Resolution Coordinator returns canonical identifier "{canonical_id}"'))
 def coordinator_returns_canonical(ctx, canonical_id):
     """
     Configure the mocked resolve service to return a canonical result.
@@ -284,7 +270,7 @@ def coordinator_returns_canonical(ctx, canonical_id):
 
 @given(
     parsers.parse(
-        'the Resolution Coordinator returns provisional identifier '
+        "the Resolution Coordinator returns provisional identifier "
         '"{provisional_id}" due to "{reason}"'
     )
 )
@@ -330,11 +316,7 @@ def mention_previously_resolved(ctx, source_id, request_id, entity_type):
     ctx["prior_triad"] = (source_id, request_id, entity_type)
 
 
-@given(
-    parsers.parse(
-        'the original content was "{content_fixture}" with context "{context}"'
-    )
-)
+@given(parsers.parse('the original content was "{content_fixture}" with context "{context}"'))
 def original_content_with_context(ctx, content_fixture, context):
     """
     Record the original content and context for the previously resolved mention.
@@ -418,9 +400,7 @@ def coordinator_unavailable(ctx):
 # ---------------------------------------------------------------------------
 
 
-@given(
-    parsers.parse('a batch of {count:d} entity mentions for entity_type "{entity_type}":')
-)
+@given(parsers.parse('a batch of {count:d} entity mentions for entity_type "{entity_type}":'))
 def batch_with_count_and_datatable(ctx, count, entity_type, datatable):
     """
     Build the batch request body from the embedded data table.
@@ -479,11 +459,7 @@ def empty_batch(ctx):
     ctx["bulk_request"] = {"mentions": []}
 
 
-@given(
-    parsers.parse(
-        'the Resolution Coordinator returns "{outcome}" for all mentions'
-    )
-)
+@given(parsers.parse('the Resolution Coordinator returns "{outcome}" for all mentions'))
 def coordinator_returns_uniform_outcome(ctx, outcome):
     """
     Configure the mocked bulk resolve service to return the same outcome
@@ -514,8 +490,7 @@ def coordinator_returns_per_mention_outcomes(ctx, datatable):
 
 @given(
     parsers.parse(
-        'the Resolution Coordinator returns canonical identifier '
-        '"{cluster_id}" for valid mentions'
+        'the Resolution Coordinator returns canonical identifier "{cluster_id}" for valid mentions'
     )
 )
 def coordinator_returns_canonical_for_valid(ctx, cluster_id):
@@ -531,8 +506,7 @@ def coordinator_returns_canonical_for_valid(ctx, cluster_id):
 
 @given(
     parsers.parse(
-        'the Resolution Coordinator returns canonical identifier '
-        '"{cluster_id}" for new mentions'
+        'the Resolution Coordinator returns canonical identifier "{cluster_id}" for new mentions'
     )
 )
 def coordinator_returns_canonical_for_new(ctx, cluster_id):
@@ -584,7 +558,7 @@ def post_resolve_replay(ctx):
 
 @when(
     parsers.parse(
-        'I POST to /resolve with the same triad but content '
+        "I POST to /resolve with the same triad but content "
         '"{new_fixture}" and context "{new_context}"'
     )
 )

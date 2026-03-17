@@ -48,9 +48,7 @@ class UserActionFactory:
         )
 
     @classmethod
-    def create_assign(
-        cls, actor: str, decision: Decision, cluster_id: str
-    ) -> UserAction:
+    def create_assign(cls, actor: str, decision: Decision, cluster_id: str) -> UserAction:
         """Create a UserAction for selecting an alternative candidate.
 
         Raises:

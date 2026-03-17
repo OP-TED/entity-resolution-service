@@ -178,11 +178,7 @@ def ere_messaging_available(ctx):
 # ---------------------------------------------------------------------------
 
 
-@given(
-    parsers.parse(
-        'an entity mention with triad "{source_id}", "{request_id}", "{entity_type}"'
-    )
-)
+@given(parsers.parse('an entity mention with triad "{source_id}", "{request_id}", "{entity_type}"'))
 def entity_mention_with_triad(ctx, source_id, request_id, entity_type):
     """Build the base resolve request with the correlation triad."""
     ctx["source_id"] = source_id
@@ -195,11 +191,7 @@ def entity_mention_with_triad(ctx, source_id, request_id, entity_type):
     }
 
 
-@given(
-    parsers.parse(
-        'the mention content is "{content_fixture}" with context "{context}"'
-    )
-)
+@given(parsers.parse('the mention content is "{content_fixture}" with context "{context}"'))
 def mention_content_with_context(ctx, content_fixture, context):
     """
     Set content (RDF Turtle fixture reference) and optional context on the request.
@@ -250,9 +242,7 @@ def ere_timeout(ctx):
     ctx["ere_timeout"] = True
 
 
-@given(
-    "the client timeout budget is exceeded before a draft identifier can be issued"
-)
+@given("the client timeout budget is exceeded before a draft identifier can be issued")
 def client_timeout_exceeded(ctx):
     """
     Configure the system so the entire client timeout budget expires.
@@ -287,22 +277,14 @@ def mention_previously_resolved(ctx, source_id, request_id, entity_type):
     ctx["prior_triad"] = (source_id, request_id, entity_type)
 
 
-@given(
-    parsers.parse(
-        'the original content was "{content_fixture}" with context "{context}"'
-    )
-)
+@given(parsers.parse('the original content was "{content_fixture}" with context "{context}"'))
 def original_content_with_context(ctx, content_fixture, context):
     """Record the original payload for replay/conflict comparison."""
     ctx["original_content"] = content_fixture
     ctx["original_context"] = context if context else None
 
 
-@given(
-    parsers.parse(
-        'the original resolution returned "{cluster_id}" with status "{status}"'
-    )
-)
+@given(parsers.parse('the original resolution returned "{cluster_id}" with status "{status}"'))
 def original_resolution(ctx, cluster_id, status):
     """
     Seed the Decision Store with the prior resolution result.
@@ -392,9 +374,7 @@ def submit_resolve(ctx):
     ctx["response"] = None  # TODO: replace with real client call
 
 
-@when(
-    "the originator submits the same resolve request with identical triad, content, and context"
-)
+@when("the originator submits the same resolve request with identical triad, content, and context")
 def submit_replay(ctx):
     """
     Re-submit the same request for idempotent replay testing.
@@ -435,11 +415,7 @@ def submit_second_identical(ctx, source_id, request_id, entity_type):
 # ---------------------------------------------------------------------------
 
 
-@then(
-    parsers.parse(
-        'the response returns "{cluster_id}" with status "{expected_status}"'
-    )
-)
+@then(parsers.parse('the response returns "{cluster_id}" with status "{expected_status}"'))
 def response_returns_cluster_and_status(ctx, cluster_id, expected_status):
     """
     TODO: data = ctx["response"].json()
@@ -449,7 +425,7 @@ def response_returns_cluster_and_status(ctx, cluster_id, expected_status):
     assert True  # TODO: implement
 
 
-@then("the response returns a deterministic draft identifier with status \"PROVISIONAL\"")
+@then('the response returns a deterministic draft identifier with status "PROVISIONAL"')
 def response_returns_draft_identifier(ctx):
     """
     TODO: data = ctx["response"].json()
@@ -462,8 +438,7 @@ def response_returns_draft_identifier(ctx):
 
 @then(
     parsers.parse(
-        'the draft identifier equals SHA256 of "{source_id}", '
-        '"{request_id}", "{entity_type}"'
+        'the draft identifier equals SHA256 of "{source_id}", "{request_id}", "{entity_type}"'
     )
 )
 def draft_id_equals_sha256(ctx, source_id, request_id, entity_type):
@@ -622,7 +597,7 @@ def decision_has_full_scores(ctx):
 
 @then(
     parsers.parse(
-        'the Decision Store is not modified for triad '
+        "the Decision Store is not modified for triad "
         '"{source_id}", "{request_id}", "{entity_type}"'
     )
 )
@@ -646,10 +621,7 @@ def no_decision_written(ctx):
 # ---------------------------------------------------------------------------
 
 
-@then(
-    "a resolveConsideringRecommendation message is forwarded to ERE "
-    "with the draft identifier"
-)
+@then("a resolveConsideringRecommendation message is forwarded to ERE with the draft identifier")
 def recommendation_forwarded_to_ere(ctx):
     """
     TODO: ctx["ere_client"].publish.assert_called_once()

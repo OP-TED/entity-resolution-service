@@ -166,8 +166,7 @@ def ere_messaging_available(ctx):
 
 @given(
     parsers.parse(
-        'a mention with triad "{source_id}", "{request_id}", '
-        '"{entity_type}" is registered'
+        'a mention with triad "{source_id}", "{request_id}", "{entity_type}" is registered'
     )
 )
 def mention_is_registered(ctx, source_id, request_id, entity_type):
@@ -183,11 +182,7 @@ def mention_is_registered(ctx, source_id, request_id, entity_type):
     ctx["entity_type"] = entity_type
 
 
-@given(
-    parsers.parse(
-        'the Decision Store holds "{cluster_id}" for that triad'
-    )
-)
+@given(parsers.parse('the Decision Store holds "{cluster_id}" for that triad'))
 def decision_store_holds_cluster(ctx, cluster_id):
     """
     Seed the Decision Store with an existing decision for the current triad.
@@ -201,8 +196,7 @@ def decision_store_holds_cluster(ctx, cluster_id):
 
 @given(
     parsers.parse(
-        'the Decision Store holds provisional draft identifier '
-        '"{draft_id}" for that triad'
+        'the Decision Store holds provisional draft identifier "{draft_id}" for that triad'
     )
 )
 def decision_store_holds_provisional(ctx, draft_id):
@@ -217,8 +211,7 @@ def decision_store_holds_provisional(ctx, draft_id):
 
 @given(
     parsers.parse(
-        'no mention with triad "{source_id}", "{request_id}", '
-        '"{entity_type}" is registered'
+        'no mention with triad "{source_id}", "{request_id}", "{entity_type}" is registered'
     )
 )
 def mention_not_registered(ctx, source_id, request_id, entity_type):
@@ -236,7 +229,7 @@ def mention_not_registered(ctx, source_id, request_id, entity_type):
 
 @given(
     parsers.parse(
-        'ERE emits a clustering outcome for that mention with cluster '
+        "ERE emits a clustering outcome for that mention with cluster "
         '"{cluster_id}" and {alt_count:d} alternatives'
     )
 )
@@ -258,8 +251,7 @@ def ere_emits_outcome(ctx, cluster_id, alt_count):
 
 @given(
     parsers.parse(
-        'ERE emits a clustering outcome with cluster "{cluster_id}" '
-        "and {alt_count:d} alternatives"
+        'ERE emits a clustering outcome with cluster "{cluster_id}" and {alt_count:d} alternatives'
     )
 )
 def ere_emits_outcome_short(ctx, cluster_id, alt_count):
@@ -282,7 +274,7 @@ def ere_emits_confirmation(ctx, cluster_id, alt_count):
 
 @given(
     parsers.parse(
-        'ERE emits a reclustering outcome reassigning the mention to '
+        "ERE emits a reclustering outcome reassigning the mention to "
         '"{cluster_id}" with {alt_count:d} alternatives'
     )
 )
@@ -321,9 +313,7 @@ def ere_emits_invalid_outcome(ctx, invalid_condition):
 
 
 @given(
-    parsers.parse(
-        'ERE emits a clustering outcome with cluster "{cluster_id}" and alternatives:'
-    )
+    parsers.parse('ERE emits a clustering outcome with cluster "{cluster_id}" and alternatives:')
 )
 def ere_emits_outcome_with_score_table(ctx, cluster_id, datatable):
     """
@@ -339,11 +329,13 @@ def ere_emits_outcome_with_score_table(ctx, cluster_id, datatable):
     ctx["outcome_cluster_id"] = cluster_id
     ctx["outcome_alternatives"] = []
     for row in datatable:
-        ctx["outcome_alternatives"].append({
-            "cluster_id": row["cluster_id"],
-            "confidence": float(row["confidence"]),
-            "similarity": float(row["similarity"]),
-        })
+        ctx["outcome_alternatives"].append(
+            {
+                "cluster_id": row["cluster_id"],
+                "confidence": float(row["confidence"]),
+                "similarity": float(row["similarity"]),
+            }
+        )
 
 
 @given("the ERE messaging boundary is unavailable for publishing")
@@ -444,8 +436,7 @@ def delta_tracking_updated(ctx):
 
 @then(
     parsers.parse(
-        'the provisional draft identifier "{draft_id}" is no longer '
-        "the current placement"
+        'the provisional draft identifier "{draft_id}" is no longer the current placement'
     )
 )
 def provisional_no_longer_current(ctx, draft_id):
@@ -535,8 +526,7 @@ def publish_failure_logged(ctx):
 
 @then(
     parsers.parse(
-        "the Decision Store stores {count:d} alternatives with scores "
-        "exactly as received:"
+        "the Decision Store stores {count:d} alternatives with scores exactly as received:"
     )
 )
 def scores_match_table(ctx, count, datatable):

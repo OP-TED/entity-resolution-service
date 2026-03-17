@@ -36,7 +36,10 @@ def test_ere_response_conditions():
     pass
 
 
-@scenario(FEATURE_FILE, "Return the existing ERE decision when a provisional write races with an ERE outcome")
+@scenario(
+    FEATURE_FILE,
+    "Return the existing ERE decision when a provisional write races with an ERE outcome",
+)
 def test_stale_provisional_race():
     pass
 
@@ -46,7 +49,10 @@ def test_idempotent_replay():
     pass
 
 
-@scenario(FEATURE_FILE, "Reject an idempotency conflict when the same triad is resubmitted with different content")
+@scenario(
+    FEATURE_FILE,
+    "Reject an idempotency conflict when the same triad is resubmitted with different content",
+)
 def test_idempotency_conflict():
     pass
 
@@ -106,7 +112,7 @@ def coordinator_available(ctx):
 
 @given(
     parsers.parse(
-        'a valid entity mention with correlation triad '
+        "a valid entity mention with correlation triad "
         '("{source_id}", "{request_id}", "Organization")'
     )
 )
@@ -156,7 +162,7 @@ def ere_already_wrote(ctx):
 
 @given(
     parsers.parse(
-        'a resolution request was previously submitted for triad '
+        "a resolution request was previously submitted for triad "
         '("{source_id}", "{request_id}", "Organization") with identical content'
     )
 )
@@ -185,7 +191,7 @@ def configure_prior_decision(ctx, prior_decision_state):
 
 @given(
     parsers.parse(
-        'a resolution request was previously submitted for triad '
+        "a resolution request was previously submitted for triad "
         '("{source_id}", "{request_id}", "Organization")'
     )
 )
@@ -200,7 +206,7 @@ def previous_request_submitted(ctx, source_id, request_id):
 
 @given(
     parsers.parse(
-        'an entity mention with malformed RDF content for triad '
+        "an entity mention with malformed RDF content for triad "
         '("{source_id}", "{request_id}", "Organization")'
     )
 )
@@ -376,11 +382,7 @@ def no_provisional(ctx):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        'a "{error_type}" error is raised'
-    )
-)
+@then(parsers.parse('a "{error_type}" error is raised'))
 def typed_error_raised(ctx, error_type):
     """
     TODO: error_map = {

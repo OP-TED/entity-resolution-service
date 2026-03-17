@@ -26,7 +26,12 @@ from erspec.models.core import LookupState
 # Scenario bindings — link each scenario title to its .feature file.
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(Path(__file__).parent.parent.parent / "features" / "request_registry" / "bulk_lookup_and_snapshot_management.feature")
+FEATURE_FILE = str(
+    Path(__file__).parent.parent.parent
+    / "features"
+    / "request_registry"
+    / "bulk_lookup_and_snapshot_management.feature"
+)
 
 
 @scenario(FEATURE_FILE, "Register a bulk lookup request")
@@ -184,9 +189,7 @@ def current_lookup_state(ctx, source_id, existing_last_snapshot):
 
 
 @given(
-    parsers.parse(
-        'the snapshot watermark for "{source_id}" has been advanced to "{snapshot_time}"'
-    )
+    parsers.parse('the snapshot watermark for "{source_id}" has been advanced to "{snapshot_time}"')
 )
 def snapshot_watermark_already_advanced(ctx, source_id, snapshot_time):
     """
@@ -295,10 +298,7 @@ def advance_snapshot(ctx, snapshot_time):
     ctx["snapshot_time"] = ts
     existing_state = ctx.get("existing_lookup_state")
 
-    is_regression = (
-        existing_state is not None
-        and ts <= existing_state.last_snapshot
-    )
+    is_regression = existing_state is not None and ts <= existing_state.last_snapshot
 
     if is_regression:
         ctx["result"] = None
@@ -374,11 +374,7 @@ def lookup_record_requested_at_is_utc_now(ctx):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        'both lookup request records exist in the repository for "{source_id}"'
-    )
-)
+@then(parsers.parse('both lookup request records exist in the repository for "{source_id}"'))
 def both_lookup_records_exist(ctx, source_id):
     """
     Assert that find_lookup_requests_by_source returns two records for source_id:
@@ -479,11 +475,7 @@ def final_last_snapshot_matches(ctx, source_id, final_snapshot):
     assert True  # TODO: implement comparison
 
 
-@then(
-    parsers.parse(
-        'the lookup state is returned with last_snapshot "{last_snapshot}"'
-    )
-)
+@then(parsers.parse('the lookup state is returned with last_snapshot "{last_snapshot}"'))
 def lookup_state_returned_with_last_snapshot(ctx, last_snapshot):
     """
     Assert that get_lookup_state returned a LookupState whose last_snapshot

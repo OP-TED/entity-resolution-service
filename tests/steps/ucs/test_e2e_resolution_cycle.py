@@ -28,10 +28,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 # ---------------------------------------------------------------------------
 
 FEATURE_FILE = str(
-    Path(__file__).parent.parent.parent
-    / "features"
-    / "ucs"
-    / "e2e_resolution_cycle.feature"
+    Path(__file__).parent.parent.parent / "features" / "ucs" / "e2e_resolution_cycle.feature"
 )
 
 
@@ -118,11 +115,7 @@ def ere_messaging_available(ctx):
 # ---------------------------------------------------------------------------
 
 
-@given(
-    parsers.parse(
-        'an entity mention with triad "{source_id}", "{request_id}", "{entity_type}"'
-    )
-)
+@given(parsers.parse('an entity mention with triad "{source_id}", "{request_id}", "{entity_type}"'))
 def entity_mention_with_triad(ctx, source_id, request_id, entity_type):
     """Build the resolve request."""
     ctx["source_id"] = source_id
@@ -135,11 +128,7 @@ def entity_mention_with_triad(ctx, source_id, request_id, entity_type):
     }
 
 
-@given(
-    parsers.parse(
-        'the mention content is "{content_fixture}" with context "{context}"'
-    )
-)
+@given(parsers.parse('the mention content is "{content_fixture}" with context "{context}"'))
 def mention_content(ctx, content_fixture, context):
     """Set content fixture and optional context."""
     ctx["request_body"]["content"] = content_fixture
@@ -177,12 +166,14 @@ def batch_submit_and_resolve(ctx, datatable):
     """
     ctx["batch_results"] = []
     for row in datatable:
-        ctx["batch_results"].append({
-            "source_id": row["source_id"],
-            "request_id": row["request_id"],
-            "entity_type": row["entity_type"],
-            "cluster_id": row["cluster_id"],
-        })
+        ctx["batch_results"].append(
+            {
+                "source_id": row["source_id"],
+                "request_id": row["request_id"],
+                "entity_type": row["entity_type"],
+                "cluster_id": row["cluster_id"],
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -215,11 +206,7 @@ def submit_resolve_replay(ctx):
 # ---------------------------------------------------------------------------
 
 
-@when(
-    parsers.parse(
-        'the originator looks up triad "{source_id}", "{request_id}", "{entity_type}"'
-    )
-)
+@when(parsers.parse('the originator looks up triad "{source_id}", "{request_id}", "{entity_type}"'))
 def lookup_triad(ctx, source_id, request_id, entity_type):
     """
     TODO: ctx["lookup_response"] = await ctx["client"].get(
@@ -246,11 +233,7 @@ def call_refreshbulk(ctx, source_id):
     ctx["refreshbulk_response"] = None  # TODO: replace with real client call
 
 
-@when(
-    parsers.parse(
-        'the originator calls refreshBulk for source "{source_id}" again'
-    )
-)
+@when(parsers.parse('the originator calls refreshBulk for source "{source_id}" again'))
 def call_refreshbulk_again(ctx, source_id):
     """Second refreshBulk call — should return empty if no new changes."""
     ctx["refreshbulk_response"] = None  # TODO: replace with real client call
@@ -281,11 +264,7 @@ def ere_late_outcome(ctx, source_id, request_id, entity_type, cluster_id):
 # ---------------------------------------------------------------------------
 
 
-@then(
-    parsers.parse(
-        'the response returns "{cluster_id}" with status "{expected_status}"'
-    )
-)
+@then(parsers.parse('the response returns "{cluster_id}" with status "{expected_status}"'))
 def response_cluster_and_status(ctx, cluster_id, expected_status):
     """
     TODO: data = ctx["response"].json()

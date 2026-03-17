@@ -33,7 +33,7 @@ WORKDIR /app
 COPY --from=builder /app/.venv .venv
 COPY --from=builder /app/src src
 
-COPY deployment/scripts/entrypoint.sh /entrypoint.sh
+COPY infra/scripts/entrypoint.sh /entrypoint.sh
 RUN sed -i 's/\r$//g' /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

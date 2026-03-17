@@ -117,9 +117,7 @@ class TestLogin:
         user_repository.find_by_email.return_value = None
 
         with pytest.raises(AuthenticationError, match="Invalid credentials"):
-            await auth_service.login(
-                LoginRequest(email="nobody@example.com", password="pw")
-            )
+            await auth_service.login(LoginRequest(email="nobody@example.com", password="pw"))
 
     async def test_login_inactive_user_raises(
         self,

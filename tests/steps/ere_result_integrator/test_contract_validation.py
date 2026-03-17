@@ -122,9 +122,7 @@ def request_registry_has_mention(ctx):
 
 
 @when(
-    parsers.parse(
-        'the ERE delivers an outcome message that is malformed because "{malformation}"'
-    )
+    parsers.parse('the ERE delivers an outcome message that is malformed because "{malformation}"')
 )
 def ere_delivers_malformed_outcome(ctx, malformation):
     """
@@ -144,11 +142,7 @@ def ere_delivers_malformed_outcome(ctx, malformation):
     ctx["raised_exception"] = Exception("OutcomeValidationError")  # placeholder
 
 
-@when(
-    parsers.parse(
-        'the ERE delivers an outcome for a triad that is unknown because "{reason}"'
-    )
-)
+@when(parsers.parse('the ERE delivers an outcome for a triad that is unknown because "{reason}"'))
 def ere_delivers_outcome_for_unknown_triad(ctx, reason):
     """
     Build an OutcomeMessage with a triad that does not exist in the Request Registry
@@ -182,7 +176,7 @@ def ere_delivers_outcome_with_invalid_timestamp(ctx, invalid_timestamp):
 
 @when(
     parsers.parse(
-        'the ERE delivers an outcome for a known triad with a candidate having '
+        "the ERE delivers an outcome for a known triad with a candidate having "
         'confidence score "{confidence}" and similarity score "{similarity}"'
     )
 )
@@ -200,9 +194,7 @@ def ere_delivers_outcome_with_invalid_scores(ctx, confidence, similarity):
     ctx["raised_exception"] = Exception("OutcomeValidationError")  # placeholder
 
 
-@when(
-    "the ERE delivers a valid outcome for a known triad that also includes unrecognised fields"
-)
+@when("the ERE delivers a valid outcome for a known triad that also includes unrecognised fields")
 def ere_delivers_outcome_with_extra_fields(ctx):
     """
     Build a valid OutcomeMessage that also contains unexpected extra fields

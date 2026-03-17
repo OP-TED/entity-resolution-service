@@ -21,12 +21,8 @@ def password_hasher() -> AsyncMock:
 
 
 @pytest.fixture
-def service(
-    user_repository: AsyncMock, password_hasher: AsyncMock
-) -> UserManagementService:
-    return UserManagementService(
-        user_repository=user_repository, password_hasher=password_hasher
-    )
+def service(user_repository: AsyncMock, password_hasher: AsyncMock) -> UserManagementService:
+    return UserManagementService(user_repository=user_repository, password_hasher=password_hasher)
 
 
 class TestCreateUser:
@@ -61,9 +57,7 @@ class TestCreateUser:
 
         with pytest.raises(ApplicationError, match="already exists"):
             await service.create_user(
-                CreateUserRequest(
-                    email="existing@example.com", password="securepassword"
-                )
+                CreateUserRequest(email="existing@example.com", password="securepassword")
             )
 
 

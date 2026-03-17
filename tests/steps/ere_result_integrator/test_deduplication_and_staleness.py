@@ -58,7 +58,7 @@ def ctx():
 
 @given(
     parsers.parse(
-        'the Request Registry contains a mention with triad '
+        "the Request Registry contains a mention with triad "
         '("{source_id}", "{request_id}", "Organization")'
     )
 )
@@ -105,7 +105,7 @@ def decision_store_has_assignment(ctx, outcome_marker):
 
 @given(
     parsers.parse(
-        'the Decision Store is empty for a mention with triad '
+        "the Decision Store is empty for a mention with triad "
         '("{source_id}", "{request_id}", "Organization")'
     )
 )
@@ -131,7 +131,7 @@ def decision_store_empty_for_triad(ctx, source_id, request_id):
 
 @when(
     parsers.parse(
-        'the ERE delivers an outcome for that triad with outcome marker '
+        "the ERE delivers an outcome for that triad with outcome marker "
         '"{incoming_timestamp}" and cluster "{incoming_cluster}"'
     )
 )
@@ -165,10 +165,12 @@ def ere_delivers_outcomes_in_order(ctx, datatable):
     """
     ctx["delivery_sequence"] = []
     for row in datatable:
-        ctx["delivery_sequence"].append({
-            "outcome_marker": row["outcome_marker"],
-            "cluster_id": row["cluster_id"],
-        })
+        ctx["delivery_sequence"].append(
+            {
+                "outcome_marker": row["outcome_marker"],
+                "cluster_id": row["cluster_id"],
+            }
+        )
     # TODO: Process each outcome through the service sequentially
     ctx["result"] = None
     ctx["raised_exception"] = None
@@ -206,9 +208,7 @@ def decision_store_unchanged(ctx, expected_marker):
 
 
 @then(
-    parsers.parse(
-        'the Decision Store holds cluster assignment "{expected_cluster}" for that triad'
-    )
+    parsers.parse('the Decision Store holds cluster assignment "{expected_cluster}" for that triad')
 )
 def decision_store_holds_cluster(ctx, expected_cluster):
     """

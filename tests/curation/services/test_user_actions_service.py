@@ -59,9 +59,7 @@ class TestRecordAccept:
         user_action_repository.has_current_action.return_value = True
 
         with pytest.raises(AlreadyCuratedError) as exc_info:
-            await user_action_service.record_accept(
-                actor="curator-1", decision=decision
-            )
+            await user_action_service.record_accept(actor="curator-1", decision=decision)
 
         assert exc_info.value.decision_id == decision.id
 
@@ -86,13 +84,8 @@ class TestListUserActions:
 
         assert result.count == 1
         assert result.results[0].id == action.id
-        assert (
-            result.results[0].about_entity_mention.identified_by
-            == action.about_entity_mention
-        )
-        assert result.results[
-            0
-        ].about_entity_mention.parsed_representation == json.loads(
+        assert result.results[0].about_entity_mention.identified_by == action.about_entity_mention
+        assert result.results[0].about_entity_mention.parsed_representation == json.loads(
             entity_mention.parsed_representation
         )
         user_action_repository.find_paginated.assert_called_once_with(pagination)

@@ -75,11 +75,7 @@ def ere_execution_window_configured(ctx):
 # ---------------------------------------------------------------------------
 
 
-@given(
-    parsers.parse(
-        "a bulk resolve request containing {mention_count:d} entity mentions"
-    )
-)
+@given(parsers.parse("a bulk resolve request containing {mention_count:d} entity mentions"))
 def bulk_request_with_n_mentions(ctx, mention_count):
     """
     TODO: Build list of EntityMention objects.
@@ -88,11 +84,7 @@ def bulk_request_with_n_mentions(ctx, mention_count):
     ctx["mentions"] = [MagicMock() for _ in range(mention_count)]
 
 
-@given(
-    parsers.parse(
-        "{count:d} of those do not receive an ERE response in time"
-    )
-)
+@given(parsers.parse("{count:d} of those do not receive an ERE response in time"))
 def n_mentions_timeout(ctx, count):
     """
     TODO: Configure waiter mock to timeout for count mentions.
@@ -100,11 +92,7 @@ def n_mentions_timeout(ctx, count):
     ctx["timeout_count"] = count
 
 
-@given(
-    parsers.parse(
-        "{count:d} of those have malformed RDF content"
-    )
-)
+@given(parsers.parse("{count:d} of those have malformed RDF content"))
 def n_mentions_malformed(ctx, count):
     """
     TODO: Configure parser mock to fail on count mentions.
@@ -112,11 +100,7 @@ def n_mentions_malformed(ctx, count):
     ctx["error_count"] = count
 
 
-@given(
-    parsers.parse(
-        'the {position} mention "{condition}"'
-    )
-)
+@given(parsers.parse('the {position} mention "{condition}"'))
 def mention_at_position_has_condition(ctx, position, condition):
     """
     Configure the mock for a specific mention by position.
@@ -152,11 +136,7 @@ def submit_bulk(ctx):
 # ---------------------------------------------------------------------------
 
 
-@then(
-    parsers.parse(
-        "{count:d} results are returned in the same order as the input"
-    )
-)
+@then(parsers.parse("{count:d} results are returned in the same order as the input"))
 def n_results_in_order(ctx, count):
     """
     TODO: assert len(ctx["results"]) == count
@@ -173,11 +153,7 @@ def n_results_are_errors(ctx, count):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        'the {position} mention returns "{result_type}"'
-    )
-)
+@then(parsers.parse('the {position} mention returns "{result_type}"'))
 def mention_at_position_returns(ctx, position, result_type):
     """
     Assert the result for a specific mention by position.

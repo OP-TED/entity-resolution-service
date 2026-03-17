@@ -290,11 +290,7 @@ def exclusion_forwarded(ctx, source_id, request_id, entity_type):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        'the excluded clusters in the forwarded message are "{excluded_clusters}"'
-    )
-)
+@then(parsers.parse('the excluded clusters in the forwarded message are "{excluded_clusters}"'))
 def forwarded_excluded_clusters(ctx, excluded_clusters):
     """
     TODO: expected = [c.strip() for c in excluded_clusters.split(",")]

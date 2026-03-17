@@ -81,9 +81,7 @@ class TestListDecisions:
         summary = result.results[0]
         assert isinstance(summary, DecisionSummary)
         assert summary.id == decision.id
-        assert (
-            summary.about_entity_mention.identified_by == decision.about_entity_mention
-        )
+        assert summary.about_entity_mention.identified_by == decision.about_entity_mention
         assert summary.about_entity_mention.parsed_representation == json.loads(
             entity_mention.parsed_representation
         )
@@ -292,9 +290,7 @@ class TestAssignDecision:
         )
         decision_repository.find_by_id.return_value = decision
 
-        await service.assign_decision(
-            decision.id, cluster_id=target.cluster_id, actor="curator-1"
-        )
+        await service.assign_decision(decision.id, cluster_id=target.cluster_id, actor="curator-1")
 
         user_action_service.record_assign.assert_called_once_with(
             actor="curator-1",
@@ -314,9 +310,7 @@ class TestAssignDecision:
         )
         decision_repository.find_by_id.return_value = decision
 
-        await service.assign_decision(
-            decision.id, cluster_id=target.cluster_id, actor="curator-1"
-        )
+        await service.assign_decision(decision.id, cluster_id=target.cluster_id, actor="curator-1")
 
         decision_repository.save.assert_not_called()
 
@@ -343,9 +337,7 @@ class TestBulkAcceptDecisions:
         decisions = DecisionFactory.batch(3)
         decision_repository.find_by_id.side_effect = decisions
 
-        result = await service.bulk_accept_decisions(
-            [d.id for d in decisions], actor="curator-1"
-        )
+        result = await service.bulk_accept_decisions([d.id for d in decisions], actor="curator-1")
 
         assert isinstance(result, BulkActionResponse)
         assert len(result.results) == 3
@@ -403,9 +395,7 @@ class TestBulkRejectDecisions:
         decisions = DecisionFactory.batch(3)
         decision_repository.find_by_id.side_effect = decisions
 
-        result = await service.bulk_reject_decisions(
-            [d.id for d in decisions], actor="curator-1"
-        )
+        result = await service.bulk_reject_decisions([d.id for d in decisions], actor="curator-1")
 
         assert len(result.results) == 3
         assert all(r.status == BulkItemStatus.SUCCESS for r in result.results)
@@ -420,9 +410,7 @@ class TestBulkRejectDecisions:
         decision_repository.find_by_id.side_effect = [decision, None]
         user_action_service.record_reject.return_value = None
 
-        result = await service.bulk_reject_decisions(
-            [decision.id, "missing-id"], actor="curator-1"
-        )
+        result = await service.bulk_reject_decisions([decision.id, "missing-id"], actor="curator-1")
 
         assert result.results[0].status == BulkItemStatus.SUCCESS
         assert result.results[1].status == BulkItemStatus.NOT_FOUND

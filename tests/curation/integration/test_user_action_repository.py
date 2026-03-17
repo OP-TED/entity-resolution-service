@@ -18,9 +18,7 @@ def repo(mongo_db: AsyncDatabase) -> MongoUserActionCurationRepository:
 
 
 class TestSaveAndFindById:
-    async def test_save_and_retrieve(
-        self, repo: MongoUserActionCurationRepository
-    ) -> None:
+    async def test_save_and_retrieve(self, repo: MongoUserActionCurationRepository) -> None:
         action = UserActionFactory.build()
         await repo.save(action)
 
@@ -30,9 +28,7 @@ class TestSaveAndFindById:
         assert found.id == action.id
         assert found.action_type == action.action_type
 
-    async def test_find_by_id_not_found(
-        self, repo: MongoUserActionCurationRepository
-    ) -> None:
+    async def test_find_by_id_not_found(self, repo: MongoUserActionCurationRepository) -> None:
         result = await repo.find_by_id("nonexistent")
         assert result is None
 

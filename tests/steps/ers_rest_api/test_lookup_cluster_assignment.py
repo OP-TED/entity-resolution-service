@@ -55,9 +55,7 @@ def test_lookup_unknown_mention():
     pass
 
 
-@scenario(
-    FEATURE_FILE, "Reject single lookup with missing or empty query parameters"
-)
+@scenario(FEATURE_FILE, "Reject single lookup with missing or empty query parameters")
 def test_lookup_missing_or_empty_params():
     pass
 
@@ -204,8 +202,7 @@ def mention_exists_in_decision_store(ctx, source_id, request_id, entity_type):
 
 @given(
     parsers.parse(
-        'the current cluster assignment is "{cluster_id}" '
-        'last updated at "{last_updated}"'
+        'the current cluster assignment is "{cluster_id}" last updated at "{last_updated}"'
     )
 )
 def cluster_assignment_with_timestamp(ctx, cluster_id, last_updated):
@@ -313,8 +310,7 @@ def source_has_n_mentions(ctx, source_id, total):
 
 @given(
     parsers.parse(
-        "{changed_count:d} mentions have been updated since "
-        "the last synchronisation snapshot"
+        "{changed_count:d} mentions have been updated since the last synchronisation snapshot"
     )
 )
 def n_mentions_changed(ctx, changed_count):
@@ -327,11 +323,7 @@ def n_mentions_changed(ctx, changed_count):
     ctx["changed_count"] = changed_count
 
 
-@given(
-    parsers.parse(
-        'source "{source_id}" has {count:d} resolved mentions in the Decision Store'
-    )
-)
+@given(parsers.parse('source "{source_id}" has {count:d} resolved mentions in the Decision Store'))
 def source_has_mentions_in_store(ctx, source_id, count):
     """
     Seed the Decision Store with resolved mentions for first-ever call scenario.
@@ -463,11 +455,7 @@ def submit_raw_request(ctx):
 # ---------------------------------------------------------------------------
 
 
-@when(
-    parsers.parse(
-        'I POST to /refreshBulk for source "{source_id}" with limit {limit:d}'
-    )
-)
+@when(parsers.parse('I POST to /refreshBulk for source "{source_id}" with limit {limit:d}'))
 def post_refreshbulk_with_limit(ctx, source_id, limit):
     """
     TODO: ctx["response"] = await ctx["client"].post(
@@ -478,11 +466,7 @@ def post_refreshbulk_with_limit(ctx, source_id, limit):
     ctx["response"] = None  # TODO: replace with real client call
 
 
-@when(
-    parsers.parse(
-        'I POST to /refreshBulk for source "{source_id}" with no continuation cursor'
-    )
-)
+@when(parsers.parse('I POST to /refreshBulk for source "{source_id}" with no continuation cursor'))
 def post_refreshbulk_no_cursor(ctx, source_id):
     """
     TODO: ctx["response"] = await ctx["client"].post(
@@ -516,11 +500,7 @@ def post_refreshbulk_with_cursor(ctx, source_id, limit):
     ctx["response"] = None  # TODO: replace with real client call
 
 
-@when(
-    parsers.parse(
-        'I POST to /refreshBulk for source "{source_id}" without specifying a limit'
-    )
-)
+@when(parsers.parse('I POST to /refreshBulk for source "{source_id}" without specifying a limit'))
 def post_refreshbulk_no_limit(ctx, source_id):
     """
     TODO: ctx["response"] = await ctx["client"].post(
@@ -555,9 +535,7 @@ def post_refreshbulk_for_source(ctx, source_id):
 
 
 @when(
-    parsers.parse(
-        'I POST to /refreshBulk for source "{source_id}" with limit {limit:d}'
-    ),
+    parsers.parse('I POST to /refreshBulk for source "{source_id}" with limit {limit:d}'),
     target_fixture="refreshbulk_and_lookup",
 )
 def post_refreshbulk_in_readonly_scenario(ctx, source_id, limit):
@@ -687,9 +665,7 @@ def snapshot_advanced(ctx, source_id):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse('the synchronisation snapshot for "{source_id}" is not modified')
-)
+@then(parsers.parse('the synchronisation snapshot for "{source_id}" is not modified'))
 def snapshot_not_modified(ctx, source_id):
     """
     Verify that the synchronisation snapshot was NOT updated on failure.

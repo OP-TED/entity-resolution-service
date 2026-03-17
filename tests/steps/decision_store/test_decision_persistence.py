@@ -95,11 +95,7 @@ def decision_store_available(ctx):
 # ---------------------------------------------------------------------------
 
 
-@given(
-    parsers.parse(
-        'a correlation triad ("{source_id}", "{request_id}", "Organization")'
-    )
-)
+@given(parsers.parse('a correlation triad ("{source_id}", "{request_id}", "Organization")'))
 def a_correlation_triad(ctx, source_id, request_id):
     """
     Record the triad under test.
@@ -111,11 +107,7 @@ def a_correlation_triad(ctx, source_id, request_id):
     ctx["entity_type"] = "Organization"
 
 
-@given(
-    parsers.parse(
-        'the Decision Store "{prior_state}" a decision for that triad'
-    )
-)
+@given(parsers.parse('the Decision Store "{prior_state}" a decision for that triad'))
 def decision_store_prior_state(ctx, prior_state):
     """
     Configure the mock based on whether a prior decision exists.
@@ -133,11 +125,7 @@ def decision_store_prior_state(ctx, prior_state):
         ctx["existing_decision"] = None
 
 
-@given(
-    parsers.parse(
-        "the maximum candidate count is configured to {max_candidates:d}"
-    )
-)
+@given(parsers.parse("the maximum candidate count is configured to {max_candidates:d}"))
 def configure_max_candidates(ctx, max_candidates):
     """
     Set the max_candidates configuration.
@@ -161,7 +149,7 @@ def decision_store_empty_for_triad(ctx):
 @when(
     parsers.parse(
         'a resolution decision is stored with cluster "{cluster_id}", '
-        "{candidate_count:d} candidates, and timestamp \"{timestamp}\""
+        '{candidate_count:d} candidates, and timestamp "{timestamp}"'
     )
 )
 def store_decision(ctx, cluster_id, candidate_count, timestamp):
@@ -178,9 +166,7 @@ def store_decision(ctx, cluster_id, candidate_count, timestamp):
 
 
 @when(
-    parsers.parse(
-        "a resolution decision is stored with {incoming_count:d} candidate alternatives"
-    )
+    parsers.parse("a resolution decision is stored with {incoming_count:d} candidate alternatives")
 )
 def store_decision_with_n_candidates(ctx, incoming_count):
     """
@@ -193,9 +179,7 @@ def store_decision_with_n_candidates(ctx, incoming_count):
     ctx["raised_exception"] = None
 
 
-@when(
-    "a provisional singleton decision is stored with a SHA256-derived cluster identifier"
-)
+@when("a provisional singleton decision is stored with a SHA256-derived cluster identifier")
 def store_provisional_singleton(ctx):
     """
     Call DecisionStoreService.store_decision with a provisional singleton.
@@ -225,7 +209,7 @@ def retrieve_decision(ctx):
 
 @then(
     parsers.parse(
-        'the Decision Store contains a decision for that triad '
+        "the Decision Store contains a decision for that triad "
         'with current placement "{cluster_id}"'
     )
 )
@@ -260,8 +244,7 @@ def created_at_rule(ctx, rule):
 
 @then(
     parsers.parse(
-        "the Decision Store retains exactly {stored_count:d} candidates "
-        "in their original order"
+        "the Decision Store retains exactly {stored_count:d} candidates in their original order"
     )
 )
 def retains_n_candidates_ordered(ctx, stored_count):
@@ -359,11 +342,7 @@ def store_has_decisions_with_confidence(ctx, datatable):
 # ---------------------------------------------------------------------------
 
 
-@when(
-    parsers.parse(
-        'decisions are queried with start "{start}" and end "{end}"'
-    )
-)
+@when(parsers.parse('decisions are queried with start "{start}" and end "{end}"'))
 def query_by_timestamp_interval(ctx, start, end):
     """
     Call DecisionStoreService.query_by_timestamp_interval.
@@ -381,8 +360,7 @@ def query_by_timestamp_interval(ctx, start, end):
 
 @when(
     parsers.parse(
-        'decisions are queried with min confidence "{min_conf}" '
-        'and max confidence "{max_conf}"'
+        'decisions are queried with min confidence "{min_conf}" and max confidence "{max_conf}"'
     )
 )
 def query_by_confidence_interval(ctx, min_conf, max_conf):

@@ -81,9 +81,7 @@ class TestLoginEndpoint:
         client: AsyncClient,
         auth_service: AsyncMock,
     ) -> None:
-        auth_service.login.return_value = TokenResponse(
-            access_token="at", refresh_token="rt"
-        )
+        auth_service.login.return_value = TokenResponse(access_token="at", refresh_token="rt")
 
         response = await client.post(
             f"{AUTH_URL}/login",
@@ -162,9 +160,7 @@ class TestProtectedEndpointUnverified:
 
         from httpx import ASGITransport, AsyncClient
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             response = await c.get("/api/v1/curation/decisions")
 
         assert response.status_code == 403

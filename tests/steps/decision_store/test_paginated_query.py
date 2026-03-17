@@ -22,10 +22,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 # ---------------------------------------------------------------------------
 
 FEATURE_FILE = str(
-    Path(__file__).parent.parent.parent
-    / "features"
-    / "decision_store"
-    / "paginated_query.feature"
+    Path(__file__).parent.parent.parent / "features" / "decision_store" / "paginated_query.feature"
 )
 
 
@@ -97,11 +94,7 @@ def store_has_n_decisions(ctx, count):
     ctx["decision_count"] = count
 
 
-@given(
-    parsers.parse(
-        "the Decision Store contains {count:d} resolution decisions"
-    )
-)
+@given(parsers.parse("the Decision Store contains {count:d} resolution decisions"))
 def store_has_n_decisions_simple(ctx, count):
     """
     Seed the mock with N decisions (for edge case outline).
@@ -124,11 +117,7 @@ def store_has_at_least_one(ctx):
 # ---------------------------------------------------------------------------
 
 
-@when(
-    parsers.parse(
-        "the first page is queried with page size {page_size:d}"
-    )
-)
+@when(parsers.parse("the first page is queried with page size {page_size:d}"))
 def query_first_page(ctx, page_size):
     """
     Call DecisionStoreService.query_decisions_paginated with no cursor.
@@ -155,11 +144,7 @@ def query_next_page(ctx):
     ctx["raised_exception"] = None
 
 
-@when(
-    parsers.parse(
-        "decisions are queried with page size {page_size:d} and no cursor"
-    )
-)
+@when(parsers.parse("decisions are queried with page size {page_size:d} and no cursor"))
 def query_with_page_size_no_cursor(ctx, page_size):
     """
     Call DecisionStoreService.query_decisions_paginated (used by edge case outline).
@@ -187,11 +172,7 @@ def query_with_malformed_cursor(ctx):
 # ---------------------------------------------------------------------------
 
 
-@then(
-    parsers.parse(
-        "{count:d} decisions are returned ordered by outcome timestamp ascending"
-    )
-)
+@then(parsers.parse("{count:d} decisions are returned ordered by outcome timestamp ascending"))
 def n_decisions_returned_ordered(ctx, count):
     """
     Assert count and ascending order.
@@ -203,11 +184,7 @@ def n_decisions_returned_ordered(ctx, count):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        "{count:d} decisions are returned starting after the previous page"
-    )
-)
+@then(parsers.parse("{count:d} decisions are returned starting after the previous page"))
 def n_decisions_after_previous(ctx, count):
     """
     Assert continuation returned the right slice.

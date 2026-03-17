@@ -1,25 +1,24 @@
-# Project Memory — Entity Resolution Docs
+# Project Memory — Entity Resolution Service
 
 ## Project Overview
 
-- Documentation and specification repository for Entity Resolution project.
+- Main repository for the Entity Resolution Service (ERS).
 - Uses Antora (AsciiDoc) for technical documentation.
-- Serves as planning hub for AI-assisted development.
 - Branch model: `develop` is the main branch.
+- Infrastructure: `infra/` (Docker, compose, scripts). Env template: `infra/.env.example`.
 
 ## AI Coding Setup
 
 - Five agents: epic-planner (opus), gherkin-writer (sonnet), implementer (sonnet), code-reviewer (opus), documenter (haiku).
-- Skills at project level: stream-coding, clarity-gate, gitnexus (6 sub-skills).
+- Skills: stream-coding, clarity-gate, gitnexus (6 sub-skills).
 - Methodology: stream-coding (documentation-first), Cosmic Python (layered architecture).
-- Memory: dual approach — auto-memory (this file) + epic/task memory under epics/.
-- Docs: `docs/ai-coding/` contains runbook, setup guide, DoD quality gates, and review.
+- Memory: auto-memory (this file) + epic/task memory under `epics/`.
 
 ## Planning Roadmap
 
 - [planning-roadmap.md](planning-roadmap.md) — Master roadmap for 10 ERS epic specifications
 - 3 phases: Foundation (EPIC-01 to 04), Core Flows (EPIC-05 to 07), Curation (EPIC-08 to 09) + cross-cutting (EPIC-X)
-- Status: Epics 1-7 written, Gherkin feature writing next
+- Status: Epics 1-7 written, all Gherkin features complete (component + UC-level + E2E)
 
 ## Epic Status
 
@@ -38,45 +37,37 @@
 
 ## Current Phase
 
-- Branch: `feature/ERS1-137-4`, implementing EPIC-01 (Request Registry)
-- **[2026-03-16] ERS-EPIC-01: Gherkin features complete** — `resolution_request_registration.feature` and `bulk_lookup_and_snapshot_management.feature` written and aligned with EPIC spec
-- **[2026-03-16] ERS-EPIC-05: Gherkin features complete** — 3 feature files + step scaffolding for ERE Result Integrator (outcome acceptance, deduplication, contract validation)
-- **[2026-03-16] ERS-EPIC-04: Gherkin features complete** — 2 feature files + step scaffolding for Decision Store (persistence, filtered queries, paginated query)
-- Steps reorganised into component subfolders: `tests/steps/request_registry/`, `tests/steps/ere_result_integrator/`, `tests/steps/decision_store/`
-- **[2026-03-16] ERS-EPIC-03: Gherkin features complete** — 2 feature files + step scaffolding for ERE Contract Client (request publishing, validation and transport)
-- **[2026-03-16] ERS-EPIC-02: Gherkin features complete** — 2 feature files + step scaffolding for RDF Mention Parser (config loading/validation, RDF parsing with all 6 error types)
-- **[2026-03-16] ERS-EPIC-06: Gherkin features complete** — 3 feature files + step scaffolding for Resolution Coordinator (single-mention resolution, bulk decomposition, async waiter coordination)
-- **[2026-03-17] ERS-EPIC-07: Gherkin features complete** — 2 feature files + step definitions for ERS REST API:
-  - `resolve_entity_mention.feature` (16 scenarios): single + bulk resolve, 200 canonical / 202 provisional / 207 mixed, idempotency, validation
-  - `lookup_cluster_assignment.feature` (11 scenarios): merged single GET /lookup + bulk POST /refreshBulk, pagination, synchronisation snapshot, read-only contract
-- Key EPIC-07 design decisions: 202 Accepted for provisional outcomes, 207 Multi-Status for mixed bulk, POST /resolveBulk as separate endpoint, content is RDF Turtle (mock fixtures), context field optional (NoticeID)
-- **[2026-03-17] UC-level Gherkin features complete** — `tests/features/ucs/` + `tests/steps/ucs/`:
-  - `ucb11_resolve_entity_mention.feature` (10 scenarios): full resolve integration, SHA256 draft ID determinism (ADR-A1N), idempotency, validation, dependency failures
-  - `ucb12_integrate_ere_outcomes.feature` (10 scenarios): async outcome integration, draft replacement/confirmation, reclustering, duplicate handling, score preservation
-  - `ucb21_submit_user_reevaluation.feature` (5 scenarios): placement + exclusion recommendations forwarded to ERE, no direct Decision Store modification
-  - `ucb22_bulk_curator_reevaluation.feature` (4 scenarios): bulk decomposition, partial validation failure, independent per-mention forwarding
-  - `ucw4_consult_resolution_statistics.feature` (5 scenarios): aggregated read-only statistics per entity type
-  - `e2e_resolution_cycle.feature` (4 scenarios): black-box 3-phase cycle (resolve → ERE outcome → lookup/refreshBulk)
-- UC coverage decisions: UCW3 (reclustering) covered by UCB12; UCB21/UCB22 trimmed to avoid duplicating UCB12 ERE outcome integration; E2E trimmed to 4 non-redundant cross-phase scenarios
-- Next: Implementation of EPIC-07 (requires EPIC-04 and EPIC-06 to be complete)
-- Design spec: `docs/superpowers/specs/2026-03-16-epic05-gherkin-features-design.md`
+- Branch: `feature/ERS1-142` — project setup + architecture guardrails
+- **[2026-03-17] Architecture guardrails complete** — tier-based import-linter contracts in `.importlinter`
+- **[2026-03-17] Project setup refactored** — tool configs migrated to dedicated files, Makefile restructured with full command model
+- Next: Begin implementation phase (foundation EPICs 01–04), or write remaining curation EPICs (08–09)
 
-## Codebase Patterns
+## Project Automation
 
-- Agent files live in `.claude/agents/` with YAML frontmatter + markdown system prompt.
-- Skills live in `.claude/skills/<name>/SKILL.md`.
-- CLAUDE.md is the master entry point; kept under 200 lines.
-- GitNexus rules are inline in CLAUDE.md (within `<!-- gitnexus:start/end -->` markers).
+- [project-automation.md](project-automation.md) — Toolchain, config files, Makefile targets, quality-control layers
+
+## Architecture
+
+- [code-anatomy.md](code-anatomy.md) — Tier-based dependency specification for all ERS components
 
 ## Key Decisions
 
-- 2026-03-11: Established AI-assisted coding setup with 5 agents, stream-coding methodology.
-- 2026-03-11: Stream-coding Phases 1-2 owned by epic-planner, Phases 3-4 by implementer.
-- 2026-03-11: Clarity Gate — full 13-item for specs, lightweight 5-item for documentation.
+- 2026-03-11: AI-assisted coding setup with 5 agents, stream-coding methodology.
 - 2026-03-12: All 7 core epics written; Clarity Gate scores 9.2-9.8/10.
-- 2026-03-12: EPIC-06 key design: AsyncResolutionWaiter (asyncio.Event), graceful degradation on Redis down, bulk decomposition in Coordinator.
+- 2026-03-17: Innermost layer is `domain/` not `models/`. Hierarchy: `entrypoints -> services -> domain`, `adapters -> domain`.
+- 2026-03-17: Toolchain: Ruff (replaces pylint/black/isort), mypy, pytest, import-linter, radon/xenon. No tox.
+- 2026-03-17: `pyproject.toml` kept minimal — tool configs in dedicated files. Dep groups: dev/test/lint.
+- 2026-03-17: Infrastructure moved to `infra/` (compose, Dockerfile, scripts, .env.example).
+
+## Codebase Patterns
+
+- Agent files in `.claude/agents/` with YAML frontmatter + markdown system prompt.
+- Skills in `.claude/skills/<name>/SKILL.md`.
+- Tool configs: `pytest.ini`, `ruff.toml`, `mypy.ini`, `.coveragerc`, `.importlinter`.
+- Makefile is primary dev/CI workflow interface. See `make help`.
 
 ## Gotchas
 
 - epic-planner agent hits CLAUDE_CODE_MAX_OUTPUT_TOKENS (8192) when writing large EPICs. Workaround: write the EPIC directly in the main conversation instead.
 - GitNexus PostToolUse hook has MODULE_NOT_FOUND error — doesn't block work.
+- `.dockerignore` must stay at repo root (Docker requirement). Cannot move to `infra/`.

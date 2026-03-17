@@ -47,9 +47,7 @@ class MongoUserActionCurationRepository(
         )
         results = [self._from_document(doc) async for doc in cursor]
 
-        total_pages = (
-            (count + pagination.per_page - 1) // pagination.per_page if count > 0 else 0
-        )
+        total_pages = (count + pagination.per_page - 1) // pagination.per_page if count > 0 else 0
 
         return PaginatedResult(
             count=count,

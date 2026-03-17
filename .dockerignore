@@ -23,8 +23,8 @@ __pycache__
 !.env.example
 
 # Docker
-deployment/docker
-compose.yaml
+infra/docker
+infra/compose.yaml
 
 # Docs and tests
 docs

@@ -27,30 +27,22 @@ class ErrorResponse(BaseModel):
 # Query parameter dependencies
 def get_pagination(
     page: int = Query(1, ge=1, description="Page number"),
-    per_page: int = Query(
-        DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE, description="Items per page"
-    ),
+    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE, description="Items per page"),
 ) -> PaginationParams:
     return PaginationParams(page=page, per_page=per_page)
 
 
 def get_decision_filters(
     entity_type: EntityType | None = Query(None, description="Filter by entity type"),
-    confidence_min: float | None = Query(
-        None, ge=0, le=1, description="Minimum confidence"
-    ),
+    confidence_min: float | None = Query(None, ge=0, le=1, description="Minimum confidence"),
     confidence_max: float | None = Query(
         get_settings().curation_confidence_threshold,
         ge=0,
         le=1,
         description="Maximum confidence",
     ),
-    similarity_min: float | None = Query(
-        None, ge=0, le=1, description="Minimum similarity"
-    ),
-    similarity_max: float | None = Query(
-        None, ge=0, le=1, description="Maximum similarity"
-    ),
+    similarity_min: float | None = Query(None, ge=0, le=1, description="Minimum similarity"),
+    similarity_max: float | None = Query(None, ge=0, le=1, description="Maximum similarity"),
     search: str | None = Query(None, description="Search text"),
     ordering: DecisionOrdering | None = Query(None, description="Ordering field"),
 ) -> DecisionFilters:

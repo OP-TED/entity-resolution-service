@@ -110,8 +110,7 @@ def valid_yaml_config(ctx, namespace_count, type_count, field_count, entity_type
 
 @given(
     parsers.parse(
-        "a YAML configuration where {location} uses prefix "
-        '"{prefix}" not declared in namespaces'
+        'a YAML configuration where {location} uses prefix "{prefix}" not declared in namespaces'
     )
 )
 def yaml_with_undeclared_prefix(ctx, location, prefix):
@@ -129,11 +128,7 @@ def yaml_with_undeclared_prefix(ctx, location, prefix):
     ctx["yaml_content"] = None  # TODO: build invalid config
 
 
-@given(
-    parsers.parse(
-        'a YAML configuration where "{structural_problem}"'
-    )
-)
+@given(parsers.parse('a YAML configuration where "{structural_problem}"'))
 def yaml_with_structural_problem(ctx, structural_problem):
     """
     Build a YAML config with the described structural problem.
@@ -152,11 +147,7 @@ def yaml_with_structural_problem(ctx, structural_problem):
     ctx["yaml_content"] = None  # TODO: build invalid config
 
 
-@given(
-    parsers.parse(
-        'a parser configuration with ORGANISATION mapped to "{rdf_type}"'
-    )
-)
+@given(parsers.parse('a parser configuration with ORGANISATION mapped to "{rdf_type}"'))
 def config_with_organisation_mapped(ctx, rdf_type):
     """
     Load a valid config for URI resolution testing.
@@ -186,11 +177,7 @@ def load_configuration(ctx):
     ctx["raised_exception"] = None  # TODO: capture validation errors
 
 
-@when(
-    parsers.parse(
-        'entity type URI "{entity_type_uri}" is resolved'
-    )
-)
+@when(parsers.parse('entity type URI "{entity_type_uri}" is resolved'))
 def resolve_entity_type_uri(ctx, entity_type_uri):
     """
     Call the config's entity type resolution method.
@@ -221,8 +208,7 @@ def config_created(ctx):
 
 @then(
     parsers.parse(
-        "it contains {namespace_count:d} namespace prefixes "
-        "and {type_count:d} entity types"
+        "it contains {namespace_count:d} namespace prefixes and {type_count:d} entity types"
     )
 )
 def config_has_counts(ctx, namespace_count, type_count):

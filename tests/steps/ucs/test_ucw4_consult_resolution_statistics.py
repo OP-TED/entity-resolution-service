@@ -127,9 +127,7 @@ def user_authenticated(ctx):
 
 
 @given(
-    parsers.parse(
-        'the Decision Store contains {count:d} mentions of entity type "{entity_type}"'
-    )
+    parsers.parse('the Decision Store contains {count:d} mentions of entity type "{entity_type}"')
 )
 def decision_store_has_mentions(ctx, count, entity_type):
     """
@@ -141,11 +139,7 @@ def decision_store_has_mentions(ctx, count, entity_type):
     ctx["expected_mention_count"] = count
 
 
-@given(
-    parsers.parse(
-        "those mentions are assigned to {count:d} distinct clusters"
-    )
-)
+@given(parsers.parse("those mentions are assigned to {count:d} distinct clusters"))
 def mentions_in_n_clusters(ctx, count):
     """
     Configure the seeded mentions to be distributed across N clusters.
@@ -155,11 +149,7 @@ def mentions_in_n_clusters(ctx, count):
     ctx["expected_cluster_count"] = count
 
 
-@given(
-    parsers.parse(
-        "{count:d} resolution requests were submitted in the last day"
-    )
-)
+@given(parsers.parse("{count:d} resolution requests were submitted in the last day"))
 def recent_requests(ctx, count):
     """
     Seed recent resolution requests within the last-day window.
@@ -169,11 +159,7 @@ def recent_requests(ctx, count):
     ctx["expected_recent_count"] = count
 
 
-@given(
-    parsers.parse(
-        'the Decision Store contains no mentions of entity type "{entity_type}"'
-    )
-)
+@given(parsers.parse('the Decision Store contains no mentions of entity type "{entity_type}"'))
 def decision_store_empty_for_type(ctx, entity_type):
     """Ensure no mentions exist for the given entity type."""
     ctx["entity_type"] = entity_type
@@ -202,11 +188,7 @@ def decision_store_unavailable(ctx):
 # ---------------------------------------------------------------------------
 
 
-@when(
-    parsers.parse(
-        'the curator requests statistics for entity type "{entity_type}"'
-    )
-)
+@when(parsers.parse('the curator requests statistics for entity type "{entity_type}"'))
 def request_statistics_for_type(ctx, entity_type):
     """
     TODO: ctx["response"] = await ctx["client"].get(
@@ -268,10 +250,7 @@ def response_has_all_types(ctx):
     assert True  # TODO: implement
 
 
-@then(
-    "each entity type section includes total mentions, total clusters, "
-    "and recent requests"
-)
+@then("each entity type section includes total mentions, total clusters, and recent requests")
 def each_section_has_fields(ctx):
     """
     TODO: data = ctx["response"].json()

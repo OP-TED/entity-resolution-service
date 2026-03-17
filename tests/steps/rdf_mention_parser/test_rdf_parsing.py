@@ -24,10 +24,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 # ---------------------------------------------------------------------------
 
 FEATURE_FILE = str(
-    Path(__file__).parent.parent.parent
-    / "features"
-    / "rdf_mention_parser"
-    / "rdf_parsing.feature"
+    Path(__file__).parent.parent.parent / "features" / "rdf_mention_parser" / "rdf_parsing.feature"
 )
 
 
@@ -151,11 +148,7 @@ def rdf_payload_multi_hop_partial(ctx):
 # ---------------------------------------------------------------------------
 
 
-@given(
-    parsers.parse(
-        'an RDF Turtle payload whose byte size is "{size_description}"'
-    )
-)
+@given(parsers.parse('an RDF Turtle payload whose byte size is "{size_description}"'))
 def rdf_payload_at_size_boundary(ctx, size_description):
     """
     Generate an RDF payload at the specified size boundary.
@@ -218,11 +211,7 @@ def parse_mention_default_uri(ctx):
     ctx["raised_exception"] = None
 
 
-@when(
-    parsers.parse(
-        'the mention is parsed for entity type URI "{entity_type_uri}"'
-    )
-)
+@when(parsers.parse('the mention is parsed for entity type URI "{entity_type_uri}"'))
 def parse_mention_with_uri(ctx, entity_type_uri):
     """
     Call MentionParserService.parse with a specific entity type URI.
@@ -239,11 +228,7 @@ def parse_mention_with_uri(ctx, entity_type_uri):
 # ---------------------------------------------------------------------------
 
 
-@then(
-    parsers.parse(
-        "a JSON representation is returned with {count:d} extracted fields"
-    )
-)
+@then(parsers.parse("a JSON representation is returned with {count:d} extracted fields"))
 def json_with_n_fields(ctx, count):
     """
     TODO: assert ctx["result"] is not None
@@ -253,11 +238,7 @@ def json_with_n_fields(ctx, count):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        "the remaining {count:d} configured fields are absent"
-    )
-)
+@then(parsers.parse("the remaining {count:d} configured fields are absent"))
 def remaining_fields_absent(ctx, count):
     """
     TODO: absent = {k for k, v in ctx["result"].items() if v is None}

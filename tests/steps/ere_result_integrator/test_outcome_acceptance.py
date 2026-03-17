@@ -63,7 +63,9 @@ def ctx():
 # ---------------------------------------------------------------------------
 
 
-@given("the Request Registry contains a mention for each correlation triad used in the scenarios below")
+@given(
+    "the Request Registry contains a mention for each correlation triad used in the scenarios below"
+)
 def request_registry_contains_mentions(ctx):
     """
     Set up the Request Registry repository mock to confirm triad existence.
@@ -113,9 +115,7 @@ def mention_exists_in_registry(ctx, source_id, request_id):
 
 
 @given(
-    parsers.parse(
-        'the Decision Store "{prior_state}" a prior cluster assignment for that triad'
-    )
+    parsers.parse('the Decision Store "{prior_state}" a prior cluster assignment for that triad')
 )
 def decision_store_prior_state(ctx, prior_state):
     """
@@ -134,7 +134,7 @@ def decision_store_prior_state(ctx, prior_state):
 
 @given(
     parsers.parse(
-        'the Decision Store contains an existing cluster assignment '
+        "the Decision Store contains an existing cluster assignment "
         'with "{prior_candidate_count}" alternative candidates'
     )
 )
@@ -159,7 +159,7 @@ def decision_store_has_prior_candidates(ctx, prior_candidate_count):
 
 @when(
     parsers.parse(
-        'the ERE publishes a solicited outcome for that triad with outcome timestamp '
+        "the ERE publishes a solicited outcome for that triad with outcome timestamp "
         '"{outcome_timestamp}", primary cluster "{cluster_id}", '
         'and "{candidate_count}" alternative candidates'
     )
@@ -206,7 +206,7 @@ def ere_publishes_unsolicited_outcome(ctx, ere_request_id, outcome_timestamp, cl
 
 @when(
     parsers.parse(
-        'the ERE publishes a new outcome for that triad with outcome timestamp '
+        "the ERE publishes a new outcome for that triad with outcome timestamp "
         '"{outcome_timestamp}" and "{new_candidate_count}" alternative candidates'
     )
 )
@@ -243,11 +243,7 @@ def decision_store_updated_with_cluster(ctx, cluster_id):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        'the outcome marker stored in the Decision Store equals "{outcome_timestamp}"'
-    )
-)
+@then(parsers.parse('the outcome marker stored in the Decision Store equals "{outcome_timestamp}"'))
 def outcome_marker_equals(ctx, outcome_timestamp):
     """
     Assert that the persisted outcome marker matches the incoming timestamp.

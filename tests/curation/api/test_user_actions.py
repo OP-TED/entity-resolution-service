@@ -76,9 +76,7 @@ class TestListUserActions:
 
         from httpx import ASGITransport, AsyncClient
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             response = await c.get(USER_ACTIONS_URL)
 
         assert response.status_code == 403

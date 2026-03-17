@@ -93,7 +93,7 @@ def messaging_channel_reachable(ctx):
 
 @given(
     parsers.parse(
-        'a valid entity mention with correlation triad '
+        "a valid entity mention with correlation triad "
         '("{source_id}", "{request_id}", "Organization")'
     )
 )
@@ -110,8 +110,7 @@ def valid_entity_mention(ctx, source_id, request_id):
 
 @given(
     parsers.parse(
-        'the request includes proposed placements "{proposed}" '
-        'and excluded clusters "{excluded}"'
+        'the request includes proposed placements "{proposed}" and excluded clusters "{excluded}"'
     )
 )
 def request_with_optional_fields(ctx, proposed, excluded):
@@ -123,18 +122,15 @@ def request_with_optional_fields(ctx, proposed, excluded):
       request.excluded_cluster_ids = [e.strip() for e in excluded.split(",")]
     """
     ctx["proposed_placements"] = (
-        None if proposed == "none"
-        else [p.strip() for p in proposed.split(",")]
+        None if proposed == "none" else [p.strip() for p in proposed.split(",")]
     )
     ctx["excluded_clusters"] = (
-        None if excluded == "none"
-        else [e.strip() for e in excluded.split(",")]
+        None if excluded == "none" else [e.strip() for e in excluded.split(",")]
     )
 
 
 @given(
-    "the request includes a single proposed placement "
-    "using the SHA256-derived provisional cluster"
+    "the request includes a single proposed placement using the SHA256-derived provisional cluster"
 )
 def request_with_singleton_proposal(ctx):
     """
@@ -146,11 +142,7 @@ def request_with_singleton_proposal(ctx):
     ctx["singleton_proposal"] = True
 
 
-@given(
-    parsers.parse(
-        'the resolution request has "{field}" not set'
-    )
-)
+@given(parsers.parse('the resolution request has "{field}" not set'))
 def request_field_not_set(ctx, field):
     """
     Configure the request to have the specified field absent.
@@ -230,11 +222,7 @@ def proposed_contains_provisional(ctx):
     assert True  # TODO: implement
 
 
-@then(
-    parsers.parse(
-        'the published request has "{field}" auto-populated'
-    )
-)
+@then(parsers.parse('the published request has "{field}" auto-populated'))
 def field_auto_populated(ctx, field):
     """
     Assert the specified field was auto-generated.

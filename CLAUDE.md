@@ -45,8 +45,9 @@ These rules apply to ALL agents in this project.
   it's cheaper and faster.
 - When code fails: **fix the spec, not the code** (Rule of Divergence from
   stream-coding methodology).
-- Follow the Cosmic Python layered architecture: `entrypoints -> services -> models`,
-  `adapters -> models`. Models must not import from higher layers.
+- Follow the Cosmic Python layered architecture: `entrypoints -> services -> domain`,
+  `adapters -> domain`. Domain must not import from higher layers.
+  **Note:** The innermost layer is called `domain` (not `models`) in this project.
 
 ### Interaction
 

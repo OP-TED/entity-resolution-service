@@ -51,8 +51,7 @@ class UserActionService:
             previous=paginated.previous,
             next=paginated.next,
             results=[
-                self._to_user_action_summary(action, mention_map)
-                for action in paginated.results
+                self._to_user_action_summary(action, mention_map) for action in paginated.results
             ],
         )
 
@@ -68,9 +67,7 @@ class UserActionService:
         user_action = UserActionFactory.create_reject(actor=actor, decision=decision)
         await self._user_action_repository.save(user_action)
 
-    async def record_assign(
-        self, actor: str, decision: Decision, cluster_id: str
-    ) -> None:
+    async def record_assign(self, actor: str, decision: Decision, cluster_id: str) -> None:
         """Record an assign action in the user action trail.
 
         Raises:

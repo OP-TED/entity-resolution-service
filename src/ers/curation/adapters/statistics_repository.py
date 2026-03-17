@@ -56,12 +56,8 @@ class MongoStatisticsRepository(StatisticsRepository):
 
         decision_filter: dict = {}
         if filters.entity_type is not None:
-            decision_filter["about_entity_mention.entity_type"] = (
-                filters.entity_type.value
-            )
-        total_decisions = await self._collections.decisions.count_documents(
-            decision_filter
-        )
+            decision_filter["about_entity_mention.entity_type"] = filters.entity_type.value
+        total_decisions = await self._collections.decisions.count_documents(decision_filter)
 
         pipeline: list[dict] = []
         if match:
@@ -94,9 +90,7 @@ class MongoStatisticsRepository(StatisticsRepository):
 
         decision_filter: dict = {}
         if filters.entity_type is not None:
-            decision_filter["about_entity_mention.entity_type"] = (
-                filters.entity_type.value
-            )
+            decision_filter["about_entity_mention.entity_type"] = filters.entity_type.value
 
         distinct_clusters = await self._collections.decisions.distinct(
             "current_placement.cluster_id",

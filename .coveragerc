@@ -1,0 +1,7 @@
+[run]
+source = src
+omit = */__init__.py
+
+[report]
+fail_under = 80
+show_missing = true

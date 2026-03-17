@@ -27,7 +27,12 @@ from tests.factories import EntityMentionFactory, EntityMentionIdentifierFactory
 # Scenario bindings — link each scenario title to its .feature file.
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(Path(__file__).parent.parent.parent / "features" / "request_registry" / "resolution_request_registration.feature")
+FEATURE_FILE = str(
+    Path(__file__).parent.parent.parent
+    / "features"
+    / "request_registry"
+    / "resolution_request_registration.feature"
+)
 
 
 @scenario(FEATURE_FILE, "Register a resolution request")

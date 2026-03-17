@@ -51,10 +51,8 @@ class DecisionCurationService:
         """List decisions with filtering, pagination, and embedded entity data."""
         mention_identifiers = None
         if filters.search is not None:
-            mention_identifiers = (
-                await self._entity_mention_repository.search_identifiers(
-                    filters.search,
-                )
+            mention_identifiers = await self._entity_mention_repository.search_identifiers(
+                filters.search,
             )
             if not mention_identifiers:
                 return PaginatedResult(count=0, results=[])
@@ -72,8 +70,7 @@ class DecisionCurationService:
         mention_map = self._index_by_identifier(entity_mentions)
 
         decision_summaries = [
-            self._to_decision_summary(decision, mention_map)
-            for decision in paginated.results
+            self._to_decision_summary(decision, mention_map) for decision in paginated.results
         ]
 
         return PaginatedResult(
@@ -111,9 +108,7 @@ class DecisionCurationService:
         decision = await self._get_decision_or_raise(decision_id)
         await self._user_action_service.record_reject(actor=actor, decision=decision)
 
-    async def assign_decision(
-        self, decision_id: str, cluster_id: str, actor: str
-    ) -> None:
+    async def assign_decision(self, decision_id: str, cluster_id: str, actor: str) -> None:
         """Assign a decision to an alternative cluster.
 
         Raises:
@@ -130,17 +125,13 @@ class DecisionCurationService:
         self, decision_ids: list[str], actor: str
     ) -> BulkActionResponse:
         """Accept multiple decisions concurrently."""
-        return await self._execute_bulk_action(
-            decision_ids, actor, self.accept_decision
-        )
+        return await self._execute_bulk_action(decision_ids, actor, self.accept_decision)
 
     async def bulk_reject_decisions(
         self, decision_ids: list[str], actor: str
     ) -> BulkActionResponse:
         """Reject multiple decisions concurrently."""
-        return await self._execute_bulk_action(
-            decision_ids, actor, self.reject_decision
-        )
+        return await self._execute_bulk_action(decision_ids, actor, self.reject_decision)
 
     async def _execute_bulk_action(
         self,
@@ -165,17 +156,11 @@ class DecisionCurationService:
     ) -> BulkItemResult:
         try:
             await action(decision_id, actor)
-            return BulkItemResult(
-                decision_id=decision_id, status=BulkItemStatus.SUCCESS
-            )
+            return BulkItemResult(decision_id=decision_id, status=BulkItemStatus.SUCCESS)
         except NotFoundError:
-            return BulkItemResult(
-                decision_id=decision_id, status=BulkItemStatus.NOT_FOUND
-            )
+            return BulkItemResult(decision_id=decision_id, status=BulkItemStatus.NOT_FOUND)
         except AlreadyCuratedError:
-            return BulkItemResult(
-                decision_id=decision_id, status=BulkItemStatus.ALREADY_CURATED
-            )
+            return BulkItemResult(decision_id=decision_id, status=BulkItemStatus.ALREADY_CURATED)
         except Exception as exc:
             return BulkItemResult(
                 decision_id=decision_id,
@@ -209,9 +194,7 @@ class DecisionCurationService:
             id=decision.id,
             about_entity_mention=EntityMentionPreview(
                 identified_by=emi,
-                parsed_representation=(
-                    mention.parsed_representation if mention else None
-                ),
+                parsed_representation=(mention.parsed_representation if mention else None),
             ),
             current_placement=decision.current_placement,
             created_at=decision.created_at,

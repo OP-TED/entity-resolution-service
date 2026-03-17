@@ -146,9 +146,7 @@ class TestAcceptDecision:
         client: AsyncClient,
         decision_curation_service: AsyncMock,
     ) -> None:
-        decision_curation_service.accept_decision.side_effect = AlreadyCuratedError(
-            "decision-1"
-        )
+        decision_curation_service.accept_decision.side_effect = AlreadyCuratedError("decision-1")
 
         response = await client.post(f"{BASE_URL}/decision-1/accept")
 
@@ -244,8 +242,8 @@ class TestGetProposedCanonicalEntity:
         client: AsyncClient,
         canonical_entity_service: AsyncMock,
     ) -> None:
-        canonical_entity_service.get_proposed_canonical_entity.side_effect = (
-            NotFoundError("Decision", "decision-1")
+        canonical_entity_service.get_proposed_canonical_entity.side_effect = NotFoundError(
+            "Decision", "decision-1"
         )
 
         response = await client.get(f"{BASE_URL}/decision-1/proposed-canonical-entity")
@@ -265,13 +263,11 @@ class TestGetAlternativeCanonicalEntities:
             similarity_score=0.65,
             top_entities=[],
         )
-        canonical_entity_service.get_alternative_canonical_entities.return_value = (
-            PaginatedResult(count=1, previous=None, next=None, results=[preview])
+        canonical_entity_service.get_alternative_canonical_entities.return_value = PaginatedResult(
+            count=1, previous=None, next=None, results=[preview]
         )
 
-        response = await client.get(
-            f"{BASE_URL}/decision-1/alternative-canonical-entities"
-        )
+        response = await client.get(f"{BASE_URL}/decision-1/alternative-canonical-entities")
 
         assert response.status_code == 200
         data = response.json()
@@ -285,15 +281,11 @@ class TestBulkAcceptDecisions:
         client: AsyncClient,
         decision_curation_service: AsyncMock,
     ) -> None:
-        decision_curation_service.bulk_accept_decisions.return_value = (
-            BulkActionResponse(
-                results=[
-                    BulkItemResult(decision_id="d-1", status=BulkItemStatus.SUCCESS),
-                    BulkItemResult(
-                        decision_id="d-2", status=BulkItemStatus.ALREADY_CURATED
-                    ),
-                ]
-            )
+        decision_curation_service.bulk_accept_decisions.return_value = BulkActionResponse(
+            results=[
+                BulkItemResult(decision_id="d-1", status=BulkItemStatus.SUCCESS),
+                BulkItemResult(decision_id="d-2", status=BulkItemStatus.ALREADY_CURATED),
+            ]
         )
 
         response = await client.post(
@@ -312,8 +304,8 @@ class TestBulkAcceptDecisions:
         client: AsyncClient,
         decision_curation_service: AsyncMock,
     ) -> None:
-        decision_curation_service.bulk_accept_decisions.return_value = (
-            BulkActionResponse(results=[])
+        decision_curation_service.bulk_accept_decisions.return_value = BulkActionResponse(
+            results=[]
         )
 
         await client.post(
@@ -343,13 +335,11 @@ class TestBulkRejectDecisions:
         client: AsyncClient,
         decision_curation_service: AsyncMock,
     ) -> None:
-        decision_curation_service.bulk_reject_decisions.return_value = (
-            BulkActionResponse(
-                results=[
-                    BulkItemResult(decision_id="d-1", status=BulkItemStatus.SUCCESS),
-                    BulkItemResult(decision_id="d-2", status=BulkItemStatus.NOT_FOUND),
-                ]
-            )
+        decision_curation_service.bulk_reject_decisions.return_value = BulkActionResponse(
+            results=[
+                BulkItemResult(decision_id="d-1", status=BulkItemStatus.SUCCESS),
+                BulkItemResult(decision_id="d-2", status=BulkItemStatus.NOT_FOUND),
+            ]
         )
 
         response = await client.post(
