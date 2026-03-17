@@ -1,6 +1,6 @@
 import pytest
-
 from erspec.models.core import ClusterReference, Decision
+
 from tests.factories import (
     ClusterReferenceFactory,
     DecisionFactory,

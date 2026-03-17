@@ -1,9 +1,6 @@
 import json
 from datetime import datetime, timezone
 
-from polyfactory.factories.pydantic_factory import ModelFactory
-
-from ers.domain.user import User
 from erspec.models.core import (
     CanonicalEntityIdentifier,
     ClusterReference,
@@ -13,6 +10,9 @@ from erspec.models.core import (
     UserAction,
     UserActionType,
 )
+from polyfactory.factories.pydantic_factory import ModelFactory
+
+from ers.users.domain.users import User
 
 
 class EntityMentionIdentifierFactory(ModelFactory):
@@ -50,8 +50,9 @@ class ClusterReferenceFactory(ModelFactory):
 class EntityMentionFactory(ModelFactory):
     __model__ = EntityMention
 
+    # TODO: rename field to identified_by in erspec
     @classmethod
-    def identifiedBy(cls) -> EntityMentionIdentifier:
+    def identifiedBy(cls) -> EntityMentionIdentifier:  # noqa: N802
         return EntityMentionIdentifierFactory.build()
 
     @classmethod
