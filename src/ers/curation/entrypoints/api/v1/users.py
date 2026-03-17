@@ -2,11 +2,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from ers.commons.domain.dtos import PaginatedResult
+from ers.commons.domain.data_transfer_objects import PaginatedResult
 from ers.curation.entrypoints.api.auth import AdminUser, CurrentUser
 from ers.curation.entrypoints.api.dependencies import get_user_management_service
 from ers.curation.entrypoints.api.v1.schemas import Pagination
-from ers.users.domain.dtos import (
+from ers.users.domain.data_transfer_objects import (
     CreateUserRequest,
     UserContext,
     UserPatchRequest,

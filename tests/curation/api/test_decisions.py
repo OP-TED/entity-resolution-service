@@ -3,9 +3,9 @@ from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
 
-from ers.commons.domain.dtos import PaginatedResult
+from ers.commons.domain.data_transfer_objects import PaginatedResult
 from ers.commons.services.exceptions import NotFoundError
-from ers.curation.domain.dtos import (
+from ers.curation.domain.data_transfer_objects import (
     BulkActionResponse,
     BulkItemResult,
     BulkItemStatus,

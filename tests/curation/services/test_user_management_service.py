@@ -2,11 +2,11 @@ from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 
-from ers.commons.domain.dtos import PaginatedResult, PaginationParams
+from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import ApplicationError, NotFoundError
 from ers.users.adapters.ports import UserRepository
 from ers.users.adapters.ports.password_hasher import PasswordHasher
-from ers.users.domain.dtos import CreateUserRequest, UserPatchRequest
+from ers.users.domain.data_transfer_objects import CreateUserRequest, UserPatchRequest
 from ers.users.services import UserManagementService
 from tests.factories import UserFactory
 

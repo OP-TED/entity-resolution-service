@@ -2,8 +2,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from ers.commons.domain.dtos import PaginatedResult
-from ers.curation.domain.dtos import (
+from ers.commons.domain.data_transfer_objects import PaginatedResult
+from ers.curation.domain.data_transfer_objects import (
     AssignRequest,
     BulkActionRequest,
     BulkActionResponse,

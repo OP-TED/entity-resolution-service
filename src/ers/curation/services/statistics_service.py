@@ -1,7 +1,7 @@
 import asyncio
 
 from ers.curation.adapters.ports.statistics_repository import StatisticsRepository
-from ers.curation.domain.dtos import Statistics, StatisticsFilters
+from ers.curation.domain.data_transfer_objects import Statistics, StatisticsFilters
 
 
 class StatisticsService:

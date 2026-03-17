@@ -4,7 +4,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ers.curation.entrypoints.api.dependencies import get_auth_service
-from ers.users.domain.dtos import UserContext
+from ers.users.domain.data_transfer_objects import UserContext
 from ers.users.domain.exceptions import AuthorizationError
 from ers.users.services import AuthService
 

@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import EmailStr, Field
 
-from ers.commons.domain.dtos import FrozenDTO
+from ers.commons.domain.data_transfer_objects import FrozenDTO
 
 
 class RegisterRequest(FrozenDTO):

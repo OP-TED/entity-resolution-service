@@ -10,7 +10,7 @@ from erspec.models.core import (
 )
 from pydantic import Field, Json
 
-from ers.commons.domain.dtos import FrozenDTO
+from ers.commons.domain.data_transfer_objects import FrozenDTO
 
 T = TypeVar("T")
 BULK_ACTION_MAX_SIZE = 200

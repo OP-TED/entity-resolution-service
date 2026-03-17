@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from ers.curation.entrypoints.api.dependencies import get_auth_service
-from ers.users.domain.dtos import (
+from ers.users.domain.data_transfer_objects import (
     LoginRequest,
     RefreshRequest,
     RegisterRequest,

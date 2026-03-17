@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from ers.curation.domain.dtos import (
+from ers.curation.domain.data_transfer_objects import (
     CurationStatistics,
     RegistryStatistics,
     StatisticsFilters,

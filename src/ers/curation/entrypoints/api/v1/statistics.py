@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from ers.curation.domain.dtos import Statistics
+from ers.curation.domain.data_transfer_objects import Statistics
 from ers.curation.entrypoints.api.auth import VerifiedUser
 from ers.curation.entrypoints.api.dependencies import get_statistics_service
 from ers.curation.entrypoints.api.v1.schemas import StatisticsFiltersDep

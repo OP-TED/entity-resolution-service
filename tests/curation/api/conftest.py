@@ -26,7 +26,7 @@ from ers.curation.services import (
     StatisticsService,
     UserActionService,
 )
-from ers.users.domain.dtos import UserContext
+from ers.users.domain.data_transfer_objects import UserContext
 from ers.users.services import AuthService, UserManagementService
 
 TEST_USER_CONTEXT = UserContext(

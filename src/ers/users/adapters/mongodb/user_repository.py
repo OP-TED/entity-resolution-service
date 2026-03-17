@@ -1,5 +1,5 @@
 from ers.commons.adapters.mongodb.base import BaseMongoRepository
-from ers.commons.domain.dtos import PaginatedResult, PaginationParams
+from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.users.adapters.ports import UserRepository
 from ers.users.domain.models import User
 

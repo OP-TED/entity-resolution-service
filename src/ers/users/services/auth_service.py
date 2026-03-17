@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from ers.users.adapters.ports.password_hasher import PasswordHasher
 from ers.users.adapters.ports.token_service import TokenService
 from ers.users.adapters.ports.user_repository import UserRepository
-from ers.users.domain.dtos import (
+from ers.users.domain.data_transfer_objects import (
     LoginRequest,
     RefreshRequest,
     RegisterRequest,

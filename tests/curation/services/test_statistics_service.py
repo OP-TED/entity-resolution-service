@@ -4,7 +4,7 @@ import pytest
 from erspec.models.core import EntityType
 
 from ers.curation.adapters.ports import StatisticsRepository
-from ers.curation.domain.dtos import (
+from ers.curation.domain.data_transfer_objects import (
     CurationStatistics,
     RegistryStatistics,
     Statistics,

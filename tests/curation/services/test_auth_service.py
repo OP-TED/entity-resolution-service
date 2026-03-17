@@ -4,7 +4,7 @@ import pytest
 
 from ers.users.adapters.ports import TokenService, UserRepository
 from ers.users.adapters.ports.password_hasher import PasswordHasher
-from ers.users.domain.dtos import (
+from ers.users.domain.data_transfer_objects import (
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
