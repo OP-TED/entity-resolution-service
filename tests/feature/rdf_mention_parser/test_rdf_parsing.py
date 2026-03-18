@@ -2,22 +2,24 @@
 Step definitions for: rdf_parsing.feature
 
 Feature: Parse RDF Entity Mention into JSON Representation
-  Covers five behaviours:
-    1. Extract configured fields from valid RDF (Turtle / RDF-XML, full / partial).
-    2. Ignore RDF triples not declared in the configuration.
-    3. Handle multi-hop property paths where intermediate nodes exist but leaf is absent.
-    4. Content size boundary enforcement (at limit passes, over limit fails).
-    5. Reject invalid input with 5 distinct error types.
-
-  These steps call the MentionParserService.
-  RDF content is loaded from test fixtures, not inline.
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
+
+from ers.rdf_mention_parser.adapter.rdf_parser_adapter import RDFParserAdapter
+from ers.rdf_mention_parser.adapter.rdf_mapping_config_reader import RDFConfigReader
+from ers.rdf_mention_parser.domain.exceptions import (
+    ContentTooLargeError,
+    EmptyExtractionError,
+    EntityTypeMismatchError,
+    MalformedRDFError,
+    UnsupportedContentTypeError,
+    UnsupportedEntityTypeError,
+)
+from ers.rdf_mention_parser.services.mention_parser_service import MAX_CONTENT_LENGTH, MentionParserService
 
 # ---------------------------------------------------------------------------
 # Scenario bindings
@@ -57,13 +59,159 @@ def test_reject_invalid_input():
 
 
 # ---------------------------------------------------------------------------
-# Shared context
+# Shared context + config
 # ---------------------------------------------------------------------------
+
+_NAMESPACES = {
+    "org": "http://www.w3.org/ns/org#",
+    "epo": "http://data.europa.eu/a4g/ontology#",
+    "cccev": "http://data.europa.eu/m8g/",
+    "locn": "http://www.w3.org/ns/locn#",
+}
+
+_ORG_FIELDS_6 = {
+    "legal_name": "epo:hasLegalName",
+    "country_code": "cccev:registeredAddress/epo:hasCountryCode",
+    "nuts_code": "cccev:registeredAddress/epo:hasNutsCode",
+    "post_code": "cccev:registeredAddress/locn:postCode",
+    "post_name": "cccev:registeredAddress/locn:postName",
+    "thoroughfare": "cccev:registeredAddress/locn:thoroughfare",
+}
+
+_TURTLE_PREFIXES = """\
+@prefix org: <http://www.w3.org/ns/org#> .
+@prefix epo: <http://data.europa.eu/a4g/ontology#> .
+@prefix cccev: <http://data.europa.eu/m8g/> .
+@prefix locn: <http://www.w3.org/ns/locn#> .
+@prefix ex: <http://example.org/> .
+"""
+
+# Canonical 6-field Organisation Turtle
+_ORG_6_FIELDS_TTL = (
+    _TURTLE_PREFIXES
+    + """
+ex:org1 a org:Organization ;
+    epo:hasLegalName "Test Organisation" ;
+    cccev:registeredAddress ex:addr1 .
+ex:addr1 a locn:Address ;
+    epo:hasCountryCode <http://publications.europa.eu/resource/authority/country/DEU> ;
+    epo:hasNutsCode <http://data.europa.eu/nuts/code/DE1> ;
+    locn:postCode "10115" ;
+    locn:postName "Berlin" ;
+    locn:thoroughfare "Unter den Linden 1" .
+"""
+)
+
+# 2-field: legal_name + country_code only
+_ORG_2_FIELDS_TTL = (
+    _TURTLE_PREFIXES
+    + """
+ex:org1 a org:Organization ;
+    epo:hasLegalName "Partial Org" ;
+    cccev:registeredAddress ex:addr1 .
+ex:addr1 a locn:Address ;
+    epo:hasCountryCode <http://publications.europa.eu/resource/authority/country/DEU> .
+"""
+)
+
+# 1-field: legal_name only
+_ORG_1_FIELD_TTL = (
+    _TURTLE_PREFIXES
+    + """
+ex:org1 a org:Organization ;
+    epo:hasLegalName "Minimal Org" .
+"""
+)
+
+# 6 configured fields + 3 extra triples not in the configuration
+_ORG_WITH_EXTRAS_TTL = (
+    _TURTLE_PREFIXES
+    + """
+ex:org1 a org:Organization ;
+    epo:hasLegalName "Extra Org" ;
+    epo:hasPrimaryContactPoint ex:cp1 ;
+    epo:hasRegistrationCountry <http://publications.europa.eu/resource/authority/country/DEU> ;
+    cccev:registeredAddress ex:addr1 .
+ex:addr1 a locn:Address ;
+    epo:hasCountryCode <http://publications.europa.eu/resource/authority/country/DEU> ;
+    epo:hasNutsCode <http://data.europa.eu/nuts/code/DE1> ;
+    locn:postCode "10115" ;
+    locn:postName "Berlin" ;
+    locn:thoroughfare "Unter den Linden 1" ;
+    locn:adminUnitL1 "DE" .
+"""
+)
+
+# Address node present but locn:postCode absent
+_ORG_ADDRESS_NO_POSTCODE_TTL = (
+    _TURTLE_PREFIXES
+    + """
+ex:org1 a org:Organization ;
+    epo:hasLegalName "No Postcode Org" ;
+    cccev:registeredAddress ex:addr1 .
+ex:addr1 a locn:Address ;
+    epo:hasCountryCode <http://publications.europa.eu/resource/authority/country/DEU> ;
+    locn:postName "Berlin" ;
+    locn:thoroughfare "Unter den Linden 1" .
+"""
+)
+
+# Person entity — wrong type for org config
+_PERSON_TTL = (
+    _TURTLE_PREFIXES
+    + """
+ex:person1 a <http://xmlns.com/foaf/0.1/Person> ;
+    <http://xmlns.com/foaf/0.1/name> "John Doe" .
+"""
+)
+
+# Organisation with no configured fields (uses unknown properties only)
+_ORG_NO_CONFIGURED_FIELDS_TTL = (
+    _TURTLE_PREFIXES
+    + """
+ex:org1 a org:Organization ;
+    <http://example.org/someUnknownProp> "value" .
+"""
+)
+
+# RDF/XML equivalent of _ORG_6_FIELDS_TTL (minus the address, for simplicity)
+_ORG_6_FIELDS_RDFXML = """\
+<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:org="http://www.w3.org/ns/org#"
+         xmlns:epo="http://data.europa.eu/a4g/ontology#"
+         xmlns:cccev="http://data.europa.eu/m8g/"
+         xmlns:locn="http://www.w3.org/ns/locn#">
+  <org:Organization rdf:about="http://example.org/org1">
+    <epo:hasLegalName>Test Organisation</epo:hasLegalName>
+    <cccev:registeredAddress>
+      <locn:Address rdf:about="http://example.org/addr1">
+        <epo:hasCountryCode rdf:resource="http://publications.europa.eu/resource/authority/country/DEU"/>
+        <epo:hasNutsCode rdf:resource="http://data.europa.eu/nuts/code/DE1"/>
+        <locn:postCode>10115</locn:postCode>
+        <locn:postName>Berlin</locn:postName>
+        <locn:thoroughfare>Unter den Linden 1</locn:thoroughfare>
+      </locn:Address>
+    </cccev:registeredAddress>
+  </org:Organization>
+</rdf:RDF>
+"""
+
+
+def _build_padded_turtle(target_bytes: int) -> str:
+    """Build a valid Turtle string whose UTF-8 encoding is exactly target_bytes."""
+    base = _ORG_1_FIELD_TTL
+    base_len = len(base.encode("utf-8"))
+    # A Turtle comment: # followed by padding chars and a newline
+    comment_overhead = 3  # "# " (2) + "\n" (1)
+    pad_chars = target_bytes - base_len - comment_overhead
+    if pad_chars < 0:
+        raise ValueError("Target size is smaller than the base content")
+    return f"# {'x' * pad_chars}\n" + base
 
 
 @pytest.fixture
 def ctx():
-    """Shared mutable context for passing state between step functions."""
     return {}
 
 
@@ -73,26 +221,27 @@ def ctx():
 
 
 @given("the parser is configured for ORGANISATION with 6 field mappings")
-def parser_configured(ctx):
-    """
-    Set up the MentionParserService with a ParserConfig for ORGANISATION.
-
-    TODO: Build real ParserConfig + RDFParserAdapter.
-          ctx["service"] = MentionParserService(config, adapter)
-    """
-    ctx["service"] = None  # TODO: build real service
-    ctx["config"] = None  # TODO: build real ParserConfig
+def parser_configured(ctx, sample_rdf_mapping):
+    config = RDFConfigReader.from_string(sample_rdf_mapping)
+    adapter = RDFParserAdapter()
+    ctx["service"] = MentionParserService(config, adapter)
+    ctx["config"] = config
 
 
 @given('the entity type URI is "http://www.w3.org/ns/org#Organization"')
 def default_entity_type_uri(ctx):
-    """Set the default entity type URI for happy-path scenarios."""
     ctx["entity_type_uri"] = "http://www.w3.org/ns/org#Organization"
 
 
 # ---------------------------------------------------------------------------
 # Given — valid RDF content
 # ---------------------------------------------------------------------------
+
+_CONTENT_BY_COUNT = {
+    6: {"text/turtle": _ORG_6_FIELDS_TTL, "application/rdf+xml": _ORG_6_FIELDS_RDFXML},
+    2: {"text/turtle": _ORG_2_FIELDS_TTL},
+    1: {"text/turtle": _ORG_1_FIELD_TTL},
+}
 
 
 @given(
@@ -102,17 +251,9 @@ def default_entity_type_uri(ctx):
     )
 )
 def rdf_payload_with_n_fields(ctx, content_type, present_count):
-    """
-    Load a test fixture RDF payload with the specified number of fields.
-
-    TODO: Load from tests/fixtures/ based on content_type and present_count:
-      - 6 fields: organisation_full.ttl / organisation_full.rdf
-      - 2 fields: organisation_partial_2.ttl
-      - 1 field:  organisation_partial_1.ttl
-    """
     ctx["content_type"] = content_type
     ctx["present_count"] = present_count
-    ctx["content"] = None  # TODO: load from fixture
+    ctx["content"] = _CONTENT_BY_COUNT[present_count][content_type]
 
 
 @given(
@@ -120,13 +261,8 @@ def rdf_payload_with_n_fields(ctx, content_type, present_count):
     "fields and 3 additional properties not in the configuration"
 )
 def rdf_payload_with_extra_triples(ctx):
-    """
-    Load a fixture with 6 configured fields + 3 extra RDF properties.
-
-    TODO: Load from tests/fixtures/organisation_with_extras.ttl
-    """
     ctx["content_type"] = "text/turtle"
-    ctx["content"] = None  # TODO: load from fixture
+    ctx["content"] = _ORG_WITH_EXTRAS_TTL
 
 
 @given(
@@ -134,13 +270,8 @@ def rdf_payload_with_extra_triples(ctx):
     "node but the post code property is absent"
 )
 def rdf_payload_multi_hop_partial(ctx):
-    """
-    Load a fixture with address node present but locn:postCode absent.
-
-    TODO: Load from tests/fixtures/organisation_address_no_postcode.ttl
-    """
     ctx["content_type"] = "text/turtle"
-    ctx["content"] = None  # TODO: load from fixture
+    ctx["content"] = _ORG_ADDRESS_NO_POSTCODE_TTL
 
 
 # ---------------------------------------------------------------------------
@@ -150,18 +281,11 @@ def rdf_payload_multi_hop_partial(ctx):
 
 @given(parsers.parse('an RDF Turtle payload whose byte size is "{size_description}"'))
 def rdf_payload_at_size_boundary(ctx, size_description):
-    """
-    Generate an RDF payload at the specified size boundary.
-
-    TODO:
-      if size_description == "exactly 1 MB":
-          content = build_valid_turtle_padded_to(1_048_576)
-      elif size_description == "1 byte over 1 MB":
-          content = build_valid_turtle_padded_to(1_048_577)
-    """
-    ctx["size_description"] = size_description
     ctx["content_type"] = "text/turtle"
-    ctx["content"] = None  # TODO: generate padded content
+    if size_description == "exactly 1 MB":
+        ctx["content"] = _build_padded_turtle(MAX_CONTENT_LENGTH)
+    elif size_description == "1 byte over 1 MB":
+        ctx["content"] = _build_padded_turtle(MAX_CONTENT_LENGTH + 1)
 
 
 # ---------------------------------------------------------------------------
@@ -171,19 +295,19 @@ def rdf_payload_at_size_boundary(ctx, size_description):
 
 @given(parsers.parse('"{invalid_input}"'))
 def invalid_rdf_input(ctx, invalid_input):
-    """
-    Prepare invalid input based on the description from the Examples table.
+    ctx["content_type"] = "text/turtle"  # default
 
-    TODO: Build or load the appropriate invalid content per description:
-      - "content type application/json" → set content_type
-      - "malformed syntax" → load broken fixture
-      - "Person, not an Organisation" → load Person fixture
-      - "none of the 6 configured fields" → load Organisation with no matching props
-      - "valid Organisation" (with wrong URI) → load valid fixture
-    """
-    ctx["invalid_input"] = invalid_input
-    ctx["content"] = None  # TODO: build per description
-    ctx["content_type"] = "text/turtle"  # default, overridden per case
+    if "application/json" in invalid_input:
+        ctx["content_type"] = "application/json"
+        ctx["content"] = '{"key": "value"}'
+    elif "malformed syntax" in invalid_input:
+        ctx["content"] = "@prefix : <> . :s :p"  # truncated triple
+    elif "Person, not an Organisation" in invalid_input:
+        ctx["content"] = _PERSON_TTL
+    elif "none of the 6 configured fields" in invalid_input:
+        ctx["content"] = _ORG_NO_CONFIGURED_FIELDS_TTL
+    elif "valid RDF Turtle payload describing an Organisation" in invalid_input:
+        ctx["content"] = _ORG_1_FIELD_TTL  # valid org, but entity_type_uri will be wrong
 
 
 # ---------------------------------------------------------------------------
@@ -193,34 +317,30 @@ def invalid_rdf_input(ctx, invalid_input):
 
 @when("the mention is parsed")
 def parse_mention_default_uri(ctx):
-    """
-    Call MentionParserService.parse with the default entity type URI.
-
-    TODO: try:
-              ctx["result"] = service.parse(
-                  content=ctx["content"],
-                  content_type=ctx["content_type"],
-                  entity_type=ctx["entity_type_uri"],
-              )
-              ctx["raised_exception"] = None
-          except (...) as exc:
-              ctx["result"] = None
-              ctx["raised_exception"] = exc
-    """
-    ctx["result"] = None  # TODO: replace with real service call
-    ctx["raised_exception"] = None
+    try:
+        ctx["result"] = ctx["service"].parse(
+            content=ctx["content"],
+            content_type=ctx["content_type"],
+            entity_type=ctx["entity_type_uri"],
+        )
+        ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
 
 
 @when(parsers.parse('the mention is parsed for entity type URI "{entity_type_uri}"'))
 def parse_mention_with_uri(ctx, entity_type_uri):
-    """
-    Call MentionParserService.parse with a specific entity type URI.
-
-    TODO: Same as above but with the provided entity_type_uri.
-    """
-    ctx["entity_type_uri"] = entity_type_uri
-    ctx["result"] = None  # TODO: replace with real service call
-    ctx["raised_exception"] = None
+    try:
+        ctx["result"] = ctx["service"].parse(
+            content=ctx["content"],
+            content_type=ctx["content_type"],
+            entity_type=entity_type_uri,
+        )
+        ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
 
 
 # ---------------------------------------------------------------------------
@@ -230,87 +350,63 @@ def parse_mention_with_uri(ctx, entity_type_uri):
 
 @then(parsers.parse("a JSON representation is returned with {count:d} extracted fields"))
 def json_with_n_fields(ctx, count):
-    """
-    TODO: assert ctx["result"] is not None
-          non_none = {k: v for k, v in ctx["result"].items() if v is not None}
-          assert len(non_none) == count
-    """
-    assert True  # TODO: implement
+    assert ctx["raised_exception"] is None, f"Unexpected error: {ctx['raised_exception']}"
+    assert ctx["result"] is not None
+    non_none = {k: v for k, v in ctx["result"].items() if v is not None}
+    assert len(non_none) == count
 
 
 @then(parsers.parse("the remaining {count:d} configured fields are absent"))
 def remaining_fields_absent(ctx, count):
-    """
-    TODO: absent = {k for k, v in ctx["result"].items() if v is None}
-          assert len(absent) == count
-    """
-    assert True  # TODO: implement
+    absent = {k for k, v in ctx["result"].items() if v is None}
+    assert len(absent) == count
 
 
 @then("no additional fields beyond the configured mappings appear in the result")
 def no_extra_fields_in_result(ctx):
-    """
-    TODO: config_fields = set(ctx["config"].entity_types["ORGANISATION"].fields.keys())
-          assert set(ctx["result"].keys()).issubset(config_fields)
-    """
-    assert True  # TODO: implement
+    config_fields = set(ctx["config"].entity_types["ORGANISATION"].fields.keys())
+    assert set(ctx["result"].keys()).issubset(config_fields)
 
 
 @then("a JSON representation is returned")
 def json_returned(ctx):
-    """
-    TODO: assert ctx["result"] is not None
-          assert isinstance(ctx["result"], dict)
-    """
-    assert True  # TODO: implement
+    assert ctx["raised_exception"] is None, f"Unexpected error: {ctx['raised_exception']}"
+    assert ctx["result"] is not None
+    assert isinstance(ctx["result"], dict)
 
 
 @then("the post_code field is absent from the result")
 def post_code_absent(ctx):
-    """
-    TODO: assert ctx["result"].get("post_code") is None
-    """
-    assert True  # TODO: implement
+    assert ctx["result"].get("post_code") is None
 
 
 @then("the other address fields that are present are correctly extracted")
 def other_address_fields_extracted(ctx):
-    """
-    TODO: Check that fields like post_name, thoroughfare etc. that ARE
-          present in the fixture are non-None in the result.
-    """
-    assert True  # TODO: implement
+    assert ctx["result"].get("country_code") is not None
+    assert ctx["result"].get("post_name") is not None
+    assert ctx["result"].get("thoroughfare") is not None
 
 
 @then(parsers.parse('"{outcome}"'))
 def assert_outcome(ctx, outcome):
-    """
-    Assert outcome from the content size boundary Examples table.
-
-    TODO:
-      if "JSON representation is returned" in outcome:
-          assert ctx["result"] is not None
-          assert ctx["raised_exception"] is None
-      elif "content_too_large error" in outcome:
-          assert ctx["raised_exception"] is not None
-    """
-    assert True  # TODO: implement
+    if "JSON representation is returned" in outcome:
+        assert ctx["raised_exception"] is None, f"Unexpected error: {ctx['raised_exception']}"
+        assert ctx["result"] is not None
+    elif "content_too_large error" in outcome:
+        assert isinstance(ctx["raised_exception"], ContentTooLargeError)
 
 
 @then(parsers.parse('a "{error_type}" error is raised'))
 def specific_error_raised(ctx, error_type):
-    """
-    Assert the correct domain error type was raised.
-
-    TODO:
-      error_map = {
-          "content_too_large": ContentTooLargeError,
-          "unsupported_content_type": UnsupportedContentTypeError,
-          "malformed_rdf": MalformedRDFError,
-          "entity_type_mismatch": EntityTypeMismatchError,
-          "empty_extraction": EmptyExtractionError,
-          "unsupported_entity_type": UnsupportedEntityTypeError,
-      }
-      assert isinstance(ctx["raised_exception"], error_map[error_type])
-    """
-    assert True  # TODO: implement
+    _error_map = {
+        "content_too_large": ContentTooLargeError,
+        "unsupported_content_type": UnsupportedContentTypeError,
+        "malformed_rdf": MalformedRDFError,
+        "entity_type_mismatch": EntityTypeMismatchError,
+        "empty_extraction": EmptyExtractionError,
+        "unsupported_entity_type": UnsupportedEntityTypeError,
+    }
+    assert ctx["raised_exception"] is not None, f"Expected {error_type} but no error was raised"
+    assert isinstance(ctx["raised_exception"], _error_map[error_type]), (
+        f"Expected {_error_map[error_type].__name__}, got {type(ctx['raised_exception']).__name__}: {ctx['raised_exception']}"
+    )
