@@ -283,16 +283,16 @@ _SERVICE_MODULE = "ers.rdf_mention_parser.services.mention_parser_service"
 class TestLoadConfig:
     def test_delegates_to_config_reader(self, config):
         with patch(
-            f"{_SERVICE_MODULE}.RDFConfigReader.from_env_or_default", return_value=config
+            f"{_SERVICE_MODULE}.RDFConfigReader.from_file", return_value=config
         ) as mock_reader:
             result = load_config()
 
-        mock_reader.assert_called_once_with()
+        mock_reader.assert_called_once_with(ers_config.RDF_MENTION_CONFIG_FILE)
         assert result is config
 
     def test_propagates_file_not_found(self):
         with patch(
-            f"{_SERVICE_MODULE}.RDFConfigReader.from_env_or_default",
+            f"{_SERVICE_MODULE}.RDFConfigReader.from_file",
             side_effect=FileNotFoundError("missing"),
         ), pytest.raises(FileNotFoundError):
             load_config()

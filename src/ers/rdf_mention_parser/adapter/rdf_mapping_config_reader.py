@@ -1,22 +1,16 @@
-import os
 from pathlib import Path
 
 import yaml
 
 from ers.rdf_mention_parser.domain.rdf_mapping_config import RDFMappingConfig
 
-_DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "resources" / "rdf_mapping.yaml"
-_ENV_VAR = "ERS_PARSER_CONFIG_PATH"
-
 
 class RDFConfigReader:
     """Loads a ParserConfig from a YAML source.
 
-    Supports three loading strategies (in order of call-site preference):
+    Supports two loading strategies:
     - ``from_string(yaml_text)``  — parse from an in-memory YAML string
     - ``from_file(path)``         — parse from an explicit file path
-    - ``from_env_or_default()``   — resolve path from ``ERS_PARSER_CONFIG_PATH``
-                                    env var, falling back to the bundled default
     """
 
     @staticmethod
@@ -56,16 +50,3 @@ class RDFConfigReader:
             raise FileNotFoundError(f"RDF config file not found: {resolved}")
         return RDFConfigReader.from_string(resolved.read_text(encoding="utf-8"))
 
-    @staticmethod
-    def from_env_or_default() -> RDFMappingConfig:
-        """Load ParserConfig using ``ERS_PARSER_CONFIG_PATH`` env var or bundled default.
-
-        Returns:
-            A validated ParserConfig instance.
-
-        Raises:
-            FileNotFoundError: If the resolved path does not exist.
-            pydantic.ValidationError: If the config content fails validation.
-        """
-        config_path = Path(os.environ.get(_ENV_VAR, _DEFAULT_CONFIG_PATH))
-        return RDFConfigReader.from_file(config_path)

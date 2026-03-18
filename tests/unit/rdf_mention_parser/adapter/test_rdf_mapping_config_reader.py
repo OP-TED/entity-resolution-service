@@ -100,27 +100,20 @@ class TestRDFConfigReaderFromFile:
 
 
 # ---------------------------------------------------------------------------
-# from_env_or_default
+# from_file — path-based loading (covers what was from_env_or_default)
 # ---------------------------------------------------------------------------
 
 
-class TestRDFConfigReaderFromEnvOrDefault:
-    def test_loads_from_env_var_path(
-        self, tmp_path: Path, sample_rdf_mapping: str, monkeypatch: pytest.MonkeyPatch
-    ):
+class TestRDFConfigReaderFromFilePath:
+    def test_loads_from_explicit_path(self, tmp_path: Path, sample_rdf_mapping: str):
         config_file = tmp_path / "custom.yaml"
         config_file.write_text(sample_rdf_mapping, encoding="utf-8")
-        monkeypatch.setenv("ERS_PARSER_CONFIG_PATH", str(config_file))
 
-        config = RDFConfigReader.from_env_or_default()
+        config = RDFConfigReader.from_file(config_file)
 
         assert isinstance(config, RDFMappingConfig)
         assert "ORGANISATION" in config.entity_types
 
-    def test_raises_file_not_found_when_env_points_to_missing_file(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        monkeypatch.setenv("ERS_PARSER_CONFIG_PATH", str(tmp_path / "missing.yaml"))
-
+    def test_raises_file_not_found_for_missing_path(self, tmp_path: Path):
         with pytest.raises(FileNotFoundError):
-            RDFConfigReader.from_env_or_default()
+            RDFConfigReader.from_file(tmp_path / "missing.yaml")

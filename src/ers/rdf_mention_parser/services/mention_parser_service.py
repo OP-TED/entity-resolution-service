@@ -139,16 +139,16 @@ class MentionParserService:
 
 
 def load_config() -> RDFMappingConfig:
-    """Load the RDF mapping config from the environment-configured path or bundled default.
+    """Load the RDF mapping config from the path set in ``RDF_MENTION_CONFIG_FILE``.
 
     Returns:
         A validated RDFMappingConfig instance.
 
     Raises:
-        FileNotFoundError: If the resolved config path does not exist.
+        FileNotFoundError: If the configured path does not exist.
         pydantic.ValidationError: If the config content fails validation.
     """
-    return RDFConfigReader.from_env_or_default()
+    return RDFConfigReader.from_file(config.RDF_MENTION_CONFIG_FILE)
 
 
 def parse_entity_mention(
