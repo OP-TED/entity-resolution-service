@@ -131,6 +131,10 @@ These rules apply to ALL agents in this project.
   (`~/.claude/dist/cli/index.js`). Re-index manually: `npx gitnexus analyze`.
 - Sub-agents cannot spawn other sub-agents. If a workflow needs chaining, the
   main conversation orchestrates: ask agent A, get results, ask agent B.
+- `pytestmark` in `conftest.py` is silently ignored by pytest — conftest is loaded
+  as a plugin, not a test module. Test-type markers (`unit`, `feature`, `e2e`,
+  `integration`) are applied via `pytest_collection_modifyitems` in `tests/conftest.py`.
+  Do not add `pytestmark` to conftest files.
 
 ---
 

@@ -54,9 +54,10 @@ Contains only: `[project]`, `[tool.poetry]`, `[build-system]`, `[dependency-grou
 | `typecheck` | mypy |
 | `check-architecture` | import-linter |
 | `test` | All tests with coverage |
-| `test-unit` | Unit tests only (excludes features/steps + integration) |
-| `test-feature` | BDD feature tests only (features + steps) |
-| `test-integration` | Integration-marked tests only |
+| `test-unit` | Unit tests only (`-m unit`) |
+| `test-feature` | BDD feature tests only (`-m feature`) |
+| `test-e2e` | End-to-end tests only (`-m e2e`) |
+| `test-integration` | Integration-marked tests only (`-m integration`) |
 
 ### Aggregates
 
@@ -92,12 +93,27 @@ Contains only: `[project]`, `[tool.poetry]`, `[build-system]`, `[dependency-grou
 | CI quick | Push / PR update | `ci-quick` |
 | CI full | Merge to develop | `ci-full` |
 
-## Test Splitting
+## Test Organisation
 
-- `test-unit`: `pytest tests/ --ignore=tests/features --ignore=tests/steps -m "not integration"`
-- `test-feature`: `pytest tests/features tests/steps`
+Tests are split into high-level folders by test type:
+
+| Folder | Marker | Description |
+|---|---|---|
+| `tests/unit/` | `unit` | Fast, no I/O — domain/service/adapter layer tests |
+| `tests/feature/` | `feature` | BDD feature tests (pytest-bdd step definitions) |
+| `tests/e2e/` | `e2e` | End-to-end tests against a near-real stack |
+| `tests/integration/` | `integration` | Requires a running FerretDB/MongoDB instance |
+
+Markers are applied automatically by a `pytest_collection_modifyitems` hook in `tests/conftest.py`
+based on the file path — no per-file `pytestmark` decoration needed.
+Note: `pytestmark` defined in `conftest.py` is silently ignored by pytest (conftest is a plugin, not a test module).
+
+Makefile targets use `-m <marker>`:
+- `test-unit`: `pytest tests/ -m "unit"`
+- `test-feature`: `pytest tests/ -m "feature"`
+- `test-e2e`: `pytest tests/ -m "e2e"`
 - `test-integration`: `pytest tests/ -m "integration"`
-- Coverage flags (`--cov`) are not in `pytest.ini` — they are added only by `test` and `coverage-report` targets.
+- Coverage flags (`--cov`) are not in `pytest.ini` — added only by `test` and `coverage-report` targets.
 
 ## Architecture Guardrails
 

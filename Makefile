@@ -121,7 +121,7 @@ pre-commit: ## Run pre-commit hooks on all files
 #-----------------------------------------------------------------------------
 # Validation — non-mutating targets
 #-----------------------------------------------------------------------------
-.PHONY: lint typecheck check-architecture test test-unit test-feature test-integration
+.PHONY: lint typecheck check-architecture test test-unit test-feature test-e2e test-integration
 
 lint: ## Run Ruff linting checks
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running Ruff checks$(END_BUILD_PRINT)"
@@ -143,15 +143,20 @@ test: ## Run all tests (with coverage)
 	@ poetry run pytest $(TEST_PATH) $(COV_FLAGS)
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) All tests passed$(END_BUILD_PRINT)"
 
-test-unit: ## Run unit tests only (exclude features/steps/integration)
+test-unit: ## Run unit tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running unit tests$(END_BUILD_PRINT)"
-	@ poetry run pytest $(TEST_PATH) --ignore=$(TEST_PATH)/features --ignore=$(TEST_PATH)/steps -m "not integration"
+	@ poetry run pytest $(TEST_PATH) -m "unit"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Unit tests passed$(END_BUILD_PRINT)"
 
-test-feature: ## Run BDD feature tests only (features + steps)
+test-feature: ## Run BDD feature tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running feature tests$(END_BUILD_PRINT)"
-	@ poetry run pytest $(TEST_PATH)/features $(TEST_PATH)/steps
+	@ poetry run pytest $(TEST_PATH) -m "feature"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Feature tests passed$(END_BUILD_PRINT)"
+
+test-e2e: ## Run end-to-end tests only
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running e2e tests$(END_BUILD_PRINT)"
+	@ poetry run pytest $(TEST_PATH) -m "e2e"
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) E2e tests passed$(END_BUILD_PRINT)"
 
 test-integration: ## Run integration tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running integration tests$(END_BUILD_PRINT)"
@@ -183,7 +188,7 @@ ci-full: check-all clean-code ## CI full: quality + all tests + clean-code
 coverage-report: ## Generate HTML coverage report in reports/
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Generating coverage report$(END_BUILD_PRINT)"
 	@ mkdir -p reports
-	@ poetry run pytest $(TEST_PATH) $(COV_FLAGS) --cov-report=html:reports/htmlcov -m "not integration"
+	@ poetry run pytest $(TEST_PATH) $(COV_FLAGS) --cov-report=html:reports/htmlcov -m "unit or feature"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Coverage report at reports/htmlcov/index.html$(END_BUILD_PRINT)"
 
 quality-report: ## Generate Radon quality report in reports/
