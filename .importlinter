@@ -1,0 +1,93 @@
+; =============================================================================
+; Import Linter — Architecture Guardrails
+; =============================================================================
+; Spec: .claude/memory/code-anatomy.md
+; Tier model: 0=commons, 1=foundation, 2=orchestration, 3=entrypoints
+; Rule: lower tiers must not import higher tiers. Same-tier must not import peers.
+;
+; Package name mapping (current -> target):
+;   ers.curation -> link_curation_rest_api
+;   ers.users    -> user_store
+; Cross-cutting packages (observability_adapter, configuration_manager) are
+; excluded from enforcement — add contracts when they are created.
+
+[importlinter]
+root_packages =
+    ers
+
+; --- Tier hierarchy: entrypoints > orchestration > foundation > commons ---
+; Pipe (|) = independent siblings at same tier level.
+; Parentheses = optional (skipped if package doesn't exist yet).
+[importlinter:contract:tier-hierarchy]
+name = Tier hierarchy: entrypoints > orchestration > foundation > commons
+type = layers
+layers =
+    (ers.ers_rest_api) | ers.curation
+    (ers.ere_result_integrator) | (ers.resolution_coordinator)
+    (ers.request_registry) | (ers.rdf_mention_parser) | (ers.ere_contract_client) | (ers.resolution_decision_store) | (ers.user_action_store) | ers.users
+    ers.commons
+
+; --- Intra-component layers: domain, adapters, services ---
+; When packages are created, add them here: ers.request_registry,
+; ers.rdf_mention_parser, ers.resolution_decision_store, ers.user_action_store
+[importlinter:contract:layers-domain-adapters-services]
+name = Layers [domain,adapters,services]: svc > adp > dom
+type = layers
+layers =
+    (services)
+    (adapters)
+    (domain)
+containers =
+    ers.users
+    ers.commons
+
+; --- Intra-component layers: adapters, services ---
+; When package is created, add: ers.ere_contract_client
+
+; --- Intra-component layers: adapters, entrypoints, services ---
+; When package is created, add: ers.ere_result_integrator
+
+; --- Intra-component layers: domain, entrypoints, services ---
+; When package is created, add: ers.ers_rest_api
+
+; --- Intra-component layers: all four ---
+[importlinter:contract:layers-all]
+name = Layers [all]: ent > svc > adp > dom
+type = layers
+layers =
+    (entrypoints)
+    (services)
+    (adapters)
+    (domain)
+containers =
+    ers.curation
+
+; --- Commons must not import any business component ---
+[importlinter:contract:commons-isolation]
+name = Commons must not import business components
+type = forbidden
+source_modules =
+    ers.commons
+forbidden_modules =
+    ers.request_registry
+    ers.rdf_mention_parser
+    ers.ere_contract_client
+    ers.resolution_decision_store
+    ers.user_action_store
+    ers.users
+    ers.ere_result_integrator
+    ers.resolution_coordinator
+    ers.ers_rest_api
+    ers.curation
+
+; --- Commons must only contain domain, adapters, services ---
+[importlinter:contract:commons-exhaustive]
+name = Commons layers are exhaustive (no entrypoints allowed)
+type = layers
+layers =
+    services
+    adapters
+    domain
+containers =
+    ers.commons
+exhaustive = true

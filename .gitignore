@@ -106,7 +106,7 @@ ipython_config.py
 #   commonly ignored for libraries.
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
 #poetry.lock
-poetry.toml
+#poetry.toml
 
 # pdm
 #   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
@@ -196,7 +196,7 @@ cython_debug/
 
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
-#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
+#  exclude from AI feature like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
@@ -213,9 +213,14 @@ __marimo__/
 .DS_Store
 /.pycharm_plugin/
 /docs/architecture/
-.claude/
 .pycharm_plugin/
 .idea/
 .vscode/
 .mypy_cache/
 .pyre/
+.gitnexus
+settings.local.json
+AGENTS.md
+data
+.import_linter_cache
+.coverage

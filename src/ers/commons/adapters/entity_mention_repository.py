@@ -33,9 +33,7 @@ class MongoEntityMentionRepository(
         doc.pop("object_description", None)
         return self._model_class.model_validate(doc)
 
-    async def find_by_id(
-        self, entity_id: EntityMentionIdentifier
-    ) -> EntityMention | None:
+    async def find_by_id(self, entity_id: EntityMentionIdentifier) -> EntityMention | None:
         doc = await self._collection.find_one({"_id": entity_id.model_dump()})
         if doc is None:
             return None

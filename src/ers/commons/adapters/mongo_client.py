@@ -25,9 +25,7 @@ class MongoClientManager:
     def get_database(self) -> AsyncDatabase:
         """Return the database instance. Must be called after connect()."""
         if self._client is None:
-            raise RuntimeError(
-                "MongoClientManager is not connected. Call connect() first."
-            )
+            raise RuntimeError("MongoClientManager is not connected. Call connect() first.")
         return self._client[self._database_name]
 
     async def ensure_indexes(self) -> None:

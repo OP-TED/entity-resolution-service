@@ -65,21 +65,21 @@ class MongoDecisionCurationRepository(
 
         placement_range: dict[str, dict[str, float]] = {}
         if filters.confidence_min is not None:
-            placement_range.setdefault("current_placement.confidence_score", {})[
-                "$gte"
-            ] = filters.confidence_min
+            placement_range.setdefault("current_placement.confidence_score", {})["$gte"] = (
+                filters.confidence_min
+            )
         if filters.confidence_max is not None:
-            placement_range.setdefault("current_placement.confidence_score", {})[
-                "$lte"
-            ] = filters.confidence_max
+            placement_range.setdefault("current_placement.confidence_score", {})["$lte"] = (
+                filters.confidence_max
+            )
         if filters.similarity_min is not None:
-            placement_range.setdefault("current_placement.similarity_score", {})[
-                "$gte"
-            ] = filters.similarity_min
+            placement_range.setdefault("current_placement.similarity_score", {})["$gte"] = (
+                filters.similarity_min
+            )
         if filters.similarity_max is not None:
-            placement_range.setdefault("current_placement.similarity_score", {})[
-                "$lte"
-            ] = filters.similarity_max
+            placement_range.setdefault("current_placement.similarity_score", {})["$lte"] = (
+                filters.similarity_max
+            )
         query.update(placement_range)
 
         return query
@@ -124,17 +124,10 @@ class MongoDecisionCurationRepository(
         skip = (pagination.page - 1) * pagination.per_page
 
         count = await self._collection.count_documents(query)
-        cursor = (
-            self._collection.find(query)
-            .sort(sort)
-            .skip(skip)
-            .limit(pagination.per_page)
-        )
+        cursor = self._collection.find(query).sort(sort).skip(skip).limit(pagination.per_page)
         results = [self._from_document(doc) async for doc in cursor]
 
-        total_pages = (
-            (count + pagination.per_page - 1) // pagination.per_page if count > 0 else 0
-        )
+        total_pages = (count + pagination.per_page - 1) // pagination.per_page if count > 0 else 0
 
         return PaginatedResult(
             count=count,

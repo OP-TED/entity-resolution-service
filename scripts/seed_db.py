@@ -28,7 +28,7 @@ from ers.curation.adapters.user_action_repository import (
 )
 
 # only used for seeding/testing
-from tests.factories import (
+from tests.unit.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
     EntityMentionFactory,

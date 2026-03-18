@@ -35,6 +35,13 @@ These rules apply to ALL agents in this project.
   in subject/intention).
 - PRs are triggered upon completing an EPIC. Exceptionally, large Epics may have
   intermediate PRs grouping stories that deliver business value.
+- **PR base targeting:** When opening a PR for a branch that builds on a previous
+  feature branch (not yet merged to `develop`), target the PR at the previous
+  feature branch — not at `develop`. This keeps each PR's diff scoped to its own
+  changes only. Use `gh pr edit <number> --base <previous-branch>` to fix after
+  creation if needed. When the earlier PR merges, GitHub automatically re-targets
+  the dependent PR to `develop`. Always use **merge commits** (not squash/rebase)
+  to preserve the shared history that makes this work.
 
 ### Working Methodology
 
@@ -45,11 +52,11 @@ These rules apply to ALL agents in this project.
   it's cheaper and faster.
 - When code fails: **fix the spec, not the code** (Rule of Divergence from
   stream-coding methodology).
-- Follow the Cosmic Python layered architecture: `entrypoints -> services -> models`,
-  `adapters -> models`. Models must not import from higher layers.
+- Follow the Cosmic Python layered architecture: `entrypoints -> services -> domain`,
+  `adapters -> domain`. Domain must not import from higher layers.
+  **Note:** The innermost layer is called `domain` (not `models`) in this project.
 
 ### Code Documentation & Docstrings
-
 - All docstrings must follow **Google Python style** (see `.claude/references/google_python_docstring_style.md`).
 - Key rules: one-line summary first, then optional description, then `Args`, `Returns`, `Raises` sections.
 - Write for behaviour, not implementation; focus on inputs, outputs, and exceptions.
@@ -137,6 +144,10 @@ These rules apply to ALL agents in this project.
   (`~/.claude/dist/cli/index.js`). Re-index manually: `npx gitnexus analyze`.
 - Sub-agents cannot spawn other sub-agents. If a workflow needs chaining, the
   main conversation orchestrates: ask agent A, get results, ask agent B.
+- `pytestmark` in `conftest.py` is silently ignored by pytest — conftest is loaded
+  as a plugin, not a test module. Test-type markers (`unit`, `feature`, `e2e`,
+  `integration`) are applied via `pytest_collection_modifyitems` in `tests/conftest.py`.
+  Do not add `pytestmark` to conftest files.
 
 ---
 
@@ -160,7 +171,7 @@ make clean-docs       # Remove build artifacts
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **entity-resolution-docs** (77 symbols, 71 relationships, 0 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **entity-resolution-service** (1443 symbols, 2524 relationships, 42 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -176,7 +187,7 @@ This project is indexed by GitNexus as **entity-resolution-docs** (77 symbols, 7
 
 1. `gitnexus_query({query: "<error or symptom>"})` — find execution flows related to the issue
 2. `gitnexus_context({name: "<suspect function>"})` — see all callers, callees, and process participation
-3. `READ gitnexus://repo/entity-resolution-docs/process/{processName}` — trace the full execution flow step by step
+3. `READ gitnexus://repo/entity-resolution-service/process/{processName}` — trace the full execution flow step by step
 4. For regressions: `gitnexus_detect_changes({scope: "compare", base_ref: "main"})` — see what your branch changed
 
 ## When Refactoring
@@ -215,10 +226,10 @@ This project is indexed by GitNexus as **entity-resolution-docs** (77 symbols, 7
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/entity-resolution-docs/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/entity-resolution-docs/clusters` | All functional areas |
-| `gitnexus://repo/entity-resolution-docs/processes` | All execution flows |
-| `gitnexus://repo/entity-resolution-docs/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/entity-resolution-service/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/entity-resolution-service/clusters` | All functional areas |
+| `gitnexus://repo/entity-resolution-service/processes` | All execution flows |
+| `gitnexus://repo/entity-resolution-service/process/{name}` | Step-by-step execution trace |
 
 ## Self-Check Before Finishing
 
