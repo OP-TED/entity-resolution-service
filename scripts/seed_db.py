@@ -12,21 +12,23 @@ import argparse
 import asyncio
 import random
 from datetime import datetime, timedelta, timezone
-
-from pymongo import AsyncMongoClient
+from typing import Any
 
 from erspec.models.core import UserActionType
+from pymongo import AsyncMongoClient
 
-from ers.adapters.mongodb import (
-    MongoCollections,
-    MongoDecisionRepository,
-    MongoEntityMentionRepository,
-    MongoUserActionRepository,
-)
+from ers.commons.adapters import MongoCollections
 from ers.config import get_settings
+from ers.curation.adapters.decision_repository import MongoDecisionCurationRepository
+from ers.curation.adapters.entity_mention_repository import (
+    MongoEntityMentionCurationRepository,
+)
+from ers.curation.adapters.user_action_repository import (
+    MongoUserActionCurationRepository,
+)
 
 # only used for seeding/testing
-from tests.factories import (
+from tests.unit.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
     EntityMentionFactory,
@@ -47,16 +49,7 @@ def _random_past(max_days: int = 90) -> datetime:
     )
 
 
-async def seed(
-    num_mentions: int = 100,
-    num_clusters: int = 30,
-    num_requests: int = 8,
-) -> None:
-    settings = get_settings()
-    client = AsyncMongoClient(settings.mongo_uri)
-    db = client[settings.mongo_database_name]
-    collections = MongoCollections(db)
-
+async def _drop_seed_collections(db: Any) -> None:
     for name in (
         MongoCollections.DECISIONS,
         MongoCollections.ENTITY_MENTIONS,
@@ -64,13 +57,14 @@ async def seed(
     ):
         await db[name].drop()
 
-    mention_repo = MongoEntityMentionRepository(collections.entity_mentions)
-    decision_repo = MongoDecisionRepository(collections.decisions)
-    action_repo = MongoUserActionRepository(collections.user_actions)
 
-    # generate entity mentions across requests
+async def _create_mentions(
+    mention_repo: MongoEntityMentionCurationRepository,
+    num_mentions: int,
+    num_requests: int,
+) -> list[Any]:
     request_ids = [f"req-{i:04d}" for i in range(1, num_requests + 1)]
-    mentions = []
+    mentions: list[Any] = []
     for i in range(num_mentions):
         entity_type = random.choice(ENTITY_TYPES)
         identifier = EntityMentionIdentifierFactory.build(
@@ -81,78 +75,131 @@ async def seed(
         mention = EntityMentionFactory.build(identifiedBy=identifier)
         mentions.append(mention)
         await mention_repo.save(mention)
+    return mentions
 
-    # group mentions into clusters and build cluster references
+
+def _build_cluster_references(
+    mentions: list[Any],
+    num_clusters: int,
+) -> tuple[list[str], dict[str, list[Any]]]:
     shuffled = list(mentions)
     random.shuffle(shuffled)
-    cluster_ids: list[str] = [f"cluster-{i:04d}" for i in range(num_clusters)]
-    cluster_refs_by_mention: dict[str, list] = {}
+    cluster_ids = [f"cluster-{i:04d}" for i in range(num_clusters)]
+    cluster_refs_by_mention: dict[str, list[Any]] = {}
     chunk_size = max(1, len(shuffled) // num_clusters)
+
     for i, cluster_id in enumerate(cluster_ids):
         start = i * chunk_size
         end = start + chunk_size if i < num_clusters - 1 else len(shuffled)
         group = shuffled[start:end]
         if not group:
             break
-        for m in group:
-            key = m.identifiedBy.source_id
+        for mention in group:
+            key = mention.identifiedBy.source_id
             cluster_refs_by_mention.setdefault(key, []).append(
                 ClusterReferenceFactory.build(cluster_id=cluster_id)
             )
 
-    # Create one decision per mention, referencing real clusters
-    decisions = []
-    for mention in mentions:
-        key = mention.identifiedBy.source_id
-        candidates = cluster_refs_by_mention.get(key, [])
-        # Add a few random alternative clusters as candidates
-        extra = random.randint(0, 3)
-        for _ in range(extra):
-            random_cluster_id = random.choice(cluster_ids)
-            candidates.append(
-                ClusterReferenceFactory.build(cluster_id=random_cluster_id)
-            )
-        if not candidates:
-            candidates = [ClusterReferenceFactory.build()]
+    return cluster_ids, cluster_refs_by_mention
 
-        current = candidates[0]
+
+def _build_candidates(
+    mention: Any,
+    cluster_refs_by_mention: dict[str, list[Any]],
+    cluster_ids: list[str],
+) -> list[Any]:
+    key = mention.identifiedBy.source_id
+    candidates = list(cluster_refs_by_mention.get(key, []))
+    for _ in range(random.randint(0, 3)):
+        candidates.append(
+            ClusterReferenceFactory.build(cluster_id=random.choice(cluster_ids))
+        )
+    return candidates or [ClusterReferenceFactory.build()]
+
+
+async def _create_decisions(
+    mentions: list[Any],
+    cluster_refs_by_mention: dict[str, list[Any]],
+    cluster_ids: list[str],
+    decision_repo: MongoDecisionCurationRepository,
+) -> list[Any]:
+    decisions: list[Any] = []
+    for mention in mentions:
+        candidates = _build_candidates(mention, cluster_refs_by_mention, cluster_ids)
         created_at = _random_past()
         decision = DecisionFactory.build(
             about_entity_mention=mention.identifiedBy,
-            current_placement=current,
+            current_placement=candidates[0],
             candidates=candidates,
             created_at=created_at,
         )
         decisions.append(decision)
         await decision_repo.save(decision)
+    return decisions
 
-    # Create user actions for a subset of decisions (simulating curation)
+
+def _selected_cluster_for_action(
+    decision: Any, action_type: UserActionType
+) -> Any | None:
+    if action_type == UserActionType.ACCEPT_TOP:
+        return decision.current_placement
+    if (
+        action_type == UserActionType.ACCEPT_ALTERNATIVE
+        and len(decision.candidates) > 1
+    ):
+        return random.choice(decision.candidates[1:])
+    return None
+
+
+async def _create_user_actions(
+    decisions: list[Any],
+    action_repo: MongoUserActionCurationRepository,
+) -> int:
     curated_decisions = random.sample(
         decisions, k=min(len(decisions) // 3, len(decisions))
     )
     action_count = 0
     for decision in curated_decisions:
         action_type = random.choice(ACTION_TYPES)
-        selected = None
-        if action_type == UserActionType.ACCEPT_TOP:
-            selected = decision.current_placement
-        elif (
-            action_type == UserActionType.ACCEPT_ALTERNATIVE
-            and len(decision.candidates) > 1
-        ):
-            selected = random.choice(decision.candidates[1:])
-        # REJECT_ALL leaves selected as None
-
         action = UserActionFactory.build(
             about_entity_mention=decision.about_entity_mention,
             candidates=decision.candidates,
-            selected_cluster=selected,
+            selected_cluster=_selected_cluster_for_action(decision, action_type),
             action_type=action_type,
             actor=random.choice(CURATORS),
             created_at=decision.created_at + timedelta(minutes=random.randint(1, 120)),
         )
         await action_repo.save(action)
         action_count += 1
+    return action_count
+
+
+async def seed(
+    num_mentions: int = 100,
+    num_clusters: int = 30,
+    num_requests: int = 8,
+) -> None:
+    settings = get_settings()
+    client = AsyncMongoClient(settings.mongo_uri)
+    db = client[settings.mongo_database_name]
+    collections = MongoCollections(db)
+    await _drop_seed_collections(db)
+
+    mention_repo = MongoEntityMentionCurationRepository(collections.entity_mentions)
+    decision_repo = MongoDecisionCurationRepository(collections.decisions)
+    action_repo = MongoUserActionCurationRepository(collections.user_actions)
+
+    mentions = await _create_mentions(mention_repo, num_mentions, num_requests)
+    cluster_ids, cluster_refs_by_mention = _build_cluster_references(
+        mentions, num_clusters
+    )
+    decisions = await _create_decisions(
+        mentions,
+        cluster_refs_by_mention,
+        cluster_ids,
+        decision_repo,
+    )
+    action_count = await _create_user_actions(decisions, action_repo)
 
     print(f"Seeded database '{settings.mongo_database_name}':")
     print(
