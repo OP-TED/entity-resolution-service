@@ -35,6 +35,13 @@ These rules apply to ALL agents in this project.
   in subject/intention).
 - PRs are triggered upon completing an EPIC. Exceptionally, large Epics may have
   intermediate PRs grouping stories that deliver business value.
+- **PR base targeting:** When opening a PR for a branch that builds on a previous
+  feature branch (not yet merged to `develop`), target the PR at the previous
+  feature branch — not at `develop`. This keeps each PR's diff scoped to its own
+  changes only. Use `gh pr edit <number> --base <previous-branch>` to fix after
+  creation if needed. When the earlier PR merges, GitHub automatically re-targets
+  the dependent PR to `develop`. Always use **merge commits** (not squash/rebase)
+  to preserve the shared history that makes this work.
 
 ### Working Methodology
 

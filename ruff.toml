@@ -9,7 +9,8 @@ select = ["E", # pycodestyle errors
     "UP", # pyupgrade
     "SIM", # simplify
     "C90", # mccabe complexity
-    "N"   # naming conventions
+    "N",      # naming conventions
+    "RUF100", # unused noqa directives
 ]
 ignore = [
     "E501", # line length handled by formatter / pragmatic exceptions
