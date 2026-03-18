@@ -1,8 +1,8 @@
 import logging
-import os
 from string import Template
 from typing import Any
 
+from ers import config
 from ers.rdf_mention_parser.adapter.rdf_mapping_config_reader import RDFConfigReader
 from ers.rdf_mention_parser.adapter.rdf_parser_adapter import RDFParserAdapter
 from ers.rdf_mention_parser.domain.exceptions import (
@@ -12,8 +12,6 @@ from ers.rdf_mention_parser.domain.exceptions import (
     MultipleEntitiesFoundError,
 )
 from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
-
-MAX_CONTENT_LENGTH: int = int(os.environ.get("ERS_PARSER_MAX_CONTENT_LENGTH", 1_048_576))
 
 logger = logging.getLogger(__name__)
 
@@ -90,14 +88,15 @@ class MentionParserService:
             EmptyExtractionError: All configured fields resolve to None.
         """
         content_bytes = content.encode("utf-8")
-        if len(content_bytes) > MAX_CONTENT_LENGTH:
+        max_bytes = config.ERS_PARSER_MAX_CONTENT_LENGTH
+        if len(content_bytes) > max_bytes:
             logger.warning(
                 "Content too large: entity_type=%s content_type=%s size=%d",
                 entity_type,
                 content_type,
                 len(content_bytes),
             )
-            raise ContentTooLargeError(MAX_CONTENT_LENGTH)
+            raise ContentTooLargeError(max_bytes)
 
         # Raises UnsupportedEntityTypeError if entity_type has no config entry.
         entity_config = self._config.resolve_entity_type(entity_type)
@@ -115,7 +114,9 @@ class MentionParserService:
         rows = self._adapter.execute_sparql(graph, query)
 
         if len(rows) > 1:
-            logger.warning("Multiple entities found: entity_type=%s count=%d", entity_type, len(rows))
+            logger.warning(
+                "Multiple entities found: entity_type=%s count=%d", entity_type, len(rows)
+            )
             raise MultipleEntitiesFoundError(entity_type, len(rows))
 
         if not rows or all(v is None for v in rows[0].values()):

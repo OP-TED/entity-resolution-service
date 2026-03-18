@@ -1,8 +1,6 @@
-import logging.config
 from pathlib import Path
 
 import pytest
-import yaml
 
 # Path constants — single source of truth for test directory structure
 TEST_DATA_DIR = Path(__file__).parent / "test_data"
@@ -133,6 +131,7 @@ def proc_group2_file2() -> str:
 # ============================================================================
 # rdf_mapping YAML file
 # ============================================================================
+
 
 @pytest.fixture(scope="session")
 def sample_rdf_mapping() -> str:

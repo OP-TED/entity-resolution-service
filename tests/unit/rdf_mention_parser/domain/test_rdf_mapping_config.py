@@ -31,7 +31,9 @@ ORGANISATION_FIELDS = {
 
 
 def minimal_config(extra_types: dict | None = None) -> dict:
-    entity_types = {"ORGANISATION": {"rdf_type": "org:Organization", "fields": dict(ORGANISATION_FIELDS)}}
+    entity_types = {
+        "ORGANISATION": {"rdf_type": "org:Organization", "fields": dict(ORGANISATION_FIELDS)}
+    }
     if extra_types:
         entity_types.update(extra_types)
     return {"namespaces": dict(MINIMAL_NAMESPACES), "entity_types": entity_types}
@@ -124,7 +126,11 @@ class TestRDFMappingConfigStructural:
             RDFMappingConfig(**data)
 
     def test_rejects_missing_namespaces(self):
-        data = {"entity_types": {"ORGANISATION": {"rdf_type": "org:Organization", "fields": ORGANISATION_FIELDS}}}
+        data = {
+            "entity_types": {
+                "ORGANISATION": {"rdf_type": "org:Organization", "fields": ORGANISATION_FIELDS}
+            }
+        }
 
         with pytest.raises(ValidationError):
             RDFMappingConfig(**data)

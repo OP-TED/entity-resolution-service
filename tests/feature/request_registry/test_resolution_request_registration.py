@@ -13,14 +13,13 @@ Feature: Resolution Request Registration
 """
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from pytest_bdd import given, parsers, scenario, then, when
-
 from erspec.models.core import EntityMention, EntityMentionIdentifier
+from pytest_bdd import given, parsers, scenario, then, when
 
 # ---------------------------------------------------------------------------
 # Scenario bindings — link each scenario title to its .feature file.
@@ -197,7 +196,7 @@ def entity_mention_already_registered(ctx):
     expected_hash = hashlib.sha256(content.encode()).hexdigest()
     existing_record = MagicMock()
     existing_record.content_hash = expected_hash
-    existing_record.received_at = datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+    existing_record.received_at = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
     existing_record.identifier = ctx["entity_mention"].identifiedBy
     existing_record.entity_mention = ctx["entity_mention"]
     ctx["existing_record"] = existing_record

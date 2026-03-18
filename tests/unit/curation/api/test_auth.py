@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
@@ -27,7 +27,7 @@ class TestRegisterEndpoint:
             is_active=True,
             is_superuser=False,
             is_verified=False,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         response = await client.post(

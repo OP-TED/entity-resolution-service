@@ -27,9 +27,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 # Scenario bindings
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(
-    Path(__file__).parent / "ucb22_bulk_curator_reevaluation.feature"
-)
+FEATURE_FILE = str(Path(__file__).parent / "ucb22_bulk_curator_reevaluation.feature")
 
 
 @scenario(

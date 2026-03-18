@@ -1,4 +1,3 @@
-import rdflib
 from rdflib import RDF, Graph, URIRef
 
 from ers.rdf_mention_parser.domain.exceptions import MalformedRDFError, UnsupportedContentTypeError
@@ -62,7 +61,9 @@ class RDFParserAdapter:
         results = graph.query(query)
         rows = []
         for row in results:
-            row_dict = {str(var): (str(row[var]) if row[var] is not None else None) for var in results.vars}
+            row_dict = {
+                str(var): (str(row[var]) if row[var] is not None else None) for var in results.vars
+            }
             rows.append(row_dict)
         return rows
 

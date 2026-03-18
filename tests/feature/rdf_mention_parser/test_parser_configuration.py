@@ -28,9 +28,7 @@ from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, R
 # ---------------------------------------------------------------------------
 
 FEATURE_FILE = str(
-    Path(__file__).parent.parent
-    / "rdf_mention_parser"
-    / "parser_configuration.feature"
+    Path(__file__).parent.parent / "rdf_mention_parser" / "parser_configuration.feature"
 )
 
 
@@ -94,7 +92,9 @@ _SECOND_ENTITY_TYPE = {
 }
 
 
-def _base_valid_config(namespace_count: int, type_count: int, entity_type: str, field_count: int) -> dict:
+def _base_valid_config(
+    namespace_count: int, type_count: int, entity_type: str, field_count: int
+) -> dict:
     """Build a valid YAML dict to spec: namespace_count ns, type_count entity types,
     entity_type has field_count fields."""
     assert namespace_count == 4, "Only 4-namespace configs are currently supported by this step"
@@ -153,7 +153,9 @@ def yaml_with_undeclared_prefix(ctx, location, prefix):
     elif location == "the rdf_type":
         data["entity_types"]["ORGANISATION"]["rdf_type"] = f"{prefix}:Organization"
     elif location == "the second segment of a multi-hop field path":
-        data["entity_types"]["ORGANISATION"]["fields"]["bad_field"] = f"epo:address/{prefix}:postCode"
+        data["entity_types"]["ORGANISATION"]["fields"]["bad_field"] = (
+            f"epo:address/{prefix}:postCode"
+        )
 
     ctx["yaml_content"] = data
 
@@ -250,14 +252,18 @@ def entity_type_has_fields(ctx, entity_type, field_count):
 
 @then("a configuration validation error is raised")
 def config_validation_error(ctx):
-    assert ctx.get("raised_exception") is not None, "Expected a validation error but none was raised"
+    assert ctx.get("raised_exception") is not None, (
+        "Expected a validation error but none was raised"
+    )
     assert isinstance(ctx["raised_exception"], (ValidationError, TypeError, KeyError))
 
 
 @then(parsers.parse("{resolution_outcome}"))
 def assert_resolution_outcome(ctx, resolution_outcome):
     if "configuration is returned" in resolution_outcome:
-        assert ctx.get("raised_exception") is None, f"Unexpected error: {ctx.get('raised_exception')}"
+        assert ctx.get("raised_exception") is None, (
+            f"Unexpected error: {ctx.get('raised_exception')}"
+        )
         assert ctx.get("result") is not None
         assert isinstance(ctx["result"], EntityTypeConfig)
     elif "unsupported entity type error is raised" in resolution_outcome:

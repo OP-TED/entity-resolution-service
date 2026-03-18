@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from erspec.models.core import (
@@ -31,7 +31,7 @@ class UserActionFactory:
             selected_cluster=decision.current_placement,
             action_type=UserActionType.ACCEPT_TOP,
             actor=actor,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
     @staticmethod
@@ -44,7 +44,7 @@ class UserActionFactory:
             selected_cluster=None,
             action_type=UserActionType.REJECT_ALL,
             actor=actor,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
     @classmethod
@@ -62,5 +62,5 @@ class UserActionFactory:
             selected_cluster=target,
             action_type=UserActionType.ACCEPT_ALTERNATIVE,
             actor=actor,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )

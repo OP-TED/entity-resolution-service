@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from rdflib import Graph
 
+from ers import config as ers_config  # aliased: 'config' fixture name conflicts in this module
 from ers.rdf_mention_parser.domain.exceptions import (
     ContentTooLargeError,
     EmptyExtractionError,
@@ -20,7 +21,6 @@ from ers.rdf_mention_parser.domain.exceptions import (
 )
 from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
 from ers.rdf_mention_parser.services.mention_parser_service import (
-    MAX_CONTENT_LENGTH,
     MentionParserService,
     build_sparql_query,
     load_config,
@@ -54,7 +54,9 @@ _ORG_URI = "http://www.w3.org/ns/org#Organization"
 def config() -> RDFMappingConfig:
     return RDFMappingConfig(
         namespaces=_NAMESPACES,
-        entity_types={"ORGANISATION": {"rdf_type": "org:Organization", "fields": dict(_ORG_FIELDS)}},
+        entity_types={
+            "ORGANISATION": {"rdf_type": "org:Organization", "fields": dict(_ORG_FIELDS)}
+        },
     )
 
 
@@ -114,7 +116,9 @@ class TestBuildSparqlQuery:
         assert "LIMIT" not in query
 
     def test_single_field_config_builds_valid_query(self, config):
-        single_config = EntityTypeConfig(rdf_type="org:Organization", fields={"legal_name": "epo:hasLegalName"})
+        single_config = EntityTypeConfig(
+            rdf_type="org:Organization", fields={"legal_name": "epo:hasLegalName"}
+        )
         query = build_sparql_query(config, single_config)
         assert "?legal_name" in query
         assert query.count("OPTIONAL") == 1
@@ -140,7 +144,14 @@ class TestMentionParserServiceParse:
 
     def test_partial_result_returned_when_some_fields_none(self, service, adapter_mock, config):
         adapter_mock.execute_sparql.return_value = [
-            {"legal_name": "Test Org", "country_code": "DEU", "nuts_code": None, "post_code": None, "post_name": None, "thoroughfare": None}
+            {
+                "legal_name": "Test Org",
+                "country_code": "DEU",
+                "nuts_code": None,
+                "post_code": None,
+                "post_name": None,
+                "thoroughfare": None,
+            }
         ]
         result = service.parse("dummy", "text/turtle", _ORG_URI)
         assert result["legal_name"] == "Test Org"
@@ -154,14 +165,14 @@ class TestMentionParserServiceParse:
 
 class TestContentTooLarge:
     def test_raises_at_one_byte_over_limit(self, service):
-        oversized = "x" * (MAX_CONTENT_LENGTH + 1)
+        oversized = "x" * (ers_config.ERS_PARSER_MAX_CONTENT_LENGTH + 1)
         with pytest.raises(ContentTooLargeError) as exc_info:
             service.parse(oversized, "text/turtle", _ORG_URI)
-        assert exc_info.value.max_bytes == MAX_CONTENT_LENGTH
+        assert exc_info.value.max_bytes == ers_config.ERS_PARSER_MAX_CONTENT_LENGTH
 
     def test_passes_at_exact_limit(self, service, adapter_mock):
-        # Build a string whose UTF-8 encoding is exactly MAX_CONTENT_LENGTH bytes.
-        padding = "x" * MAX_CONTENT_LENGTH
+        # Build a string whose UTF-8 encoding is exactly ers_config.ERS_PARSER_MAX_CONTENT_LENGTH bytes.
+        padding = "x" * ers_config.ERS_PARSER_MAX_CONTENT_LENGTH
         # The adapter mock returns a valid result, so parse succeeds.
         result = service.parse(padding, "text/turtle", _ORG_URI)
         assert isinstance(result, dict)
@@ -211,7 +222,14 @@ class TestMultipleEntitiesFound:
 class TestEmptyExtraction:
     def test_raises_when_all_fields_are_none(self, service, adapter_mock):
         adapter_mock.execute_sparql.return_value = [
-            {"legal_name": None, "country_code": None, "nuts_code": None, "post_code": None, "post_name": None, "thoroughfare": None}
+            {
+                "legal_name": None,
+                "country_code": None,
+                "nuts_code": None,
+                "post_code": None,
+                "post_name": None,
+                "thoroughfare": None,
+            }
         ]
 
         with pytest.raises(EmptyExtractionError) as exc_info:
@@ -264,35 +282,45 @@ _SERVICE_MODULE = "ers.rdf_mention_parser.services.mention_parser_service"
 
 class TestLoadConfig:
     def test_delegates_to_config_reader(self, config):
-        with patch(f"{_SERVICE_MODULE}.RDFConfigReader.from_env_or_default", return_value=config) as mock_reader:
+        with patch(
+            f"{_SERVICE_MODULE}.RDFConfigReader.from_env_or_default", return_value=config
+        ) as mock_reader:
             result = load_config()
 
         mock_reader.assert_called_once_with()
         assert result is config
 
     def test_propagates_file_not_found(self):
-        with patch(f"{_SERVICE_MODULE}.RDFConfigReader.from_env_or_default", side_effect=FileNotFoundError("missing")):
-            with pytest.raises(FileNotFoundError):
-                load_config()
+        with patch(
+            f"{_SERVICE_MODULE}.RDFConfigReader.from_env_or_default",
+            side_effect=FileNotFoundError("missing"),
+        ), pytest.raises(FileNotFoundError):
+            load_config()
 
 
 class TestParseEntityMention:
     def test_delegates_to_service(self, config):
         expected = {"legal_name": "Test Org", "country_code": "DEU"}
-        with patch(f"{_SERVICE_MODULE}.RDFParserAdapter") as mock_adapter_cls, \
-             patch(f"{_SERVICE_MODULE}.MentionParserService") as mock_service_cls:
+        with (
+            patch(f"{_SERVICE_MODULE}.RDFParserAdapter") as mock_adapter_cls,
+            patch(f"{_SERVICE_MODULE}.MentionParserService") as mock_service_cls,
+        ):
             mock_service_cls.return_value.parse.return_value = expected
 
             result = parse_entity_mention("content", "text/turtle", _ORG_URI, config)
 
         mock_adapter_cls.assert_called_once_with()
         mock_service_cls.assert_called_once_with(config, mock_adapter_cls.return_value)
-        mock_service_cls.return_value.parse.assert_called_once_with("content", "text/turtle", _ORG_URI)
+        mock_service_cls.return_value.parse.assert_called_once_with(
+            "content", "text/turtle", _ORG_URI
+        )
         assert result == expected
 
     def test_propagates_domain_errors(self, config):
-        with patch(f"{_SERVICE_MODULE}.RDFParserAdapter"), \
-             patch(f"{_SERVICE_MODULE}.MentionParserService") as mock_service_cls:
+        with (
+            patch(f"{_SERVICE_MODULE}.RDFParserAdapter"),
+            patch(f"{_SERVICE_MODULE}.MentionParserService") as mock_service_cls,
+        ):
             mock_service_cls.return_value.parse.side_effect = EntityTypeMismatchError(_ORG_URI)
 
             with pytest.raises(EntityTypeMismatchError):

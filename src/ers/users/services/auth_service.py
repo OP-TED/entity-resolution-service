@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ers.users.adapters.hasher import PasswordHasher
 from ers.users.adapters.user_repository import UserRepository
@@ -51,7 +51,7 @@ class AuthService:
             id=str(uuid.uuid4()),
             email=dto.email,
             hashed_password=self._hasher.hash(dto.password),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await self._user_repo.save(user)
         return _to_user_response(user)

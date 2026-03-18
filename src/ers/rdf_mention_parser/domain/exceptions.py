@@ -55,6 +55,4 @@ class MultipleEntitiesFoundError(DomainError):
     def __init__(self, entity_type_uri: str, count: int) -> None:
         self.entity_type_uri = entity_type_uri
         self.count = count
-        super().__init__(
-            f"Expected exactly 1 entity of type '{entity_type_uri}', found {count}."
-        )
+        super().__init__(f"Expected exactly 1 entity of type '{entity_type_uri}', found {count}.")

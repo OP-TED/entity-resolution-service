@@ -18,7 +18,7 @@ from erspec.models.core import UserActionType
 from pymongo import AsyncMongoClient
 
 from ers.commons.adapters import MongoCollections
-from ers.config import get_settings
+from ers import config
 from ers.curation.adapters.decision_repository import MongoDecisionCurationRepository
 from ers.curation.adapters.entity_mention_repository import (
     MongoEntityMentionCurationRepository,
@@ -179,9 +179,8 @@ async def seed(
     num_clusters: int = 30,
     num_requests: int = 8,
 ) -> None:
-    settings = get_settings()
-    client = AsyncMongoClient(settings.mongo_uri)
-    db = client[settings.mongo_database_name]
+    client = AsyncMongoClient(config.MONGO_URI)
+    db = client[config.MONGO_DATABASE_NAME]
     collections = MongoCollections(db)
     await _drop_seed_collections(db)
 
@@ -201,7 +200,7 @@ async def seed(
     )
     action_count = await _create_user_actions(decisions, action_repo)
 
-    print(f"Seeded database '{settings.mongo_database_name}':")
+    print(f"Seeded database '{config.MONGO_DATABASE_NAME}':")
     print(
         f"  {num_mentions} entity mentions ({num_requests} requests, {len(ENTITY_TYPES)} entity types)"
     )

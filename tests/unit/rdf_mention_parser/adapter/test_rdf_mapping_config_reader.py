@@ -13,7 +13,6 @@ from pydantic import ValidationError
 from ers.rdf_mention_parser.adapter.rdf_mapping_config_reader import RDFConfigReader
 from ers.rdf_mention_parser.domain.rdf_mapping_config import RDFMappingConfig
 
-
 # ---------------------------------------------------------------------------
 # from_string
 # ---------------------------------------------------------------------------
@@ -106,7 +105,9 @@ class TestRDFConfigReaderFromFile:
 
 
 class TestRDFConfigReaderFromEnvOrDefault:
-    def test_loads_from_env_var_path(self, tmp_path: Path, sample_rdf_mapping: str, monkeypatch: pytest.MonkeyPatch):
+    def test_loads_from_env_var_path(
+        self, tmp_path: Path, sample_rdf_mapping: str, monkeypatch: pytest.MonkeyPatch
+    ):
         config_file = tmp_path / "custom.yaml"
         config_file.write_text(sample_rdf_mapping, encoding="utf-8")
         monkeypatch.setenv("ERS_PARSER_CONFIG_PATH", str(config_file))
@@ -117,7 +118,7 @@ class TestRDFConfigReaderFromEnvOrDefault:
         assert "ORGANISATION" in config.entity_types
 
     def test_raises_file_not_found_when_env_points_to_missing_file(
-            self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ):
         monkeypatch.setenv("ERS_PARSER_CONFIG_PATH", str(tmp_path / "missing.yaml"))
 

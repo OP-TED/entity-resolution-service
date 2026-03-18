@@ -1,6 +1,17 @@
 # Task 5 — Global Config Management
 
-## Status: Planned
+## Status: Complete (2026-03-18)
+
+### Outcome
+All 8 implementation steps delivered. 390 unit+feature tests passing. Key files:
+- `src/ers/commons/adapters/config_resolver.py` — `ConfigResolverABC`, `EnvConfigResolver`, `DefaultConfigResolver`, `env_property`
+- `src/ers/__init__.py` — all domain config classes + `config` singleton, `load_dotenv()` at import
+- `src/ers/config.py` — deleted
+- `ruff.toml` — `[lint.per-file-ignores]` for N802 on `ers/__init__.py`
+- `tests/unit/commons/adapters/test_config_resolver.py` — 11 tests
+- `tests/unit/commons/adapters/test_app_config.py` — 17 tests
+
+---
 
 ---
 

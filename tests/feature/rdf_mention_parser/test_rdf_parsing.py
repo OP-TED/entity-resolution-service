@@ -9,8 +9,9 @@ from pathlib import Path
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
 
-from ers.rdf_mention_parser.adapter.rdf_parser_adapter import RDFParserAdapter
+from ers import config
 from ers.rdf_mention_parser.adapter.rdf_mapping_config_reader import RDFConfigReader
+from ers.rdf_mention_parser.adapter.rdf_parser_adapter import RDFParserAdapter
 from ers.rdf_mention_parser.domain.exceptions import (
     ContentTooLargeError,
     EmptyExtractionError,
@@ -19,7 +20,9 @@ from ers.rdf_mention_parser.domain.exceptions import (
     UnsupportedContentTypeError,
     UnsupportedEntityTypeError,
 )
-from ers.rdf_mention_parser.services.mention_parser_service import MAX_CONTENT_LENGTH, MentionParserService
+from ers.rdf_mention_parser.services.mention_parser_service import MentionParserService
+
+MAX_CONTENT_LENGTH = config.ERS_PARSER_MAX_CONTENT_LENGTH
 
 # ---------------------------------------------------------------------------
 # Scenario bindings

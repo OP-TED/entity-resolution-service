@@ -50,7 +50,9 @@ class RDFMappingConfig(BaseModel):
 
     @field_validator("entity_types")
     @classmethod
-    def entity_types_not_empty(cls, v: dict[str, "EntityTypeConfig"]) -> dict[str, "EntityTypeConfig"]:
+    def entity_types_not_empty(
+        cls, v: dict[str, "EntityTypeConfig"]
+    ) -> dict[str, "EntityTypeConfig"]:
         if not v:
             raise ValueError("entity_types must not be empty")
         return v
