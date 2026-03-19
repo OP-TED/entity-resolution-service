@@ -13,14 +13,25 @@ Feature: Resolution Request Registration
   No real MongoDB connection is required for unit-level BDD scenarios.
 """
 
+import asyncio
 import hashlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import create_autospec
 
 import pytest
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 from pytest_bdd import given, parsers, scenario, then, when
+
+from ers.commons.adapters.hasher import SHA256ContentHasher
+from ers.request_registry.adapters.records_repository import (
+    LookupRequestRepository,
+    LookupStateRepository,
+    ResolutionRequestRepository,
+)
+from ers.request_registry.domain.records import ResolutionRequestRecord
+from ers.request_registry.services.exceptions import IdempotencyConflictError
+from ers.request_registry.services.request_registry_service import RequestRegistryService
 
 # ---------------------------------------------------------------------------
 # Scenario bindings — link each scenario title to its .feature file.
@@ -77,23 +88,28 @@ def ctx():
 @given("the Request Registry service is available")
 def request_registry_service_available(ctx):
     """
-    Instantiate the RequestRegistryService with a mocked repository.
+    Instantiate the RequestRegistryService with mocked repositories and a real hasher.
 
-    The mock repository starts with no stored records so every scenario
-    begins from a clean state.
-
-    TODO: Replace MagicMock with create_autospec(RequestRegistryRepository)
-          once the abstract repository class exists.
+    ResolutionRequestRepository and LookupStateRepository are created with
+    create_autospec to catch wrong method signatures.  SHA256ContentHasher is
+    used as-is (pure function — no I/O).
     """
-    # TODO: import RequestRegistryRepository, RequestRegistryService
-    # from ers.request_registry.adapters.repository import RequestRegistryRepository
-    # from ers.request_registry.services.request_registry_service import RequestRegistryService
-    repository = MagicMock()
-    repository.find_by_triad = AsyncMock(return_value=None)
-    repository.store_resolution_request = AsyncMock()
-    ctx["repository"] = repository
-    # ctx["service"] = RequestRegistryService(repository=repository)
-    ctx["service"] = None  # TODO: replace with real service instantiation
+    resolution_repo = create_autospec(ResolutionRequestRepository, instance=True)
+    lookup_repo = create_autospec(LookupStateRepository, instance=True)
+    lookup_request_repo = create_autospec(LookupRequestRepository, instance=True)
+    hasher = SHA256ContentHasher()
+
+    service = RequestRegistryService(
+        resolution_repo=resolution_repo,
+        lookup_repo=lookup_repo,
+        lookup_request_repo=lookup_request_repo,
+        hasher=hasher,
+    )
+
+    ctx["resolution_repo"] = resolution_repo
+    ctx["lookup_repo"] = lookup_repo
+    ctx["hasher"] = hasher
+    ctx["service"] = service
 
 
 @given("the repository is empty")
@@ -101,12 +117,9 @@ def repository_is_empty(ctx):
     """
     Ensure the mocked repository reports no existing records.
 
-    find_by_triad returns None and exists_by_triad returns False for any
-    input, simulating a clean collection.
+    find_by_triad returns None for any input, simulating a clean collection.
     """
-    repository = ctx["repository"]
-    repository.find_by_triad = AsyncMock(return_value=None)
-    # TODO: repository.exists_by_triad = AsyncMock(return_value=False)
+    ctx["resolution_repo"].find_by_triad.return_value = None
 
 
 # ---------------------------------------------------------------------------
@@ -125,8 +138,6 @@ def an_entity_mention(ctx, source_id, request_id, entity_type, content):
     Build an EntityMention value object from the scenario parameters.
 
     Uses erspec.models.core.EntityMention and EntityMentionIdentifier.
-    The content may be an empty string (valid per the EPIC spec — SHA-256
-    of the empty string is a well-defined value).
     """
     identifier = EntityMentionIdentifier(
         source_id=source_id,
@@ -171,7 +182,7 @@ def an_entity_mention_with_empty_content(ctx, source_id, request_id, entity_type
     Build an EntityMention with empty string content.
 
     Used by the rejection scenario — the service must reject empty content
-    with a validation error.
+    with a ValueError.
     """
     an_entity_mention(ctx, source_id, request_id, entity_type, "")
 
@@ -181,27 +192,21 @@ def entity_mention_already_registered(ctx):
     """
     Pre-seed the mocked repository with an existing record for the triad.
 
-    Constructs a mock ResolutionRequestRecord whose content_hash matches the
+    Constructs a real ResolutionRequestRecord whose content_hash matches the
     content stored in ctx, and configures find_by_triad to return it.
-
-    TODO (Task 1): Once ResolutionRequestRecord model is defined in
-    ers.request_registry.models.records, replace the mock with real instantiation:
-        existing_record = ResolutionRequestRecord(
-            identifier=ctx["entity_mention"].identifiedBy,
-            entity_mention=ctx["entity_mention"],
-            received_at=datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc),
-            content_hash=expected_hash,
-        )
     """
     content = ctx.get("content", "")
-    expected_hash = hashlib.sha256(content.encode()).hexdigest()
-    existing_record = MagicMock()
-    existing_record.content_hash = expected_hash
-    existing_record.received_at = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
-    existing_record.identifier = ctx["entity_mention"].identifiedBy
-    existing_record.entity_mention = ctx["entity_mention"]
+    hasher = ctx["hasher"]
+    expected_hash = hasher.hash(content)
+
+    existing_record = ResolutionRequestRecord(
+        identifier=ctx["entity_mention"].identifiedBy,
+        entity_mention=ctx["entity_mention"],
+        content_hash=expected_hash,
+        received_at=datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC),
+    )
     ctx["existing_record"] = existing_record
-    ctx["repository"].find_by_triad = AsyncMock(return_value=existing_record)
+    ctx["resolution_repo"].find_by_triad.return_value = existing_record
 
 
 # ---------------------------------------------------------------------------
@@ -215,32 +220,20 @@ def register_resolution_request(ctx):
     Call RequestRegistryService.register_resolution_request with the entity
     mention built in the Given step.
 
-    Captures the returned record or any raised exception in ctx so the
-    Then steps can inspect both paths without re-running the action.
+    Configures store to return the record it receives (identity side-effect)
+    when the path is a new registration.  Captures the returned record or any
+    raised exception in ctx so the Then steps can inspect both paths.
+    """
+    ctx["resolution_repo"].store.side_effect = lambda r: r
 
-    TODO: Replace the stub with a real async call:
-        import asyncio
+    try:
         ctx["result"] = asyncio.run(
             ctx["service"].register_resolution_request(ctx["entity_mention"])
         )
-    """
-    # TODO: Replace the stub with a real async call:
-    #     import asyncio
-    #     try:
-    #         ctx["result"] = asyncio.run(
-    #             ctx["service"].register_resolution_request(ctx["entity_mention"])
-    #         )
-    #         ctx["raised_exception"] = None
-    #     except Exception as exc:
-    #         ctx["result"] = None
-    #         ctx["raised_exception"] = exc
-    content = ctx.get("content", "")
-    if content == "":
-        ctx["result"] = None
-        ctx["raised_exception"] = Exception("ValidationError: content must not be empty")  # placeholder
-    else:
-        ctx["result"] = None  # TODO: replace with real service call
         ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
 
 
 @when("the same entity mention is submitted again with identical content")
@@ -251,11 +244,17 @@ def resubmit_identical_entity_mention(ctx):
 
     The mocked repository already has find_by_triad returning the existing
     record set up by the 'that entity mention has already been registered' step.
-
-    TODO: Replace with real async service call.
     """
-    ctx["result"] = ctx.get("existing_record")  # TODO: replace with real call
-    ctx["raised_exception"] = None
+    ctx["resolution_repo"].store.side_effect = lambda r: r
+
+    try:
+        ctx["result"] = asyncio.run(
+            ctx["service"].register_resolution_request(ctx["entity_mention"])
+        )
+        ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
 
 
 @when(parsers.parse("the same triad is resubmitted with different content '{new_content}'"))
@@ -264,22 +263,24 @@ def resubmit_with_different_content(ctx, new_content):
     Re-submit the same triad but with different content, triggering the
     IdempotencyConflictError path.
 
-    The existing record in the repository has a different content_hash than
-    SHA-256(new_content), so the service must detect the conflict and raise.
-
-    TODO: Build a new EntityMention with the same triad but new_content, then
-    call the service and capture the raised IdempotencyConflictError:
-        import asyncio
-        from ers.request_registry.services.exceptions import IdempotencyConflictError
-        try:
-            ctx["service"].register_resolution_request(conflicting_mention)
-        except IdempotencyConflictError as exc:
-            ctx["raised_exception"] = exc
+    Builds a new EntityMention with identical triad but new_content, then
+    calls the service and captures the raised IdempotencyConflictError.
     """
+    conflicting_mention = EntityMention(
+        identifiedBy=ctx["entity_mention"].identifiedBy,
+        content=new_content,
+        content_type="application/ld+json",
+    )
     ctx["new_content"] = new_content
-    ctx["result"] = None
-    # TODO: ctx["raised_exception"] = IdempotencyConflictError(...)
-    ctx["raised_exception"] = Exception("IdempotencyConflictError")  # placeholder
+
+    try:
+        ctx["result"] = asyncio.run(
+            ctx["service"].register_resolution_request(conflicting_mention)
+        )
+        ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
 
 
 # ---------------------------------------------------------------------------
@@ -289,14 +290,13 @@ def resubmit_with_different_content(ctx, new_content):
 
 @then("a resolution request record is returned")
 def a_resolution_request_record_is_returned(ctx):
-    """
-    Assert that the service returned a ResolutionRequestRecord (not None,
-    not an exception).
-
-    TODO: assert isinstance(ctx["result"], ResolutionRequestRecord)
-    """
-    assert ctx["raised_exception"] is None
-    assert True  # TODO: assert isinstance(ctx["result"], ResolutionRequestRecord)
+    """Assert that the service returned a ResolutionRequestRecord (not None, not an exception)."""
+    assert ctx["raised_exception"] is None, (
+        f"Expected a record but got exception: {ctx['raised_exception']}"
+    )
+    assert isinstance(ctx["result"], ResolutionRequestRecord), (
+        f"Expected ResolutionRequestRecord, got {type(ctx['result'])}"
+    )
 
 
 @then(
@@ -306,128 +306,82 @@ def a_resolution_request_record_is_returned(ctx):
     )
 )
 def record_contains_correct_triad(ctx, source_id, request_id, entity_type):
-    """
-    Assert that the returned record's identifier (triad) matches the values
-    passed into the scenario.
-
-    TODO (Task 4): Once RequestRegistryService is implemented, uncomment:
-        record = ctx["result"]
-        assert record.identifier.source_id == source_id
-        assert record.identifier.request_id == request_id
-        assert record.identifier.entity_type == entity_type
-    """
-    assert True  # TODO: implement
+    """Assert that the returned record's identifier matches the scenario values."""
+    record = ctx["result"]
+    assert record.identifier.source_id == source_id
+    assert record.identifier.request_id == request_id
+    assert record.identifier.entity_type == entity_type
 
 
 @then(parsers.parse('the record content_hash is the SHA-256 digest of "{content}"'))
 def record_content_hash_is_sha256(ctx, content):
-    """
-    Assert that content_hash on the record equals hashlib.sha256(content.encode()).hexdigest().
-
-    This is a pure determinism check — same content always produces the same hash.
-    Covers the empty-string case (content == '') where the hash is well-defined.
-
-    TODO: Uncomment once ResolutionRequestRecord is real:
-        expected = hashlib.sha256(content.encode()).hexdigest()
-        assert ctx["result"].content_hash == expected
-    """
+    """Assert that content_hash equals hashlib.sha256(content.encode()).hexdigest()."""
     expected = hashlib.sha256(content.encode()).hexdigest()
-    assert True  # TODO: assert ctx["result"].content_hash == expected
+    assert ctx["result"].content_hash == expected
 
 
 @then("the record received_at timestamp is set to the current UTC time")
 def record_received_at_is_utc(ctx):
     """
-    Assert that received_at is a timezone-aware UTC datetime reasonably close
-    to now (within a few seconds, to avoid flakiness from test execution time).
-
-    TODO: Uncomment once record is real:
-        from datetime import timezone
-        record = ctx["result"]
-        assert record.received_at.tzinfo == timezone.utc
-        delta = datetime.now(timezone.utc) - record.received_at
-        assert delta.total_seconds() < 5
+    Assert that received_at is a timezone-aware UTC datetime within 2 seconds of now.
     """
-    assert True  # TODO: implement
+    record = ctx["result"]
+    assert record.received_at.tzinfo is not None
+    delta = abs(datetime.now(UTC) - record.received_at)
+    assert delta < timedelta(seconds=2), (
+        f"received_at {record.received_at} is more than 2 seconds away from now"
+    )
 
 
 @then("the existing resolution request record is returned")
 def existing_record_is_returned(ctx):
-    """
-    Assert that the record returned by the replay is the same object (or at
-    least identical values) as the one already stored — not a new record.
-
-    TODO: assert ctx["result"] == ctx["existing_record"]
-    """
-    assert True  # TODO: implement
+    """Assert that the record returned by the replay is identical to the pre-existing one."""
+    assert ctx["result"] is ctx["existing_record"], (
+        "Expected the existing record to be returned unchanged, but got a different object"
+    )
 
 
 @then("no duplicate record is created in the repository")
 def no_duplicate_record_created(ctx):
-    """
-    Assert that store_resolution_request was NOT called during the replay.
-    The service must return the existing record without writing to the repository.
-
-    TODO: ctx["repository"].store_resolution_request.assert_not_called()
-    """
-    assert True  # TODO: implement
+    """Assert that store was NOT called during the idempotent replay."""
+    ctx["resolution_repo"].store.assert_not_called()
 
 
 @then("the returned record has the same received_at timestamp as the original")
 def returned_record_has_same_received_at(ctx):
-    """
-    Assert that received_at on the replayed result equals the original record's
-    received_at — confirming the existing record was returned unchanged.
-
-    TODO: assert ctx["result"].received_at == ctx["existing_record"].received_at
-    """
-    assert True  # TODO: implement
+    """Assert that received_at on the replayed result equals the original record's received_at."""
+    assert ctx["result"].received_at == ctx["existing_record"].received_at
 
 
 @then("an IdempotencyConflictError is raised")
 def idempotency_conflict_error_is_raised(ctx):
-    """
-    Assert that the service raised IdempotencyConflictError and did not return
-    a record.
-
-    TODO: from ers.request_registry.services.exceptions import IdempotencyConflictError
-          assert isinstance(ctx["raised_exception"], IdempotencyConflictError)
-          assert ctx["result"] is None
-    """
-    assert ctx["raised_exception"] is not None
-    assert True  # TODO: assert isinstance(ctx["raised_exception"], IdempotencyConflictError)
+    """Assert that the service raised IdempotencyConflictError."""
+    assert ctx["raised_exception"] is not None, "Expected IdempotencyConflictError but no exception was raised"
+    assert isinstance(ctx["raised_exception"], IdempotencyConflictError), (
+        f"Expected IdempotencyConflictError, got {type(ctx['raised_exception'])}"
+    )
+    assert ctx["result"] is None
 
 
 @then("the original resolution request record remains unchanged in the repository")
 def original_record_remains_unchanged(ctx):
-    """
-    Assert that store_resolution_request was not called and the existing record
-    in the repository is the same as before the conflict was attempted.
-
-    TODO: ctx["repository"].store_resolution_request.assert_not_called()
-          # Fetch the record from the repository and compare with ctx["existing_record"]
-    """
-    assert True  # TODO: implement
+    """Assert that store was not called and the existing record is unchanged."""
+    ctx["resolution_repo"].store.assert_not_called()
 
 
 @then("a validation error is raised indicating content must not be empty")
 def validation_error_for_empty_content(ctx):
-    """
-    Assert that the service raised a validation error when content is empty.
-
-    TODO: from ers.request_registry.services.exceptions import ValidationError
-          assert isinstance(ctx["raised_exception"], ValidationError)
-          assert "content" in str(ctx["raised_exception"]).lower()
-    """
-    assert ctx["raised_exception"] is not None
-    assert True  # TODO: assert isinstance(ctx["raised_exception"], ValidationError)
+    """Assert that the service raised a ValueError when content is empty."""
+    assert ctx["raised_exception"] is not None, "Expected a ValueError but no exception was raised"
+    assert isinstance(ctx["raised_exception"], ValueError), (
+        f"Expected ValueError, got {type(ctx['raised_exception'])}"
+    )
+    assert "empty" in str(ctx["raised_exception"]).lower(), (
+        f"Expected 'empty' in error message, got: {ctx['raised_exception']}"
+    )
 
 
 @then("no record is created in the repository")
 def no_record_created(ctx):
-    """
-    Assert that store_resolution_request was NOT called.
-
-    TODO: ctx["repository"].store_resolution_request.assert_not_called()
-    """
-    assert True  # TODO: implement
+    """Assert that store was NOT called when content is empty."""
+    ctx["resolution_repo"].store.assert_not_called()

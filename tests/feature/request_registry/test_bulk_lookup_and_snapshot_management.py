@@ -15,13 +15,27 @@ Feature: Lookup Request Registration and Snapshot State Management
   No real MongoDB connection is required for unit-level BDD scenarios.
 """
 
-from datetime import UTC, datetime
+import asyncio
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, create_autospec
 
 import pytest
-from erspec.models.core import LookupState
 from pytest_bdd import given, parsers, scenario, then, when
+
+from ers.commons.adapters.hasher import SHA256ContentHasher
+from ers.request_registry.adapters.records_repository import (
+    LookupRequestRepository,
+    LookupStateRepository,
+    ResolutionRequestRepository,
+)
+from ers.request_registry.domain.records import (
+    LookupRequestRecord,
+    LookupRequestType,
+    LookupState,
+)
+from ers.request_registry.services.exceptions import SnapshotRegressionError
+from ers.request_registry.services.request_registry_service import RequestRegistryService
 
 # ---------------------------------------------------------------------------
 # Scenario bindings — link each scenario title to its .feature file.
@@ -102,23 +116,30 @@ def ctx():
 @given("the Request Registry service is available")
 def request_registry_service_available(ctx):
     """
-    Instantiate the RequestRegistryService with a mocked repository.
+    Instantiate the RequestRegistryService with mocked repositories and a real hasher.
 
-    The mock repository starts in a clean state (no stored records, no lookup states).
-
-    TODO: Replace MagicMock with create_autospec(RequestRegistryRepository)
-          once the abstract repository class exists.
+    All three repositories are created with create_autospec to catch wrong method
+    signatures.  SHA256ContentHasher is used as-is (pure function — no I/O).
     """
-    # TODO: from ers.request_registry.adapters.repository import RequestRegistryRepository
-    # TODO: from ers.request_registry.services.request_registry_service import RequestRegistryService
-    repository = MagicMock()
-    repository.store_lookup_request = AsyncMock()
-    repository.find_lookup_requests_by_source = AsyncMock(return_value=[])
-    repository.get_lookup_state = AsyncMock(return_value=None)
-    repository.upsert_lookup_state = AsyncMock()
-    ctx["repository"] = repository
-    # ctx["service"] = RequestRegistryService(repository=repository)
-    ctx["service"] = None  # TODO: replace with real service instantiation
+    resolution_repo = create_autospec(ResolutionRequestRepository, instance=True)
+    lookup_repo = create_autospec(LookupStateRepository, instance=True)
+    lookup_request_repo = create_autospec(LookupRequestRepository, instance=True)
+
+    # Default: no existing lookup state
+    lookup_repo.get.return_value = None
+
+    service = RequestRegistryService(
+        resolution_repo=resolution_repo,
+        lookup_repo=lookup_repo,
+        lookup_request_repo=lookup_request_repo,
+        hasher=SHA256ContentHasher(),
+    )
+
+    ctx["resolution_repo"] = resolution_repo
+    ctx["lookup_repo"] = lookup_repo
+    ctx["lookup_request_repo"] = lookup_request_repo
+    ctx["service"] = service
+    ctx["stored_lookup_records"] = []  # accumulates all stored LookupRequestRecords
 
 
 @given("the repository is empty")
@@ -128,9 +149,8 @@ def repository_is_empty(ctx):
 
     All read operations return empty collections or None.
     """
-    repository = ctx["repository"]
-    repository.find_lookup_requests_by_source = AsyncMock(return_value=[])
-    repository.get_lookup_state = AsyncMock(return_value=None)
+    ctx["lookup_request_repo"].find_by_source_id.return_value = []
+    ctx["lookup_repo"].get.return_value = None
 
 
 # ---------------------------------------------------------------------------
@@ -143,8 +163,7 @@ def a_source_system(ctx, source_id):
     """
     Record the source_id under test in the shared context.
 
-    No repository interaction at this stage — merely sets up the identifier
-    that subsequent steps will use when calling the service.
+    No repository interaction at this stage.
     """
     ctx["source_id"] = source_id
 
@@ -154,51 +173,43 @@ def bulk_lookup_already_registered(ctx, source_id):
     """
     Pre-seed the mocked repository with one existing LookupRequestRecord for
     the given source_id, simulating a prior successful bulk registration.
-
-    TODO: Build a real LookupRequestRecord:
-        from ers.request_registry.models.records import LookupRequestRecord, LookupRequestType
-        existing = LookupRequestRecord(
-            source_id=source_id,
-            requested_at=datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc),
-            request_type=LookupRequestType.BULK,
-        )
-        ctx["repository"].find_lookup_requests_by_source.return_value = [existing]
-        ctx["existing_lookup_record"] = existing
     """
-    existing_record = MagicMock()
-    existing_record.source_id = source_id
-    existing_record.requested_at = datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC)
-    # TODO: existing_record.request_type = LookupRequestType.BULK
-    ctx["existing_lookup_record"] = existing_record
-    ctx["repository"].find_lookup_requests_by_source = AsyncMock(return_value=[existing_record])
+    existing = LookupRequestRecord(
+        source_id=source_id,
+        requested_at=datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC),
+        request_type=LookupRequestType.BULK,
+    )
+    ctx["existing_lookup_record"] = existing
+    ctx["stored_lookup_records"].append(existing)
+    ctx["lookup_request_repo"].find_by_source_id.return_value = [existing]
 
 
 @given(parsers.parse('the existing last_snapshot for "{source_id}" is "{existing_last_snapshot}"'))
 def current_lookup_state(ctx, source_id, existing_last_snapshot):
     """
-    Configure the mocked repository's get_lookup_state return value to match
-    the scenario's existing state.
+    Configure the mocked repository's get return value to match the scenario's
+    existing state.
 
     Handles two cases:
-      - "(none)": get_lookup_state returns None (new source, no prior state).
-      - ISO datetime string (e.g., "2024-06-01T12:00:00+00:00"): get_lookup_state
-        returns a LookupState with last_snapshot parsed from the string.
+      - "(none)": get returns None (new source, no prior state).
+      - ISO datetime string: get returns a LookupState with last_snapshot parsed
+        from the string.
     """
     ctx["source_id"] = source_id
     ctx["existing_last_snapshot_str"] = existing_last_snapshot
 
     if existing_last_snapshot == "(none)":
-        ctx["repository"].get_lookup_state = AsyncMock(return_value=None)
+        ctx["lookup_repo"].get.return_value = None
         ctx["existing_lookup_state"] = None
     else:
-        # Parse the ISO timestamp directly
         existing_ts = datetime.fromisoformat(existing_last_snapshot)
         existing_state = LookupState(
             source_id=source_id,
             last_snapshot=existing_ts,
+            updated_at=existing_ts,
         )
         ctx["existing_lookup_state"] = existing_state
-        ctx["repository"].get_lookup_state = AsyncMock(return_value=existing_state)
+        ctx["lookup_repo"].get.return_value = existing_state
 
 
 @given(
@@ -215,20 +226,18 @@ def snapshot_watermark_already_advanced(ctx, source_id, snapshot_time):
     state = LookupState(
         source_id=source_id,
         last_snapshot=ts,
+        updated_at=ts,
     )
     ctx["known_lookup_state"] = state
-    ctx["repository"].get_lookup_state = AsyncMock(return_value=state)
+    ctx["lookup_repo"].get.return_value = state
 
 
 @given(parsers.parse('no lookup state exists for "{source_id}"'))
 def no_lookup_state_exists(ctx, source_id):
     """
-    Confirm that get_lookup_state returns None for source_id.
-
-    Redundant with the Background 'repository is empty' step but explicit
-    for scenarios that focus specifically on the unknown-source read path.
+    Confirm that get returns None for source_id (unknown source).
     """
-    ctx["repository"].get_lookup_state = AsyncMock(return_value=None)
+    ctx["lookup_repo"].get.return_value = None
 
 
 # ---------------------------------------------------------------------------
@@ -241,23 +250,20 @@ def register_bulk_lookup_request(ctx, source_id):
     """
     Call RequestRegistryService.register_lookup_request with BULK type.
 
+    Configures store to return the record it receives (identity side-effect).
     Captures the returned LookupRequestRecord or any raised exception.
+    """
+    ctx["lookup_request_repo"].store.side_effect = lambda r: r
 
-    TODO: Replace with real async call:
-        import asyncio
-        from ers.request_registry.models.records import LookupRequestType
+    try:
         ctx["result"] = asyncio.run(
             ctx["service"].register_lookup_request(source_id, LookupRequestType.BULK)
         )
-    """
-    # Simulate a returned record for the placeholder
-    returned_record = MagicMock()
-    returned_record.source_id = source_id
-    returned_record.requested_at = datetime.now(UTC)
-    # TODO: returned_record.request_type = LookupRequestType.BULK
-    ctx["repository"].store_lookup_request = AsyncMock(return_value=returned_record)
-    ctx["result"] = returned_record  # TODO: replace with real service call
-    ctx["raised_exception"] = None
+        ctx["stored_lookup_records"].append(ctx["result"])
+        ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
 
 
 @when(parsers.parse('a single lookup request is registered for "{source_id}"'))
@@ -266,27 +272,18 @@ def register_single_lookup_request(ctx, source_id):
     Call RequestRegistryService.register_lookup_request with SINGLE type.
 
     Captures the returned LookupRequestRecord or any raised exception.
+    """
+    ctx["lookup_request_repo"].store.side_effect = lambda r: r
 
-    TODO: Replace with real async call:
-        import asyncio
-        from ers.request_registry.domain.records import LookupRequestType
+    try:
         ctx["result"] = asyncio.run(
             ctx["service"].register_lookup_request(source_id, LookupRequestType.SINGLE)
         )
-    """
-    returned_record = MagicMock()
-    returned_record.source_id = source_id
-    returned_record.requested_at = datetime.now(UTC)
-    # TODO: returned_record.request_type = LookupRequestType.SINGLE
-    ctx["repository"].store_lookup_request = AsyncMock(return_value=returned_record)
-    ctx["result"] = returned_record  # TODO: replace with real service call
-    ctx["raised_exception"] = None
-    # If a prior bulk record exists, update find to return both (mixed-types scenario)
-    existing = ctx.get("existing_lookup_record")
-    if existing is not None:
-        ctx["repository"].find_lookup_requests_by_source = AsyncMock(
-            return_value=[existing, returned_record]
-        )
+        ctx["stored_lookup_records"].append(ctx["result"])
+        ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
 
 
 @when(parsers.parse('a second bulk lookup request is registered for "{source_id}"'))
@@ -294,21 +291,20 @@ def register_second_bulk_lookup(ctx, source_id):
     """
     Register a second bulk lookup for a source that already has one record.
 
-    After this call, the repository must contain two LookupRequestRecord entries
-    for the source_id. The earlier record must remain unmodified.
-
-    TODO: Call the service and then verify the repository's append-only behaviour.
+    After this call, stored_lookup_records must contain two entries for the
+    source_id. The earlier record must remain unmodified.
     """
-    second_record = MagicMock()
-    second_record.source_id = source_id
-    second_record.requested_at = datetime.now(UTC)
-    ctx["second_lookup_record"] = second_record
-    # Configure find_lookup_requests_by_source to now return both records
-    ctx["repository"].find_lookup_requests_by_source = AsyncMock(
-        return_value=[ctx.get("existing_lookup_record"), second_record]
-    )
-    ctx["result"] = second_record  # TODO: replace with real service call
-    ctx["raised_exception"] = None
+    ctx["lookup_request_repo"].store.side_effect = lambda r: r
+
+    try:
+        ctx["result"] = asyncio.run(
+            ctx["service"].register_lookup_request(source_id, LookupRequestType.BULK)
+        )
+        ctx["stored_lookup_records"].append(ctx["result"])
+        ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
 
 
 @when(parsers.parse('the snapshot is advanced to "{snapshot_time}"'))
@@ -320,40 +316,20 @@ def advance_snapshot(ctx, snapshot_time):
       - Success: returns updated LookupState with last_snapshot == snapshot_time.
       - SnapshotRegressionError: raised when snapshot_time <= current last_snapshot.
 
-    Captures the result or exception in ctx without letting the exception
-    propagate (so Then steps can assert on it).
-
-    TODO: Replace with real async call:
-        import asyncio
-        from ers.request_registry.services.exceptions import SnapshotRegressionError
-        ts = datetime.fromisoformat(snapshot_time)
-        try:
-            ctx["result"] = asyncio.run(
-                ctx["service"].advance_snapshot(ctx["source_id"], ts)
-            )
-            ctx["raised_exception"] = None
-        except SnapshotRegressionError as exc:
-            ctx["result"] = None
-            ctx["raised_exception"] = exc
+    Captures the result or exception in ctx without letting the exception propagate.
     """
     ts = datetime.fromisoformat(snapshot_time)
     ctx["snapshot_time"] = ts
-    existing_state = ctx.get("existing_lookup_state")
+    ctx["lookup_repo"].upsert.side_effect = lambda s: s
 
-    is_regression = existing_state is not None and ts <= existing_state.last_snapshot
-
-    if is_regression:
-        ctx["result"] = None
-        # TODO: ctx["raised_exception"] = SnapshotRegressionError(...)
-        ctx["raised_exception"] = Exception("SnapshotRegressionError")  # placeholder
-    else:
-        updated_state = LookupState(
-            source_id=ctx["source_id"],
-            last_snapshot=ts,
+    try:
+        ctx["result"] = asyncio.run(
+            ctx["service"].advance_snapshot(ctx["source_id"], ts)
         )
-        ctx["repository"].upsert_lookup_state = AsyncMock(return_value=updated_state)
-        ctx["result"] = updated_state  # TODO: replace with real service call
         ctx["raised_exception"] = None
+    except SnapshotRegressionError as exc:
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
 
 
 @when(parsers.parse('the current lookup state is retrieved for "{source_id}"'))
@@ -362,14 +338,13 @@ def retrieve_lookup_state(ctx, source_id):
     Call RequestRegistryService.get_lookup_state for the given source_id.
 
     Captures the returned LookupState or None in ctx.
-
-    TODO: Replace with real async call:
-        import asyncio
-        ctx["result"] = asyncio.run(ctx["service"].get_lookup_state(source_id))
     """
-    # Return whatever get_lookup_state is configured to return for this source
-    ctx["result"] = ctx.get("known_lookup_state")  # None for unknown source
-    ctx["raised_exception"] = None
+    try:
+        ctx["result"] = asyncio.run(ctx["service"].get_lookup_state(source_id))
+        ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
 
 
 # ---------------------------------------------------------------------------
@@ -382,150 +357,116 @@ def lookup_request_record_returned(ctx, source_id):
     """
     Assert that the service returned a LookupRequestRecord (not None, not an
     exception) for the given source_id.
-
-    TODO: assert isinstance(ctx["result"], LookupRequestRecord)
-          assert ctx["result"].source_id == source_id
     """
-    assert ctx["raised_exception"] is None
-    assert ctx["result"] is not None
-    assert True  # TODO: assert isinstance(ctx["result"], LookupRequestRecord)
+    assert ctx["raised_exception"] is None, (
+        f"Expected a record but got exception: {ctx['raised_exception']}"
+    )
+    assert ctx["result"] is not None, "Expected a LookupRequestRecord but got None"
+    assert isinstance(ctx["result"], LookupRequestRecord), (
+        f"Expected LookupRequestRecord, got {type(ctx['result'])}"
+    )
+    assert ctx["result"].source_id == source_id
 
 
 @then("the lookup request record has request type BULK")
 def lookup_record_has_bulk_type(ctx):
-    """
-    Assert that the returned LookupRequestRecord.request_type is LookupRequestType.BULK.
-
-    TODO: from ers.request_registry.models.records import LookupRequestType
-          assert ctx["result"].request_type == LookupRequestType.BULK
-    """
-    assert True  # TODO: implement
+    """Assert that the returned LookupRequestRecord.request_type is LookupRequestType.BULK."""
+    assert ctx["result"].request_type == LookupRequestType.BULK, (
+        f"Expected BULK, got {ctx['result'].request_type}"
+    )
 
 
 @then("the lookup request record has request type SINGLE")
 def lookup_record_has_single_type(ctx):
-    """
-    Assert that the returned LookupRequestRecord.request_type is LookupRequestType.SINGLE.
-
-    TODO: from ers.request_registry.domain.records import LookupRequestType
-          assert ctx["result"].request_type == LookupRequestType.SINGLE
-    """
-    assert True  # TODO: implement
+    """Assert that the returned LookupRequestRecord.request_type is LookupRequestType.SINGLE."""
+    assert ctx["result"].request_type == LookupRequestType.SINGLE, (
+        f"Expected SINGLE, got {ctx['result'].request_type}"
+    )
 
 
 @then("the lookup request record has a requested_at timestamp set to the current UTC time")
 def lookup_record_requested_at_is_utc_now(ctx):
     """
     Assert that requested_at on the returned record is a timezone-aware UTC
-    datetime that is within a few seconds of now.
-
-    TODO: record = ctx["result"]
-          assert record.requested_at.tzinfo == timezone.utc
-          delta = datetime.now(timezone.utc) - record.requested_at
-          assert delta.total_seconds() < 5
+    datetime that is within 2 seconds of now.
     """
-    assert True  # TODO: implement
+    record = ctx["result"]
+    assert record.requested_at.tzinfo is not None
+    delta = abs(datetime.now(UTC) - record.requested_at)
+    assert delta < timedelta(seconds=2), (
+        f"requested_at {record.requested_at} is more than 2 seconds away from now"
+    )
 
 
 @then(parsers.parse('both lookup request records exist in the repository for "{source_id}"'))
 def both_lookup_records_exist(ctx, source_id):
     """
-    Assert that find_lookup_requests_by_source returns two records for source_id:
+    Assert that two records have been stored for source_id:
     the one created in the Given step and the one created in the When step.
-
-    TODO: records = asyncio.run(
-              ctx["repository"].find_lookup_requests_by_source(source_id)
-          )
-          assert len(records) == 2
-          assert all(r.source_id == source_id for r in records)
     """
-    assert True  # TODO: implement
+    source_records = [r for r in ctx["stored_lookup_records"] if r.source_id == source_id]
+    assert len(source_records) == 2, (
+        f"Expected 2 lookup records for {source_id}, found {len(source_records)}"
+    )
+    assert all(r.source_id == source_id for r in source_records)
 
 
 @then("the earlier record is not modified")
 def earlier_record_not_modified(ctx):
     """
     Assert that the existing_lookup_record captured in the Given step is
-    identical to the corresponding entry in the repository after the second
-    registration — confirming append-only behaviour.
-
-    TODO: Check that existing_lookup_record.requested_at has not changed and
-          that its identity matches the first element returned by
-          find_lookup_requests_by_source.
+    identical to the first record in stored_lookup_records — confirming
+    append-only behaviour (the original record object is unchanged).
     """
-    assert True  # TODO: implement
+    existing = ctx["existing_lookup_record"]
+    # The existing record must still be present and unmodified in stored_lookup_records
+    assert existing in ctx["stored_lookup_records"], (
+        "The earlier lookup record was not found in stored records"
+    )
+    # Verify its fields are unchanged (frozen model ensures immutability)
+    assert existing.request_type == LookupRequestType.BULK
+    assert existing.requested_at == datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC)
 
 
 @then(parsers.parse('the lookup state for "{source_id}" has last_snapshot "{snapshot_time}"'))
 def lookup_state_has_new_last_snapshot(ctx, source_id, snapshot_time):
     """
     Assert that the returned LookupState has last_snapshot equal to snapshot_time.
-
-    Used in the 'Advance the snapshot watermark for a source system' scenario.
-
-    TODO: expected_ts = datetime.fromisoformat(snapshot_time)
-          assert ctx["result"] is not None
-          assert isinstance(ctx["result"], LookupState)
-          assert ctx["result"].last_snapshot == expected_ts
     """
     expected_ts = datetime.fromisoformat(snapshot_time)
-    assert True  # TODO: assert ctx["result"].last_snapshot == expected_ts
+    assert ctx["result"] is not None, "Expected a LookupState but got None"
+    assert isinstance(ctx["result"], LookupState), (
+        f"Expected LookupState, got {type(ctx['result'])}"
+    )
+    assert ctx["result"].last_snapshot == expected_ts, (
+        f"Expected last_snapshot={expected_ts}, got {ctx['result'].last_snapshot}"
+    )
 
 
 @then("a SnapshotRegressionError is raised")
 def snapshot_regression_error_is_raised(ctx):
-    """
-    Assert that a SnapshotRegressionError was raised during the snapshot advance.
-
-    Used in the 'Reject snapshot regression' scenario.
-
-    TODO: from ers.request_registry.services.exceptions import SnapshotRegressionError
-          assert isinstance(ctx["raised_exception"], SnapshotRegressionError)
-    """
+    """Assert that a SnapshotRegressionError was raised during the snapshot advance."""
     assert ctx["raised_exception"] is not None, (
         "Expected SnapshotRegressionError to be raised but it was not."
     )
-    assert True  # TODO: assert isinstance(ctx["raised_exception"], SnapshotRegressionError)
+    assert isinstance(ctx["raised_exception"], SnapshotRegressionError), (
+        f"Expected SnapshotRegressionError, got {type(ctx['raised_exception'])}"
+    )
 
 
 @then(parsers.parse('the last_snapshot for "{source_id}" remains "{existing_last_snapshot}"'))
 def last_snapshot_remains_unchanged(ctx, source_id, existing_last_snapshot):
     """
     Assert that the repository's stored last_snapshot for source_id is unchanged
-    after a failed regression attempt.
-
-    Used in the 'Reject snapshot watermark regression' scenario to verify that
-    no mutation occurred.
-
-    TODO: expected_ts = datetime.fromisoformat(existing_last_snapshot)
-          stored_state = asyncio.run(ctx["repository"].get_lookup_state(source_id))
-          assert stored_state is not None
-          assert stored_state.last_snapshot == expected_ts
+    after a failed regression attempt — confirmed by checking upsert was not called.
     """
     expected_ts = datetime.fromisoformat(existing_last_snapshot)
-    assert True  # TODO: verify repository state is unchanged
-
-
-@then(parsers.parse('the final last_snapshot for "{source_id}" is "{final_snapshot}"'))
-def final_last_snapshot_matches(ctx, source_id, final_snapshot):
-    """
-    Assert that the last_snapshot value on the LookupState (either the returned
-    result or the state still stored in the repository) equals final_snapshot.
-
-    For regression scenarios the result is None, so we verify the repository's
-    stored state is unchanged by calling get_lookup_state and comparing.
-
-    TODO: Implement correctly:
-        expected_ts = datetime.fromisoformat(final_snapshot)
-        if ctx["result"] is not None:
-            assert ctx["result"].last_snapshot == expected_ts
-        else:
-            # Regression: repository state must be unchanged
-            stored = asyncio.run(ctx["repository"].get_lookup_state(source_id))
-            assert stored.last_snapshot == expected_ts
-    """
-    expected_ts = datetime.fromisoformat(final_snapshot)
-    assert True  # TODO: implement comparison
+    # upsert must not have been called — the existing state is unchanged
+    ctx["lookup_repo"].upsert.assert_not_called()
+    # Verify the existing state in ctx still holds the expected timestamp
+    existing_state = ctx.get("existing_lookup_state")
+    assert existing_state is not None
+    assert existing_state.last_snapshot == expected_ts
 
 
 @then(parsers.parse('the lookup state is returned with last_snapshot "{last_snapshot}"'))
@@ -533,21 +474,20 @@ def lookup_state_returned_with_last_snapshot(ctx, last_snapshot):
     """
     Assert that get_lookup_state returned a LookupState whose last_snapshot
     equals the given ISO datetime string.
-
-    TODO: expected_ts = datetime.fromisoformat(last_snapshot)
-          assert ctx["result"] is not None
-          assert ctx["result"].last_snapshot == expected_ts
     """
     expected_ts = datetime.fromisoformat(last_snapshot)
-    assert ctx["result"] is not None
-    assert True  # TODO: assert ctx["result"].last_snapshot == expected_ts
+    assert ctx["result"] is not None, "Expected a LookupState but got None"
+    assert isinstance(ctx["result"], LookupState), (
+        f"Expected LookupState, got {type(ctx['result'])}"
+    )
+    assert ctx["result"].last_snapshot == expected_ts, (
+        f"Expected last_snapshot={expected_ts}, got {ctx['result'].last_snapshot}"
+    )
 
 
 @then("no lookup state is returned")
 def no_lookup_state_returned(ctx):
-    """
-    Assert that get_lookup_state returned None for an unknown source_id.
-
-    TODO: assert ctx["result"] is None
-    """
-    assert ctx["result"] is None
+    """Assert that get_lookup_state returned None for an unknown source_id."""
+    assert ctx["result"] is None, (
+        f"Expected None but got {ctx['result']}"
+    )

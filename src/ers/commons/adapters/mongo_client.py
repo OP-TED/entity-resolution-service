@@ -47,3 +47,13 @@ class MongoClientManager:
             unique=True,
             name="users_email_unique",
         )
+
+        await collections.resolution_requests.create_index(
+            [("identifier.source_id", 1), ("received_at", 1)],
+            name="resolution_requests_source_received_at",
+        )
+
+        await collections.lookup_states.create_index(
+            "source_id",
+            name="lookup_states_source_id",
+        )

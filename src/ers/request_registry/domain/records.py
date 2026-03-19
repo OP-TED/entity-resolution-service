@@ -7,12 +7,49 @@ by the Request Registry service. No I/O, no service logic, no framework deps.
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 from pydantic import Field, field_validator, model_validator
 
 from ers.commons.domain.data_transfer_objects import FrozenDTO
+
+
+class LookupRequestType(StrEnum):
+    """Distinguishes between a single-entity lookup and a bulk source refresh."""
+
+    SINGLE = "SINGLE"
+    BULK = "BULK"
+
+
+class LookupRequestRecord(FrozenDTO):
+    """Append-only audit record capturing that a lookup was requested from a source.
+
+    Never mutated after storage. Multiple records per source_id are allowed
+    (one per lookup request). The collection acts as an append-only log.
+    """
+
+    source_id: str = Field(
+        ...,
+        min_length=1,
+        description="Source system identifier — which source requested the lookup.",
+    )
+    requested_at: datetime = Field(
+        ...,
+        description="UTC timestamp of the lookup request. Must be timezone-aware.",
+    )
+    request_type: LookupRequestType = Field(
+        ...,
+        description="Whether this is a SINGLE-entity lookup or a BULK source refresh.",
+    )
+
+    @field_validator("requested_at", mode="after")
+    @classmethod
+    def _requested_at_must_be_aware(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("requested_at must be timezone-aware")
+        return v
 
 
 class JSONRepresentation(FrozenDTO):

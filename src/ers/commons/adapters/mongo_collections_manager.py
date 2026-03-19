@@ -7,6 +7,8 @@ class MongoCollections:
 
     DECISIONS = "decisions"
     ENTITY_MENTIONS = "entity_mentions"
+    LOOKUP_STATES = "lookup_states"
+    RESOLUTION_REQUESTS = "resolution_requests"
     USER_ACTIONS = "user_actions"
     USERS = "users"
 
@@ -20,6 +22,14 @@ class MongoCollections:
     @property
     def entity_mentions(self) -> AsyncCollection:
         return self._db[self.ENTITY_MENTIONS]
+
+    @property
+    def lookup_states(self) -> AsyncCollection:
+        return self._db[self.LOOKUP_STATES]
+
+    @property
+    def resolution_requests(self) -> AsyncCollection:
+        return self._db[self.RESOLUTION_REQUESTS]
 
     @property
     def user_actions(self) -> AsyncCollection:
