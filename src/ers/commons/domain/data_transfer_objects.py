@@ -13,6 +13,24 @@ class FrozenDTO(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class ERSRequest(FrozenDTO):
+    """Base class for all ERS REST API request DTOs.
+
+    Mirrors the ERERequest / EREResponse pattern from erspec,
+    providing an extraction point if these models are later
+    promoted to the erspec contract.
+    """
+
+
+class ERSResponse(FrozenDTO):
+    """Base class for all ERS REST API response DTOs.
+
+    Mirrors the ERERequest / EREResponse pattern from erspec,
+    providing an extraction point if these models are later
+    promoted to the erspec contract.
+    """
+
+
 class PaginationParams(FrozenDTO):
     """Pagination query parameters."""
 
