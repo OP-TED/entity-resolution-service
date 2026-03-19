@@ -60,7 +60,7 @@ class CurationConfig:
 
 
 class MongoDBConfig:
-    @env_property(default_value="mongodb://localhost:27017")
+    @env_property(default_value="mongodb://username:password@localhost:27017")
     def MONGO_URI(self, config_value: str) -> str:
         return config_value
 
@@ -77,7 +77,6 @@ class RDFMentionParserConfig:
     @env_property(default_value="rdf_mention_config.yaml")
     def RDF_MENTION_CONFIG_FILE(self, config_value: str) -> str:
         return config_value
-
 
 
 class ERSConfigResolver(
