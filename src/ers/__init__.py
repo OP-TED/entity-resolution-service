@@ -79,6 +79,20 @@ class RDFMentionParserConfig:
         return config_value
 
 
+class ERSRestApiConfig:
+    @env_property(default_value="ERS REST API")
+    def ERS_API_NAME(self, config_value: str) -> str:
+        return config_value
+
+    @env_property(default_value="/api/v1")
+    def ERS_API_PREFIX(self, config_value: str) -> str:
+        return config_value
+
+    @env_property(default_value="8001")
+    def ERS_API_PORT(self, config_value: str) -> int:
+        return int(config_value)
+
+
 class ERSConfigResolver(
     AppConfig,
     JWTConfig,
@@ -86,6 +100,7 @@ class ERSConfigResolver(
     CurationConfig,
     MongoDBConfig,
     RDFMentionParserConfig,
+    ERSRestApiConfig,
 ):
     """Aggregates all ERS configuration.
 
