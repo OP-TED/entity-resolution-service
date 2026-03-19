@@ -179,8 +179,8 @@ def store_provisional_singleton(ctx):
     """
     Call DecisionStoreService.store_decision with a provisional singleton.
 
-    TODO: derive_provisional_cluster_id(identifier), build ClusterReference(confidence=1.0,
-          similarity=1.0), call service.store_decision.
+    TODO: derive_provisional_cluster_id(identifier), build ClusterReference(confidence=0.0,
+          similarity=0.0), call service.store_decision.
     """
     ctx["result"] = None  # TODO: replace with real service call
     ctx["raised_exception"] = None
@@ -252,12 +252,12 @@ def retains_n_candidates_ordered(ctx, stored_count):
 
 @then(
     "the current placement is the provisional singleton cluster "
-    "with confidence 1.0 and similarity 1.0"
+    "with confidence 0.0 and similarity 0.0"
 )
 def current_is_provisional(ctx):
     """
-    TODO: assert ctx["result"].current.confidence_score == 1.0
-          assert ctx["result"].current.similarity_score == 1.0
+    TODO: assert ctx["result"].current.confidence_score == 0.0
+          assert ctx["result"].current.similarity_score == 0.0
     """
     assert True  # TODO: implement
 

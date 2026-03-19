@@ -4,12 +4,9 @@ Feature: Accept and Persist ERE Resolution Outcomes
   and persist the latest cluster assignment to the Decision Store,
   So that all downstream consumers always see the authoritative clustering decision.
 
-  Background:
-    Given the Request Registry contains a mention for each correlation triad used in the scenarios below
-    And the Decision Store contains no prior cluster assignment for those triads
-
   Scenario Outline: Accept a valid solicited resolution outcome
     Given the mention with triad ("<source_id>", "<request_id>", "Organization") exists in the Request Registry
+    And the Decision Store contains no prior cluster assignment for that triad
     When the ERE publishes a solicited outcome for that triad with outcome timestamp "<outcome_timestamp>", primary cluster "<cluster_id>", and "<candidate_count>" alternative candidates
     Then the Decision Store is updated with cluster assignment "<cluster_id>" for that triad
     And the outcome marker stored in the Decision Store equals "<outcome_timestamp>"

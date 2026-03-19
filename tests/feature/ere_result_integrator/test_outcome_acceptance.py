@@ -63,29 +63,13 @@ def ctx():
 # ---------------------------------------------------------------------------
 
 
-@given(
-    "the Request Registry contains a mention for each correlation triad used in the scenarios below"
-)
-def request_registry_contains_mentions(ctx):
-    """
-    Set up the Request Registry repository mock to confirm triad existence.
-
-    TODO: Replace with create_autospec(RequestRegistryRepository)
-    """
-    # TODO: import RequestRegistryRepository
-    registry_repo = MagicMock()
-    registry_repo.find_by_triad = AsyncMock(return_value=MagicMock())
-    ctx["registry_repo"] = registry_repo
-
-
-@given("the Decision Store contains no prior cluster assignment for those triads")
+@given("the Decision Store contains no prior cluster assignment for that triad")
 def decision_store_is_empty(ctx):
     """
     Set up the Decision Store repository mock with no existing assignments.
 
     TODO: Replace with create_autospec(DecisionStoreRepository)
     """
-    # TODO: import DecisionStoreRepository
     decision_repo = MagicMock()
     decision_repo.find_by_triad = AsyncMock(return_value=None)
     decision_repo.upsert = AsyncMock()
@@ -106,9 +90,18 @@ def decision_store_is_empty(ctx):
 def mention_exists_in_registry(ctx, source_id, request_id):
     """
     Confirm that a mention with the given triad exists in the Request Registry.
+    Also initialises the Decision Store mock if not already present.
 
     TODO: Build a real CorrelationTriad and configure the registry mock.
     """
+    registry_repo = MagicMock()
+    registry_repo.find_by_triad = AsyncMock(return_value=MagicMock())
+    ctx["registry_repo"] = registry_repo
+    if "decision_repo" not in ctx:
+        decision_repo = MagicMock()
+        decision_repo.find_by_triad = AsyncMock(return_value=None)
+        decision_repo.upsert = AsyncMock()
+        ctx["decision_repo"] = decision_repo
     ctx["source_id"] = source_id
     ctx["request_id"] = request_id
     ctx["entity_type"] = "Organization"
