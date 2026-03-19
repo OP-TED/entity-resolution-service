@@ -2,8 +2,7 @@ from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
 
-from ers.ers_rest_api.domain.data_transfer_objects import ResolveResponse
-from ers.resolution_coordinator.domain.data_transfer_objects import ResolutionOutcome
+from ers.ers_rest_api.domain.data_transfer_objects import ResolutionOutcome, ResolveResponse
 
 VALID_RESOLVE_PAYLOAD = {
     "source_id": "SYSTEM_A",

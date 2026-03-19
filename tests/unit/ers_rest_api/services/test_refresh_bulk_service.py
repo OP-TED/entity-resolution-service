@@ -9,9 +9,8 @@ from erspec.models.core import (
     LookupState,
 )
 
-from ers.ers_rest_api.domain.data_transfer_objects import RefreshBulkRequest
+from ers.ers_rest_api.domain.data_transfer_objects import DeltaPage, RefreshBulkRequest
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
-from ers.resolution_decision_store.domain.data_transfer_objects import DeltaPage
 from ers.resolution_decision_store.services.resolution_decision_store_service import (
     ResolutionDecisionStoreServiceABC,
 )

@@ -8,6 +8,7 @@ from ers.ers_rest_api.domain.data_transfer_objects import (
     LookupResponse,
     RefreshBulkRequest,
     RefreshBulkResponse,
+    ResolutionOutcome,
     ResolveResponse,
 )
 from ers.ers_rest_api.entrypoints.api.dependencies import (
@@ -18,7 +19,6 @@ from ers.ers_rest_api.entrypoints.api.dependencies import (
 from ers.ers_rest_api.services.lookup_service import LookupService
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
 from ers.ers_rest_api.services.resolve_service import ResolveService
-from ers.resolution_coordinator.domain.data_transfer_objects import ResolutionOutcome
 
 router = APIRouter(tags=["Resolution"])
 

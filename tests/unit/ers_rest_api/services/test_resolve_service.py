@@ -2,12 +2,12 @@ from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 
-from ers.ers_rest_api.domain.data_transfer_objects import EntityMentionRequest
-from ers.ers_rest_api.services.resolve_service import ResolveService
-from ers.resolution_coordinator.domain.data_transfer_objects import (
+from ers.ers_rest_api.domain.data_transfer_objects import (
+    EntityMentionRequest,
     ResolutionOutcome,
     ResolutionResult,
 )
+from ers.ers_rest_api.services.resolve_service import ResolveService
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
     ResolutionCoordinatorServiceABC,
 )

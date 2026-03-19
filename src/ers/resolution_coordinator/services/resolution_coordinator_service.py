@@ -4,7 +4,7 @@ from erspec.models.core import EntityMention
 
 from ers.commons.adapters.decision_repository import DecisionRepository
 from ers.commons.adapters.entity_mention_repository import EntityMentionRepository
-from ers.resolution_coordinator.domain.data_transfer_objects import ResolutionResult
+from ers.ers_rest_api.domain.data_transfer_objects import ResolutionResult
 
 
 # Temporary abstractions and DI
