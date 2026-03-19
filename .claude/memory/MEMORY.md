@@ -51,6 +51,12 @@
 
 - [code-anatomy.md](code-anatomy.md) — Tier-based dependency specification for all ERS components
 
+## PR Strategy
+
+- **Stacked PRs**: each feature branch is based on the previous feature branch, not `develop`. PR diff is scoped to its own changes only.
+- Use `/commit-push-pr --base <previous-branch>` to target the correct base directly.
+- Always use **merge commits** — squash/rebase breaks auto-retargeting when the upstream PR merges.
+
 ## Key Decisions
 
 - 2026-03-11: AI-assisted coding setup with 5 agents, stream-coding methodology.
