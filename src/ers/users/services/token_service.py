@@ -62,10 +62,10 @@ class JWTTokenService(TokenService):
     def decode_token(self, token: str) -> dict[str, Any]:
         try:
             return jwt.decode(token, self._secret, algorithms=[self._algorithm])
-        except jwt.ExpiredSignatureError:
-            raise AuthenticationError("Token has expired")
-        except jwt.InvalidTokenError:
-            raise AuthenticationError("Invalid token")
+        except jwt.ExpiredSignatureError as e:
+            raise AuthenticationError("Token has expired") from e
+        except jwt.InvalidTokenError as e:
+            raise AuthenticationError("Invalid token") from e
 
 
 def _minutes(n: int) -> timedelta:

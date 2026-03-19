@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml poetry.lock LICENSE ./
 
 RUN poetry install --no-root --only main
 
@@ -33,13 +33,12 @@ WORKDIR /app
 COPY --from=builder /app/.venv .venv
 COPY --from=builder /app/src src
 
-COPY infra/scripts/entrypoint.sh /entrypoint.sh
-RUN sed -i 's/\r$//g' /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY infra/scripts/ /scripts/
+RUN sed -i 's/\r$//g' /scripts/*.sh && chmod +x /scripts/*.sh
 
 USER appuser
 
-EXPOSE 8000
+EXPOSE 8000 8001
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "ers.curation.entrypoints.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/scripts/entrypoint.sh"]
+CMD ["/scripts/start-curation-api.sh"]

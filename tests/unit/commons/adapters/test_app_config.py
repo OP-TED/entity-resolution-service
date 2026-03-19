@@ -61,7 +61,7 @@ class TestAdminConfig:
 class TestMongoDBConfig:
     def test_mongo_uri_default(self, monkeypatch):
         monkeypatch.delenv("MONGO_URI", raising=False)
-        assert MongoDBConfig().MONGO_URI == "mongodb://localhost:27017"
+        assert MongoDBConfig().MONGO_URI == "mongodb://username:password@localhost:27017"
 
     def test_mongo_database_name_from_env(self, monkeypatch):
         monkeypatch.setenv("MONGO_DATABASE_NAME", "mydb")
