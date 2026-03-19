@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from ers.users.adapters.hasher import PasswordHasher
+from ers.commons.adapters.hasher import ContentHasher
 from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.data_transfer_objects import (
     LoginRequest,
@@ -34,7 +34,7 @@ class AuthService:
     def __init__(
         self,
         user_repository: UserRepository,
-        password_hasher: PasswordHasher,
+        password_hasher: ContentHasher,
         token_service: TokenService,
     ) -> None:
         self._user_repo = user_repository

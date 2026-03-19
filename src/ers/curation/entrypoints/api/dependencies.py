@@ -23,7 +23,7 @@ from ers.curation.services import (
     UserActionService,
 )
 from ers.users.adapters import MongoUserRepository, UserRepository
-from ers.users.adapters.hasher import Argon2PasswordHasher, PasswordHasher
+from ers.commons.adapters.hasher import Argon2PasswordHasher, ContentHasher
 from ers.users.services import AuthService, UserManagementService
 from ers.users.services.token_service import JWTTokenService, TokenService
 
@@ -39,7 +39,7 @@ def _get_collections(request: Request) -> MongoCollections:
 # Infrastructure providers
 
 
-def get_password_hasher() -> PasswordHasher:
+def get_password_hasher() -> ContentHasher:
     return Argon2PasswordHasher()
 
 
@@ -134,7 +134,7 @@ async def get_statistics_service(
 
 async def get_auth_service(
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
-    hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
+    hasher: Annotated[ContentHasher, Depends(get_password_hasher)],
     token_svc: Annotated[TokenService, Depends(get_token_service)],
 ) -> AuthService:
     return AuthService(
@@ -146,6 +146,6 @@ async def get_auth_service(
 
 async def get_user_management_service(
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
-    hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
+    hasher: Annotated[ContentHasher, Depends(get_password_hasher)],
 ) -> UserManagementService:
     return UserManagementService(user_repository=user_repo, password_hasher=hasher)

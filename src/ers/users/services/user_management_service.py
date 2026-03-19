@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import ApplicationError, NotFoundError
-from ers.users.adapters.hasher import PasswordHasher
+from ers.commons.adapters.hasher import ContentHasher
 from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.data_transfer_objects import (
     CreateUserRequest,
@@ -31,7 +31,7 @@ class UserManagementService:
     def __init__(
         self,
         user_repository: UserRepository,
-        password_hasher: PasswordHasher,
+        password_hasher: ContentHasher,
     ) -> None:
         self._user_repo = user_repository
         self._hasher = password_hasher

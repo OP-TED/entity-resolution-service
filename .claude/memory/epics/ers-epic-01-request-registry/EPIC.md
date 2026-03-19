@@ -424,7 +424,7 @@ flowchart TD
 
 ## Roadmap
 
-- [ ] Task 1: Define domain models (`models/`)
+- [x] Task 1: Define domain models (`models/`) — completed 2026-03-19
 - [ ] Task 2: Define repository interface and exceptions (`adapters/`)
 - [ ] Task 3: Implement MongoDB repository (`adapters/`)
 - [ ] Task 4: Implement service layer with idempotency and observability (`services/`)
@@ -529,6 +529,12 @@ These constraints are inherited from the ERS Architecture and must be respected 
 ---
 
 # Part 2 — Implementation Log
+
+### 2026-03-19 — Task 1.1: Domain models and SHA256ContentHasher
+
+- **Outcome:** All 5 domain types (`LookupRequestType`, `JSONRepresentation`, `ResolutionRequestRecord`, `LookupRequestRecord`, `LookupState`) created as frozen Pydantic models under `src/ers/request_registry/domain/records.py`. `SHA256ContentHasher` added to `src/ers/commons/adapters/hasher.py`. 35 new unit tests; full suite 276/276 pass.
+- **Decisions:** Used `StrEnum` for `LookupRequestType` (consistent with `ResolutionOutcome`). All erspec imports use `EntityMention.identifiedBy` (camelCase per erspec contract). No modifications to existing code — purely additive.
+- **Deviations:** None.
 
 ### 2026-03-16 — Gherkin features and step scaffolding
 - **Outcome:** 2 feature files created under `tests/features/request_registry/` (resolution_request_registration.feature, bulk_lookup_and_snapshot_management.feature). Step definitions scaffolded under `tests/steps/request_registry/` with TODO placeholders.
