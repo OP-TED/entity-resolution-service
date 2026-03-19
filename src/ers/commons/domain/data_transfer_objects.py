@@ -1,3 +1,4 @@
+from enum import StrEnum
 from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -45,3 +46,14 @@ class PaginatedResult(FrozenDTO, Generic[T]):
     previous: int | None = None
     next: int | None = None
     results: list[T]
+
+
+class ResolutionOutcome(StrEnum):
+    """Possible outcomes of a single entity mention resolution.
+
+    CANONICAL — the cluster ID was produced by the Entity Resolution Engine.
+    PROVISIONAL — the cluster ID was derived deterministically (singleton).
+    """
+
+    CANONICAL = "CANONICAL"
+    PROVISIONAL = "PROVISIONAL"

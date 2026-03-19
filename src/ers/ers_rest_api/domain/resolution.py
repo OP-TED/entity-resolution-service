@@ -2,20 +2,11 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
-
 from erspec.models.core import EntityMentionIdentifier, EntityType
 from pydantic import Field, model_validator
 
-from ers.commons.domain.data_transfer_objects import ERSRequest, ERSResponse
+from ers.commons.domain.data_transfer_objects import ERSRequest, ERSResponse, ResolutionOutcome
 from ers.ers_rest_api.domain.errors import ErrorCode, ErrorResponse
-
-
-class ResolutionOutcome(StrEnum):
-    """Possible outcomes of a single entity mention resolution."""
-
-    CANONICAL = "CANONICAL"
-    PROVISIONAL = "PROVISIONAL"
 
 
 # ---------------------------------------------------------------------------

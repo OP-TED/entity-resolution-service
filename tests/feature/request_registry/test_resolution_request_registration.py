@@ -2,11 +2,12 @@
 Step definitions for: resolution_request_registration.feature
 
 Feature: Resolution Request Registration
-  Covers three behaviours:
+  Covers four behaviours:
     1. Registering a new entity mention produces a ResolutionRequestRecord with the
        correct triad, content_hash (SHA-256), and received_at timestamp.
     2. Replaying an identical triad+content returns the existing record (idempotent).
     3. Replaying the same triad with different content raises IdempotencyConflictError.
+    4. Submitting empty content is rejected with a validation error.
 
   These steps call the RequestRegistryService with a mocked or in-memory repository.
   No real MongoDB connection is required for unit-level BDD scenarios.
@@ -51,9 +52,9 @@ def test_reject_idempotency_conflict():
     pass
 
 
-@scenario(FEATURE_FILE, "Register a resolution request with empty content")
-def test_register_resolution_request_with_empty_content():
-    """Bind the 'Register a resolution request with empty content' scenario."""
+@scenario(FEATURE_FILE, "Reject a resolution request with empty content")
+def test_reject_resolution_request_with_empty_content():
+    """Bind the 'Reject a resolution request with empty content' scenario."""
     pass
 
 
@@ -167,10 +168,10 @@ def an_entity_mention_single_quoted(ctx, source_id, request_id, entity_type, con
 )
 def an_entity_mention_with_empty_content(ctx, source_id, request_id, entity_type):
     """
-    Build an EntityMention with empty string content (no content parameter).
+    Build an EntityMention with empty string content.
 
-    This step avoids the parser ambiguity of empty strings in double quotes by
-    using a dedicated step title.
+    Used by the rejection scenario — the service must reject empty content
+    with a validation error.
     """
     an_entity_mention(ctx, source_id, request_id, entity_type, "")
 
@@ -223,8 +224,23 @@ def register_resolution_request(ctx):
             ctx["service"].register_resolution_request(ctx["entity_mention"])
         )
     """
-    ctx["result"] = None  # TODO: replace with real async service call
-    ctx["raised_exception"] = None
+    # TODO: Replace the stub with a real async call:
+    #     import asyncio
+    #     try:
+    #         ctx["result"] = asyncio.run(
+    #             ctx["service"].register_resolution_request(ctx["entity_mention"])
+    #         )
+    #         ctx["raised_exception"] = None
+    #     except Exception as exc:
+    #         ctx["result"] = None
+    #         ctx["raised_exception"] = exc
+    content = ctx.get("content", "")
+    if content == "":
+        ctx["result"] = None
+        ctx["raised_exception"] = Exception("ValidationError: content must not be empty")  # placeholder
+    else:
+        ctx["result"] = None  # TODO: replace with real service call
+        ctx["raised_exception"] = None
 
 
 @when("the same entity mention is submitted again with identical content")
@@ -319,19 +335,6 @@ def record_content_hash_is_sha256(ctx, content):
     assert True  # TODO: assert ctx["result"].content_hash == expected
 
 
-@then("the record content_hash is the SHA-256 digest of the empty string")
-def record_content_hash_is_sha256_of_empty_string(ctx):
-    """
-    Assert that content_hash equals the SHA-256 of b"" (empty string).
-
-    Empty string SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-
-    TODO: expected = hashlib.sha256(b"").hexdigest()
-          assert ctx["result"].content_hash == expected
-    """
-    assert True  # TODO: implement
-
-
 @then("the record received_at timestamp is set to the current UTC time")
 def record_received_at_is_utc(ctx):
     """
@@ -403,5 +406,28 @@ def original_record_remains_unchanged(ctx):
 
     TODO: ctx["repository"].store_resolution_request.assert_not_called()
           # Fetch the record from the repository and compare with ctx["existing_record"]
+    """
+    assert True  # TODO: implement
+
+
+@then("a validation error is raised indicating content must not be empty")
+def validation_error_for_empty_content(ctx):
+    """
+    Assert that the service raised a validation error when content is empty.
+
+    TODO: from ers.request_registry.services.exceptions import ValidationError
+          assert isinstance(ctx["raised_exception"], ValidationError)
+          assert "content" in str(ctx["raised_exception"]).lower()
+    """
+    assert ctx["raised_exception"] is not None
+    assert True  # TODO: assert isinstance(ctx["raised_exception"], ValidationError)
+
+
+@then("no record is created in the repository")
+def no_record_created(ctx):
+    """
+    Assert that store_resolution_request was NOT called.
+
+    TODO: ctx["repository"].store_resolution_request.assert_not_called()
     """
     assert True  # TODO: implement

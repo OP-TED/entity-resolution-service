@@ -1,13 +1,15 @@
 """
 Step definitions for: bulk_lookup_and_snapshot_management.feature
 
-Feature: Bulk Lookup Request Registration and Snapshot State Management
-  Covers four behaviours:
+Feature: Lookup Request Registration and Snapshot State Management
+  Covers seven behaviours:
     1. Registering a bulk lookup request creates an append-only LookupRequestRecord.
     2. Multiple bulk lookups from the same source accumulate without overwriting.
-    3. Advancing the snapshot watermark for a known source updates LookupState.last_snapshot.
-    4. Advancing the snapshot to the current or earlier time raises WatermarkRegressionError.
-    5. Retrieving lookup state for known/unknown sources returns the correct result.
+    3. Registering a single lookup request creates an append-only LookupRequestRecord.
+    4. Single and bulk lookup records from the same source coexist independently.
+    5. Advancing the snapshot watermark for a known source updates LookupState.last_snapshot.
+    6. Advancing the snapshot to the current or earlier time raises SnapshotRegressionError.
+    7. Retrieving lookup state for known/unknown sources returns the correct result.
 
   These steps call RequestRegistryService with a mocked or in-memory repository.
   No real MongoDB connection is required for unit-level BDD scenarios.
@@ -42,6 +44,18 @@ def test_register_bulk_lookup_request():
 @scenario(FEATURE_FILE, "Register multiple bulk lookup requests from the same source")
 def test_register_multiple_bulk_lookups():
     """Bind the 'Register multiple bulk lookup requests from the same source' outline."""
+    pass
+
+
+@scenario(FEATURE_FILE, "Register a single lookup request")
+def test_register_single_lookup_request():
+    """Bind the 'Register a single lookup request' scenario outline."""
+    pass
+
+
+@scenario(FEATURE_FILE, "Register lookup requests of different types from the same source")
+def test_register_mixed_lookup_types():
+    """Bind the 'Register lookup requests of different types' scenario outline."""
     pass
 
 
@@ -246,6 +260,35 @@ def register_bulk_lookup_request(ctx, source_id):
     ctx["raised_exception"] = None
 
 
+@when(parsers.parse('a single lookup request is registered for "{source_id}"'))
+def register_single_lookup_request(ctx, source_id):
+    """
+    Call RequestRegistryService.register_lookup_request with SINGLE type.
+
+    Captures the returned LookupRequestRecord or any raised exception.
+
+    TODO: Replace with real async call:
+        import asyncio
+        from ers.request_registry.domain.records import LookupRequestType
+        ctx["result"] = asyncio.run(
+            ctx["service"].register_lookup_request(source_id, LookupRequestType.SINGLE)
+        )
+    """
+    returned_record = MagicMock()
+    returned_record.source_id = source_id
+    returned_record.requested_at = datetime.now(UTC)
+    # TODO: returned_record.request_type = LookupRequestType.SINGLE
+    ctx["repository"].store_lookup_request = AsyncMock(return_value=returned_record)
+    ctx["result"] = returned_record  # TODO: replace with real service call
+    ctx["raised_exception"] = None
+    # If a prior bulk record exists, update find to return both (mixed-types scenario)
+    existing = ctx.get("existing_lookup_record")
+    if existing is not None:
+        ctx["repository"].find_lookup_requests_by_source = AsyncMock(
+            return_value=[existing, returned_record]
+        )
+
+
 @when(parsers.parse('a second bulk lookup request is registered for "{source_id}"'))
 def register_second_bulk_lookup(ctx, source_id):
     """
@@ -355,6 +398,17 @@ def lookup_record_has_bulk_type(ctx):
 
     TODO: from ers.request_registry.models.records import LookupRequestType
           assert ctx["result"].request_type == LookupRequestType.BULK
+    """
+    assert True  # TODO: implement
+
+
+@then("the lookup request record has request type SINGLE")
+def lookup_record_has_single_type(ctx):
+    """
+    Assert that the returned LookupRequestRecord.request_type is LookupRequestType.SINGLE.
+
+    TODO: from ers.request_registry.domain.records import LookupRequestType
+          assert ctx["result"].request_type == LookupRequestType.SINGLE
     """
     assert True  # TODO: implement
 

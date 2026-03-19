@@ -286,7 +286,7 @@ class RequestRegistryService:
     ) -> LookupState | None:
         """Retrieve the current lookup watermark for a source."""
 
-    async def advance_lookup_watermark(
+    async def advance_snapshot(
         self,
         source_id: str,
         snapshot_time: datetime,
@@ -294,7 +294,7 @@ class RequestRegistryService:
         """Advance the lookup state watermark for a source.
         Called only after a bulk refresh response is successfully produced.
         Sets last_snapshot to snapshot_time, updated_at to current UTC.
-        Raises: WatermarkRegressionError if snapshot_time <= current last_snapshot."""
+        Raises: SnapshotRegressionError if snapshot_time <= current last_snapshot."""
 ```
 
 ### 6.2 Service Exceptions
@@ -302,7 +302,7 @@ class RequestRegistryService:
 | Exception | Raised when |
 |-----------|------------|
 | `IdempotencyConflictError` | Same triad submitted with different content (different `content_hash`). |
-| `WatermarkRegressionError` | Attempting to set `last_snapshot` to a time earlier than or equal to the current value. |
+| `SnapshotRegressionError` | Attempting to set `last_snapshot` to a time earlier than or equal to the current value. |
 
 ### 6.3 Idempotency Algorithm (Mermaid)
 
@@ -356,8 +356,8 @@ flowchart TD
 | TC-005 | Service: `register_resolution_request` (new) | New `EntityMention` with unique triad | `ResolutionRequestRecord` stored and returned | First record for a source_id |
 | TC-006 | Service: `register_resolution_request` (replay) | Same `EntityMention` submitted twice (identical content) | Returns existing record without creating duplicate | Rapid concurrent replays |
 | TC-007 | Service: `register_resolution_request` (conflict) | Same triad, different content | Raises `IdempotencyConflictError` | Content differs only in whitespace (still different hash) |
-| TC-008 | Service: `advance_lookup_watermark` (happy) | `source_id` with existing state, `snapshot_time` > current | Updated `LookupState` returned | First watermark for a new source_id |
-| TC-009 | Service: `advance_lookup_watermark` (regression) | `snapshot_time` <= current `last_snapshot` | Raises `WatermarkRegressionError` | Equal timestamps (not just less-than) |
+| TC-008 | Service: `advance_snapshot` (happy) | `source_id` with existing state, `snapshot_time` > current | Updated `LookupState` returned | First watermark for a new source_id |
+| TC-009 | Service: `advance_snapshot` (regression) | `snapshot_time` <= current `last_snapshot` | Raises `SnapshotRegressionError` | Equal timestamps (not just less-than) |
 | TC-010 | Service: `register_lookup_request` | Valid `source_id` and `LookupRequestType.BULK` | `LookupRequestRecord` stored | Multiple lookups from same source in rapid succession |
 | TC-011 | Repository: `store_resolution_request` (duplicate) | Record with existing triad | Raises `DuplicateTriadError` | MongoDB duplicate key error is correctly wrapped |
 | TC-012 | Repository: `find_by_triad` (not found) | Non-existent triad | Returns `None` | All three triad fields present but no match |
@@ -384,7 +384,7 @@ flowchart TD
 | Duplicate triad (MongoDB) | `DuplicateKeyError` from pymongo | Adapter wraps as `DuplicateTriadError` | Service catches and runs idempotency check (may be concurrent insert race) | DEBUG |
 | MongoDB connection failure | `ConnectionFailure` from pymongo | Adapter wraps as `RepositoryConnectionError` | None — propagate to caller | ERROR |
 | MongoDB operation timeout | `ServerSelectionTimeoutError` or `ExecutionTimeout` | Adapter wraps as `RepositoryOperationError` | None — propagate to caller | ERROR |
-| Watermark regression | `snapshot_time <= current last_snapshot` | Raise `WatermarkRegressionError` | None — caller must handle | WARN |
+| Watermark regression | `snapshot_time <= current last_snapshot` | Raise `SnapshotRegressionError` | None — caller must handle | WARN |
 | Invalid EntityMention (missing triad fields) | Pydantic validation on `EntityMentionIdentifier` | Pydantic `ValidationError` raised at model construction | None — caller must validate before calling service | Not logged at this layer |
 | Empty content string | `entity_mention.content` is empty string | Accept and hash normally (empty string has a valid SHA-256) | None | INFO (flag unusual input) |
 
@@ -447,9 +447,9 @@ flowchart TD
 
 | Scenario | Description |
 |----------|------------|
-| Advance watermark for new source | Given no existing LookupState for a source_id, when advance_lookup_watermark is called, then a new LookupState is created with the given snapshot_time. |
-| Advance watermark for existing source | Given an existing LookupState with last_snapshot T1, when advance_lookup_watermark is called with T2 > T1, then last_snapshot is updated to T2. |
-| Reject watermark regression | Given an existing LookupState with last_snapshot T1, when advance_lookup_watermark is called with T2 <= T1, then a WatermarkRegressionError is raised and last_snapshot remains T1. |
+| Advance watermark for new source | Given no existing LookupState for a source_id, when advance_snapshot is called, then a new LookupState is created with the given snapshot_time. |
+| Advance watermark for existing source | Given an existing LookupState with last_snapshot T1, when advance_snapshot is called with T2 > T1, then last_snapshot is updated to T2. |
+| Reject watermark regression | Given an existing LookupState with last_snapshot T1, when advance_snapshot is called with T2 <= T1, then a SnapshotRegressionError is raised and last_snapshot remains T1. |
 
 ### Feature: Lookup Request Registration
 
