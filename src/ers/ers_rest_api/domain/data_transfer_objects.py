@@ -25,7 +25,9 @@ class EntityMentionRequest(FrozenDTO):
     request_id: str = Field(..., min_length=1)
     entity_type: str = Field(..., min_length=1)
     content: str = Field(..., min_length=1)
-    content_type: str = Field(default="application/ld+json")
+    content_type: str = Field(
+        default="application/ld+json"
+    )  # can use an enum to restrict to specific content types
     context: str | None = None
 
 
