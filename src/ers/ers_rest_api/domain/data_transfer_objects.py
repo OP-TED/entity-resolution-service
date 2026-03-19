@@ -5,7 +5,7 @@ from erspec.models.core import ClusterReference
 from pydantic import Field
 
 from ers.commons.domain.data_transfer_objects import FrozenDTO
-from ers.resolution_coordinator.services.resolution_coordinator_service import ResolutionOutcome
+from ers.resolution_coordinator.domain.data_transfer_objects import ResolutionOutcome
 
 DEFAULT_REFRESH_BULK_LIMIT = 1000
 MAX_REFRESH_BULK_LIMIT = 1000

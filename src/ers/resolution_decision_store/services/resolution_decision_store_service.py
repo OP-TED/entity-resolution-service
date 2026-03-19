@@ -1,26 +1,21 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime
 
 from erspec.models.core import Decision, LookupState
 
-# Temporary abstractions
+from ers.commons.adapters.decision_repository import DecisionRepository
+from ers.resolution_decision_store.domain.data_transfer_objects import DeltaPage
 
 
-@dataclass(frozen=True)
-class DeltaPage:
-    """A page of changed decision assignments with cursor-based pagination."""
-
-    deltas: list[Decision]
-    continuation_cursor: str | None
-    has_more: bool
-
-
+# Temporary abstractions and DI
 class ResolutionDecisionStoreServiceABC(ABC):
     """Abstraction for the Resolution Decision Store (EPIC-04).
 
     Provides read access to decisions and manages delta-sync snapshots.
     """
+
+    def __init__(self, decision_repository: DecisionRepository) -> None:
+        self._decision_repository = decision_repository
 
     @abstractmethod
     async def get_decision_for_mention(
