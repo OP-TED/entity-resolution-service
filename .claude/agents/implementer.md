@@ -25,7 +25,7 @@ description: >
   </example>
 model: sonnet
 color: blue
-tools: [Read, Edit, Write, Glob, Grep, Bash, Skill]
+tools: [Read, Edit, Write, Glob, Grep, Bash, Skill, mcp__gitnexus__context, mcp__gitnexus__cypher, mcp__gitnexus__detect_changes, mcp__gitnexus__impact, mcp__gitnexus__list_repos, mcp__gitnexus__query, mcp__gitnexus__rename, mcp__ide__getDiagnostics, mcp__plugin_context7_context7__query-docs, mcp__plugin_context7_context7__resolve-library-id, ListMcpResourcesTool, ReadMcpResourceTool]
 skills:
   - stream-coding
   - superpowers:test-driven-development

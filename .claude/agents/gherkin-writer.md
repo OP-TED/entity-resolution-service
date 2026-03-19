@@ -24,7 +24,7 @@ description: >
   </example>
 model: sonnet
 color: green
-tools: [Read, Write, Edit, Glob, Grep, AskUserQuestion]
+tools: [Read, Write, Edit, Glob, Grep, AskUserQuestion, mcp__gitnexus__query, mcp__gitnexus__context, mcp__plugin_context7_context7__query-docs, mcp__plugin_context7_context7__resolve-library-id, ListMcpResourcesTool, ReadMcpResourceTool]
 ---
 
 You are the **Gherkin Writer** — a BDD specialist who translates EPIC specifications

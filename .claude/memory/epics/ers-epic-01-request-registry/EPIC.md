@@ -424,10 +424,9 @@ flowchart TD
 
 ## Roadmap
 
-- [x] Task 1: Define domain models (`models/`) — completed 2026-03-19
-- [ ] Task 2: Define repository interface and exceptions (`adapters/`)
-- [ ] Task 3: Implement MongoDB repository (`adapters/`)
-- [ ] Task 4: Implement service layer with idempotency and observability (`services/`)
+- [x] Task 1.1: Define domain models (`domain/`) — completed 2026-03-19
+- [x] Task 1.2: Repository, Service, and Exceptions — completed 2026-03-20
+- [x] Task 1.3: Wire BDD feature files with real service calls — completed 2026-03-20
 - [ ] Task 5: Write integration tests (`tests/`)
 
 ---
@@ -529,6 +528,18 @@ These constraints are inherited from the ERS Architecture and must be respected 
 ---
 
 # Part 2 — Implementation Log
+
+### 2026-03-20 — Task 1.2: Repository, Service, and Exceptions
+
+- **Outcome:** Five exceptions (`IdempotencyConflictError`, `SnapshotRegressionError`, `DuplicateTriadError`, `RepositoryConnectionError`, `RepositoryOperationError`) created under `services/exceptions.py`. Two repository ABCs (`ResolutionRequestRepository`, `LookupStateRepository`) and two Mongo implementations (`MongoResolutionRequestRepository`, `MongoLookupStateRepository`) created under `adapters/records_repository.py`. `RequestRegistryService` created under `services/request_registry_service.py`. `MongoCollections` extended with `RESOLUTION_REQUESTS` and `LOOKUP_STATES`. `ensure_indexes()` extended with two new indexes. 33 new unit tests (16 adapter, 11 service, 6 pre-existing domain); full suite 298/298 pass.
+- **Decisions:** `MongoResolutionRequestRepository` does not extend `BaseMongoRepository` — the `_id` is computed from the triad, not mapped from a model field. `MongoLookupStateRepository` does extend `BaseMongoRepository` with `_id_field = "source_id"`. `_from_document` operates on a local copy to avoid mutating the original dict. `RequestRegistryService` removed from `services/__init__.py` to break a circular import (`adapters → services.exceptions → services.__init__ → request_registry_service → adapters`); callers import it directly from the module.
+- **Deviations:** `RequestRegistryService` not re-exported from `services/__init__.py` (spec said it should be). Breaking the circular import required this. The exception types and adapters ABCs are still correctly exported from their respective `__init__.py` files. The `updated_at` guard in `advance_snapshot` uses `max(now, snapshot_time)` to satisfy the `LookupState` invariant that `updated_at >= last_snapshot` when `snapshot_time` is in the future.
+
+### 2026-03-20 — Task 1.3: BDD feature file wiring
+
+- **Outcome:** All TODO stubs in `tests/feature/request_registry/test_resolution_request_registration.py` and `tests/feature/request_registry/test_bulk_lookup_and_snapshot_management.py` replaced with real service calls and assertions. `RequestRegistryService` instantiated with `create_autospec` repositories + real `SHA256ContentHasher`. All BDD scenarios pass.
+- **Decisions:** `LookupRequestRecord` and `LookupRequestType` re-added to domain records (originally dropped in task 1.1 design) after determining the BDD bulk scenarios require registering SINGLE/BULK lookup audit events. The append-only `LookupRequestRepository` ABC and `register_lookup_request` service method added accordingly.
+- **Deviations:** None relative to the Gherkin scenarios.
 
 ### 2026-03-19 — Task 1.1: Domain models and SHA256ContentHasher
 

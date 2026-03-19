@@ -10,6 +10,7 @@
 ## AI Coding Setup
 
 - Five agents: epic-planner (opus), gherkin-writer (sonnet), implementer (sonnet), code-reviewer (opus), documenter (haiku).
+- All agents have MCP tools in their frontmatter `tools:` array: gitnexus (query, context, impact, detect_changes, cypher, rename, list_repos), ide diagnostics, context7 docs. Implementer has the full set; others have a role-appropriate subset.
 - Skills: stream-coding, clarity-gate, gitnexus (6 sub-skills).
 - Methodology: stream-coding (documentation-first), Cosmic Python (layered architecture).
 - Memory: auto-memory (this file) + epic/task memory under `epics/`.
@@ -24,7 +25,7 @@
 
 | Epic | Component | Score | Status |
 |------|-----------|-------|--------|
-| [ERS-EPIC-01](epics/ers-epic-01-request-registry/EPIC.md) | Request Registry | 9.7 | Gherkin Complete |
+| [ERS-EPIC-01](epics/ers-epic-01-request-registry/EPIC.md) | Request Registry | 9.7 | Implementation in progress (Tasks 1.1–1.3 done) |
 | [ERS-EPIC-02](epics/ers-epic-02-rdf-mention-parser/EPIC.md) | RDF Mention Parser | 9.8 | Gherkin Complete |
 | [ERS-EPIC-03](epics/ers-epic-03-ere-contract-client/EPIC.md) | ERE Contract Client | 9.8 | Gherkin Complete |
 | [ERS-EPIC-04](epics/ers-epic-04-resolution-decision-store/EPIC.md) | Decision Store | 9.8 | Gherkin Complete |
@@ -37,11 +38,12 @@
 
 ## Current Phase
 
-- Branch: `feature/ERS1-142-task4` — EPIC-02 RDF Mention Parser implementation
-- **[2026-03-17] Architecture guardrails complete** — tier-based import-linter contracts in `.importlinter`
-- **[2026-03-18] EPIC-02 Tasks 2, 3, 4 complete** — adapter + service + config loader + public API (`load_config`, `parse_entity_mention`); 44/44 tests passing
-- **[2026-03-18] Task 5 complete** — global config management: `env_property` + `ConfigResolverABC` pattern in `ers/commons/adapters/config_resolver.py`; all config classes + `config` singleton in `ers/__init__.py`; `pydantic-settings` removed, `python-dotenv` added; 390 unit+feature tests passing
-- Next: integration tests + Gherkin `rdf_parsing.feature` for EPIC-02, then PR
+- Branch: `feature/ERS1-143-task11` (stacked on `feature/ERS1-137-5`) — EPIC-01 Request Registry implementation
+- **[2026-03-19] Task 1.1 complete** — domain models (`ResolutionRequestRecord`, `LookupState`, `LookupRequestRecord`, `LookupRequestType`, `JSONRepresentation`) + `SHA256ContentHasher`; 276 tests passing
+- **[2026-03-20] Task 1.2 complete** — repository ABCs + Mongo implementations + `RequestRegistryService` + exceptions; 298 tests passing
+- **[2026-03-20] Task 1.3 complete** — BDD feature files wired with real service calls; all scenarios passing
+- **[2026-03-20] Agent MCP tools** — all agents updated with gitnexus, ide, context7 MCP tools in frontmatter
+- Next: integration tests (Task 5) or PR
 
 ## Project Automation
 
