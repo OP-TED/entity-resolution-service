@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from erspec.models.core import UserActionType
@@ -71,17 +71,17 @@ async def _seed_data(db: AsyncDatabase) -> None:
         UserActionFactory.build(
             about_entity_mention=mentions[0].identifiedBy,
             action_type=UserActionType.ACCEPT_TOP,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         ),
         UserActionFactory.build(
             about_entity_mention=mentions[1].identifiedBy,
             action_type=UserActionType.ACCEPT_ALTERNATIVE,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         ),
         UserActionFactory.build(
             about_entity_mention=mentions[2].identifiedBy,
             action_type=UserActionType.REJECT_ALL,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         ),
     ]
     for a in actions:

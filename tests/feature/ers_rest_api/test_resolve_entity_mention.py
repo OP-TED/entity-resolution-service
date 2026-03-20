@@ -29,7 +29,7 @@ Feature: Resolve Entity Mention via REST API (Spine A)
 """
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
@@ -316,7 +316,11 @@ def mention_previously_resolved(ctx, source_id, request_id, entity_type):
     ctx["prior_triad"] = (source_id, request_id, entity_type)
 
 
-@given(parsers.re(r'the original content was "(?P<content_fixture>[^"]+)" with context "(?P<context>[^"]*)"'))
+@given(
+    parsers.re(
+        r'the original content was "(?P<content_fixture>[^"]+)" with context "(?P<context>[^"]*)"'
+    )
+)
 def original_content_with_context(ctx, content_fixture, context):
     """
     Record the original content and context for the previously resolved mention.

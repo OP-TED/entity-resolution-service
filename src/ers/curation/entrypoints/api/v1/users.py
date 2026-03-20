@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, status
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult
 from ers.curation.entrypoints.api.auth import AdminUser, CurrentUser
@@ -46,17 +46,6 @@ async def patch_user(
 ) -> UserResponse:
     """Update user flags (admin only)."""
     return await service.patch_user(user_id, body)
-
-
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(
-    user_id: str,
-    _admin: AdminUser,
-    service: Annotated[UserManagementService, Depends(get_user_management_service)],
-) -> Response:
-    """Delete a user (admin only)."""
-    await service.delete_user(user_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/me", response_model=UserContext)

@@ -21,9 +21,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 # Scenario bindings
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(
-    Path(__file__).parent / "paginated_query.feature"
-)
+FEATURE_FILE = str(Path(__file__).parent / "paginated_query.feature")
 
 
 @scenario(FEATURE_FILE, "Walk through all pages until exhausted")

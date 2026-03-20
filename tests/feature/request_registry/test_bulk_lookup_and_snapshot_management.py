@@ -13,14 +13,13 @@ Feature: Bulk Lookup Request Registration and Snapshot State Management
   No real MongoDB connection is required for unit-level BDD scenarios.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from pytest_bdd import given, parsers, scenario, then, when
-
 from erspec.models.core import LookupState
+from pytest_bdd import given, parsers, scenario, then, when
 
 # ---------------------------------------------------------------------------
 # Scenario bindings — link each scenario title to its .feature file.
@@ -154,7 +153,7 @@ def bulk_lookup_already_registered(ctx, source_id):
     """
     existing_record = MagicMock()
     existing_record.source_id = source_id
-    existing_record.requested_at = datetime(2024, 6, 1, 10, 0, 0, tzinfo=timezone.utc)
+    existing_record.requested_at = datetime(2024, 6, 1, 10, 0, 0, tzinfo=UTC)
     # TODO: existing_record.request_type = LookupRequestType.BULK
     ctx["existing_lookup_record"] = existing_record
     ctx["repository"].find_lookup_requests_by_source = AsyncMock(return_value=[existing_record])
@@ -240,7 +239,7 @@ def register_bulk_lookup_request(ctx, source_id):
     # Simulate a returned record for the placeholder
     returned_record = MagicMock()
     returned_record.source_id = source_id
-    returned_record.requested_at = datetime.now(timezone.utc)
+    returned_record.requested_at = datetime.now(UTC)
     # TODO: returned_record.request_type = LookupRequestType.BULK
     ctx["repository"].store_lookup_request = AsyncMock(return_value=returned_record)
     ctx["result"] = returned_record  # TODO: replace with real service call
@@ -259,7 +258,7 @@ def register_second_bulk_lookup(ctx, source_id):
     """
     second_record = MagicMock()
     second_record.source_id = source_id
-    second_record.requested_at = datetime.now(timezone.utc)
+    second_record.requested_at = datetime.now(UTC)
     ctx["second_lookup_record"] = second_record
     # Configure find_lookup_requests_by_source to now return both records
     ctx["repository"].find_lookup_requests_by_source = AsyncMock(

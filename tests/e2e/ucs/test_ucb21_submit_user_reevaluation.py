@@ -27,9 +27,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 # Scenario bindings
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(
-    Path(__file__).parent / "ucb21_submit_user_reevaluation.feature"
-)
+FEATURE_FILE = str(Path(__file__).parent / "ucb21_submit_user_reevaluation.feature")
 
 
 @scenario(FEATURE_FILE, "Forward a placement recommendation to ERE")

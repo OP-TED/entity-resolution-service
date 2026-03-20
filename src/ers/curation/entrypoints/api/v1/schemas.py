@@ -5,12 +5,12 @@ from erspec.models.core import EntityType
 from fastapi import Depends, Query
 from pydantic import BaseModel
 
+from ers import config
 from ers.commons.domain.data_transfer_objects import (
     DEFAULT_PER_PAGE,
     MAX_PER_PAGE,
     PaginationParams,
 )
-from ers.config import get_settings
 from ers.curation.domain.data_transfer_objects import (
     DecisionFilters,
     DecisionOrdering,
@@ -36,7 +36,7 @@ def get_decision_filters(
     entity_type: EntityType | None = Query(None, description="Filter by entity type"),
     confidence_min: float | None = Query(None, ge=0, le=1, description="Minimum confidence"),
     confidence_max: float | None = Query(
-        get_settings().curation_confidence_threshold,
+        config.CURATION_CONFIDENCE_THRESHOLD,  # evaluated once at import time
         ge=0,
         le=1,
         description="Maximum confidence",

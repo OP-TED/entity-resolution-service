@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pymongo.asynchronous.database import AsyncDatabase
@@ -37,12 +37,12 @@ class TestHasCurrentAction:
     async def test_returns_true_when_action_exists_since(
         self, repo: MongoUserActionCurationRepository
     ) -> None:
-        action = UserActionFactory.build(created_at=datetime.now(timezone.utc))
+        action = UserActionFactory.build(created_at=datetime.now(UTC))
         await repo.save(action)
 
         result = await repo.has_current_action(
             about_entity_mention=action.about_entity_mention,
-            since=datetime.now(timezone.utc) - timedelta(minutes=5),
+            since=datetime.now(UTC) - timedelta(minutes=5),
         )
         assert result is True
 
@@ -50,25 +50,25 @@ class TestHasCurrentAction:
         self, repo: MongoUserActionCurationRepository
     ) -> None:
         action = UserActionFactory.build(
-            created_at=datetime.now(timezone.utc) - timedelta(hours=2),
+            created_at=datetime.now(UTC) - timedelta(hours=2),
         )
         await repo.save(action)
 
         result = await repo.has_current_action(
             about_entity_mention=action.about_entity_mention,
-            since=datetime.now(timezone.utc) - timedelta(minutes=5),
+            since=datetime.now(UTC) - timedelta(minutes=5),
         )
         assert result is False
 
     async def test_returns_false_for_different_entity(
         self, repo: MongoUserActionCurationRepository
     ) -> None:
-        action = UserActionFactory.build(created_at=datetime.now(timezone.utc))
+        action = UserActionFactory.build(created_at=datetime.now(UTC))
         await repo.save(action)
 
         other_mention = EntityMentionIdentifierFactory.build()
         result = await repo.has_current_action(
             about_entity_mention=other_mention,
-            since=datetime.now(timezone.utc) - timedelta(minutes=5),
+            since=datetime.now(UTC) - timedelta(minutes=5),
         )
         assert result is False

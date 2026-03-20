@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from erspec.models.core import Decision
@@ -50,7 +50,7 @@ class TestSaveAndFindById:
             current_placement=decision.current_placement,
             candidates=decision.candidates,
             created_at=decision.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
         await repo.save(updated)
 
