@@ -1,28 +1,74 @@
-# Task 1.2 — Repository, Service, and Exceptions
+# Task 1.2 — Repository, Service, and Exceptions: Request Registry
 
-## Part 1 — Task Specification
+## Specification Summary
 
-### Description
+Implement the persistence adapters, application service, and exception hierarchy for the Request Registry. This task covers orchestration, repositories, and exception handling.
 
-Implement the persistence adapters, application service, and exception hierarchy for the Request Registry. This task covers:
+### Files to Create/Modify
 
-1. `src/ers/request_registry/services/exceptions.py` — five domain exceptions
-2. `src/ers/request_registry/adapters/records_repository.py` — two ABCs + two Mongo implementations
-3. `src/ers/request_registry/services/request_registry_service.py` — orchestration service
-4. `src/ers/request_registry/adapters/__init__.py` — adapter package exports
-5. `src/ers/request_registry/services/__init__.py` — service package exports (exceptions only)
-6. `src/ers/commons/adapters/mongo_collections_manager.py` — two new collection constants/properties
-7. `src/ers/commons/adapters/mongo_client.py` — two new indexes in `ensure_indexes()`
+**Files created:**
+- `src/ers/request_registry/adapters/records_repository.py` — two ABCs + two Mongo implementations
+- `src/ers/request_registry/services/request_registry_service.py`
+- `src/ers/request_registry/services/exceptions.py`
+- `src/ers/request_registry/adapters/__init__.py` — adapter package exports
+- `src/ers/request_registry/services/__init__.py` — service package exports (exceptions only)
+
+**Files modified:**
+- `src/ers/commons/adapters/mongo_collections_manager.py` — added `RESOLUTION_REQUESTS`, `LOOKUP_STATES`
+- `src/ers/commons/adapters/mongo_client.py` — added index creation for new collections
+
+---
+
+## Specification Details
+
+### Exceptions (`services/exceptions.py`)
+
+All inherit `ApplicationError` (`ers.commons.services.exceptions`).
+
+| Exception | Raised when |
+|-----------|-------------|
+| `IdempotencyConflictError` | Same triad resubmitted with different `content_hash` |
+| `SnapshotRegressionError` | `advance_snapshot` called with time ≤ current `last_snapshot` |
+| `DuplicateTriadError` | Wraps pymongo `DuplicateKeyError` on `_id` |
+| `RepositoryConnectionError` | Wraps pymongo `ConnectionFailure` |
+| `RepositoryOperationError` | Wraps any other pymongo error |
+
+### Repositories (`adapters/records_repository.py`)
+
+**`ResolutionRequestRepository`** — ABC + `MongoResolutionRequestRepository`
+- Does NOT extend `BaseMongoRepository` — `_id` is computed from the triad: `f"{source_id}::{request_id}::{entity_type}"`
+- Methods: `store`, `find_by_triad`, `find_by_source_id(limit, offset)`
+- `DuplicateKeyError` → `DuplicateTriadError`
+
+**`LookupStateRepository`** — ABC + `MongoLookupStateRepository`
+- Extends `BaseMongoRepository[LookupState, str]` with `_id_field = "source_id"`
+- `get(source_id)` → `find_by_id`; `upsert(state)` → `save` (free upsert)
+
+**`LookupRequestRepository`** — ABC (append-only audit log, no Mongo impl yet)
+- `store(record)` → append; `find_by_source_id(source_id, since=None)`
+
+### Service (`services/request_registry_service.py`)
+
+`RequestRegistryService(resolution_repo, lookup_repo, lookup_request_repo, hasher)`
+
+- `register_resolution_request` — reject empty content → hash → find existing → idempotent replay or conflict or new store
+- `get_resolution_request` — delegate to `find_by_triad`
+- `list_resolution_requests_by_source` — paginated delegate
+- `register_lookup_request` — append audit record with UTC timestamp
+- `get_lookup_state` — delegate to `lookup_repo.get`
+- `advance_snapshot` — reject regression; upsert with `updated_at = max(now, snapshot_time)`
+
+**Note:** Not re-exported from `services/__init__.py` — avoids circular import. Import directly from the module.
 
 ### Acceptance Criteria
 
 1. `register_resolution_request` stores new record and returns it.
 2. Idempotent replay returns existing record without calling `store` again.
 3. Conflict raises `IdempotencyConflictError`, no write.
-4. Empty content raises `ValueError` before any hashing or DB call.
+4. Empty content raises before any hashing or DB call.
 5. Duplicate `_id` at DB level wraps to `DuplicateTriadError`.
 6. `advance_snapshot` upserts with new timestamp.
-7. `advance_snapshot` regression (time <= current) raises `SnapshotRegressionError`, no write.
+7. `advance_snapshot` regression raises `SnapshotRegressionError`, no write.
 8. All unit tests pass with mocked repositories (no MongoDB required).
 
 ### Gherkin Scenarios Covered
@@ -30,19 +76,9 @@ Implement the persistence adapters, application service, and exception hierarchy
 - `resolution_request_registration.feature`: new registration, idempotent replay, idempotency conflict, empty content rejection
 - `bulk_lookup_and_snapshot_management.feature`: first `advance_snapshot`, subsequent advance, regression rejection
 
-### Layers Affected
-
-- `src/ers/request_registry/services/` — exceptions + service (new)
-- `src/ers/request_registry/adapters/` — repository ABCs + Mongo implementations (new)
-- `src/ers/commons/adapters/` — `mongo_collections_manager.py`, `mongo_client.py` (modified)
-- `tests/unit/request_registry/services/` — service unit tests (new)
-- `tests/unit/request_registry/adapters/` — adapter unit tests (new)
-
----
-<!-- implementation-log -->
 ---
 
-## Part 2 — Implementation Log
+## Implementation Outcomes
 
 ### What Was Accomplished
 
@@ -52,7 +88,7 @@ Implement the persistence adapters, application service, and exception hierarchy
 - `RequestRegistryService` with 5 methods; full idempotency algorithm (new / replay / conflict) and monotonic snapshot advancement.
 - `MongoCollections` extended with `RESOLUTION_REQUESTS` and `LOOKUP_STATES` constants and properties.
 - `ensure_indexes()` extended with composite source/received_at index on `resolution_requests` and source_id index on `lookup_states`.
-- 33 new unit tests (16 adapter, 11 service, plus 6 pre-existing domain tests unchanged). Full suite 298/298 pass.
+- **33 new unit tests (16 adapter, 11 service, plus 6 pre-existing domain tests unchanged). Full suite 298/298 pass.**
 
 ### Key Decisions
 
@@ -61,10 +97,9 @@ Implement the persistence adapters, application service, and exception hierarchy
 - **`services/__init__.py` does not re-export `RequestRegistryService`** to break a structural circular import: `adapters/records_repository` imports `services.exceptions`, which triggers loading `services/__init__.py`; if that file imported `request_registry_service`, it would in turn import `adapters.records_repository` while it is still initialising. Callers import `RequestRegistryService` directly from `ers.request_registry.services.request_registry_service`.
 - **`updated_at` guard in `advance_snapshot`** uses `max(now_utc, snapshot_time)` to satisfy the `LookupState` model invariant (`updated_at >= last_snapshot`) when `snapshot_time` is in the future relative to wall clock.
 
-### Deviations from Original Spec
+### Deviations from Spec
 
 - `RequestRegistryService` excluded from `services/__init__.py` (spec said to include it). Reason: structural circular import. All other exports are correct; the service remains importable via its module path.
-- Task spec said "Tasks 2, 3, 4" in the EPIC roadmap. The implementation collapsed these into a single task (1.2) as the task file was already scoped that way.
 
 ### Files Created
 
@@ -82,3 +117,7 @@ Implement the persistence adapters, application service, and exception hierarchy
 
 - `/home/lps/work/workspace-charm/entity-resolution-service/src/ers/commons/adapters/mongo_collections_manager.py`
 - `/home/lps/work/workspace-charm/entity-resolution-service/src/ers/commons/adapters/mongo_client.py`
+
+### Commits
+
+- Committed and merged.

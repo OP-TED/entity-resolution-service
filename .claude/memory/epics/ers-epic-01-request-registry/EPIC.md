@@ -424,8 +424,8 @@ flowchart TD
 
 ## Roadmap
 
-- [x] Task 1.1: Define domain models (`domain/`) — completed 2026-03-19
-- [x] Task 1.2: Repository, Service, and Exceptions — completed 2026-03-20
+- [x] Task 1.1: Define domain models (`domain/`) — [outcomes](task11-domain-models.md)
+- [x] Task 1.2: Repository, Service, and Exceptions — [outcomes](task12-repository-service-exceptions.md)
 - [x] Task 1.3: Wire BDD feature files with real service calls — completed 2026-03-20
 - [ ] Task 5: Write integration tests (`tests/`)
 
