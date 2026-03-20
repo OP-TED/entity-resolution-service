@@ -18,7 +18,7 @@ End-to-End Resolution Cycle (Black-box, demo-ready)
 """
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
@@ -27,9 +27,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 # Scenario bindings
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(
-    Path(__file__).parent / "e2e_resolution_cycle.feature"
-)
+FEATURE_FILE = str(Path(__file__).parent / "e2e_resolution_cycle.feature")
 
 
 @scenario(

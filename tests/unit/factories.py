@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from erspec.models.core import (
     CanonicalEntityIdentifier,
@@ -113,11 +113,11 @@ class DecisionFactory(ModelFactory):
 
     @classmethod
     def created_at(cls) -> datetime:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
     @classmethod
     def updated_at(cls) -> datetime:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
 
 class UserActionFactory(ModelFactory):
@@ -149,7 +149,7 @@ class UserActionFactory(ModelFactory):
 
     @classmethod
     def created_at(cls) -> datetime:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
     @classmethod
     def metadata(cls) -> None:
@@ -185,7 +185,7 @@ class UserFactory(ModelFactory):
 
     @classmethod
     def created_at(cls) -> datetime:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
     @classmethod
     def updated_at(cls) -> None:

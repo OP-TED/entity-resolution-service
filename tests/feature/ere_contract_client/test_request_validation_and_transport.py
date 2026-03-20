@@ -111,11 +111,7 @@ def transport_will_fail(ctx, failure_mode):
       - "serialization failure" → SerializationError (on service side)
       - "channel accepted zero" → ChannelUnavailableError
     """
-    if failure_mode == "connection refused":
-        ctx["adapter"].push_request = AsyncMock(
-            side_effect=Exception("RedisConnectionError")  # TODO: real error
-        )
-    elif failure_mode == "response timeout":
+    if failure_mode == "connection refused" or failure_mode == "response timeout":
         ctx["adapter"].push_request = AsyncMock(
             side_effect=Exception("RedisConnectionError")  # TODO: real error
         )

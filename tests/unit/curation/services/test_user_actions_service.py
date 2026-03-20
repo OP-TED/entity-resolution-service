@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
@@ -54,7 +54,7 @@ class TestRecordAccept:
         user_action_repository: MagicMock,
     ) -> None:
         decision = DecisionFactory.build(
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
         user_action_repository.has_current_action.return_value = True
 
@@ -130,7 +130,7 @@ class TestRecordAssign:
         user_action_repository: MagicMock,
     ) -> None:
         decision = DecisionFactory.build(
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
         user_action_repository.has_current_action.return_value = True
 

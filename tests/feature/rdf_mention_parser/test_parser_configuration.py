@@ -8,24 +8,27 @@ Feature: Parser Configuration Loading and Entity Type Resolution
     3. Reject configurations with structural problems (empty maps, invalid paths).
     4. Resolve entity type URI to its configuration entry (match / no-match).
 
-  These steps operate on the ParserConfig model directly.
+  These steps operate on RDFMappingConfig and RDFConfigReader directly.
   No RDF parsing or external services required.
 """
 
 from pathlib import Path
 
 import pytest
+import yaml
+from pydantic import ValidationError
 from pytest_bdd import given, parsers, scenario, then, when
+
+from ers.rdf_mention_parser.adapter.rdf_mapping_config_reader import RDFConfigReader
+from ers.rdf_mention_parser.domain.exceptions import UnsupportedEntityTypeError
+from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
 
 # ---------------------------------------------------------------------------
 # Scenario bindings
 # ---------------------------------------------------------------------------
 
 FEATURE_FILE = str(
-    Path(__file__).parent.parent.parent
-    / "feature"
-    / "rdf_mention_parser"
-    / "parser_configuration.feature"
+    Path(__file__).parent.parent / "rdf_mention_parser" / "parser_configuration.feature"
 )
 
 
@@ -61,17 +64,62 @@ def ctx():
 
 
 # ---------------------------------------------------------------------------
+# Reusable YAML building blocks
+# ---------------------------------------------------------------------------
+
+_FOUR_NAMESPACES = {
+    "org": "http://www.w3.org/ns/org#",
+    "epo": "http://data.europa.eu/a4g/ontology#",
+    "cccev": "http://data.europa.eu/m8g/",
+    "locn": "http://www.w3.org/ns/locn#",
+}
+
+_ORGANISATION_FIELDS_6 = {
+    "legal_name": "epo:hasLegalName",
+    "country_code": "cccev:registeredAddress/epo:hasCountryCode",
+    "nuts_code": "cccev:registeredAddress/epo:hasNutsCode",
+    "post_code": "cccev:registeredAddress/locn:postCode",
+    "post_name": "cccev:registeredAddress/locn:postName",
+    "thoroughfare": "cccev:registeredAddress/locn:thoroughfare",
+}
+
+# Minimal second entity type using only the four base namespaces.
+_SECOND_ENTITY_TYPE = {
+    "PROCEDURE": {
+        "rdf_type": "epo:Procedure",
+        "fields": {"title": "epo:hasTitle"},
+    }
+}
+
+
+def _base_valid_config(
+    namespace_count: int, type_count: int, entity_type: str, field_count: int
+) -> dict:
+    """Build a valid YAML dict to spec: namespace_count ns, type_count entity types,
+    entity_type has field_count fields."""
+    assert namespace_count == 4, "Only 4-namespace configs are currently supported by this step"
+    assert entity_type == "ORGANISATION", "Only ORGANISATION primary type is currently supported"
+    assert field_count == 6, "Only 6-field ORGANISATION configs are currently supported"
+
+    entity_types = {
+        "ORGANISATION": {
+            "rdf_type": "org:Organization",
+            "fields": dict(_ORGANISATION_FIELDS_6),
+        }
+    }
+    if type_count == 2:
+        entity_types.update(_SECOND_ENTITY_TYPE)
+
+    return {"namespaces": dict(_FOUR_NAMESPACES), "entity_types": entity_types}
+
+
+# ---------------------------------------------------------------------------
 # Background
 # ---------------------------------------------------------------------------
 
 
 @given("the parser configuration loader is available")
 def config_loader_available(ctx):
-    """
-    Ensure the configuration loading mechanism is ready.
-
-    TODO: Import ParserConfig and any YAML loading utilities.
-    """
     ctx["config"] = None
     ctx["raised_exception"] = None
 
@@ -89,23 +137,7 @@ def config_loader_available(ctx):
     )
 )
 def valid_yaml_config(ctx, namespace_count, type_count, field_count, entity_type):
-    """
-    Build a valid YAML configuration with the specified structure.
-
-    TODO: Build dict matching the ParserConfig schema:
-        yaml_content = {
-            "namespaces": {...},  # namespace_count entries
-            "entity_types": {
-                entity_type: {"rdf_type": "org:Organization", "fields": {...}}
-                # type_count entries total, primary one has field_count fields
-            }
-        }
-    """
-    ctx["namespace_count"] = namespace_count
-    ctx["type_count"] = type_count
-    ctx["field_count"] = field_count
-    ctx["entity_type"] = entity_type
-    ctx["yaml_content"] = None  # TODO: build real YAML dict
+    ctx["yaml_content"] = _base_valid_config(namespace_count, type_count, entity_type, field_count)
 
 
 @given(
@@ -114,48 +146,50 @@ def valid_yaml_config(ctx, namespace_count, type_count, field_count, entity_type
     )
 )
 def yaml_with_undeclared_prefix(ctx, location, prefix):
-    """
-    Build a YAML config with an undeclared prefix at the specified location.
+    data = _base_valid_config(4, 1, "ORGANISATION", 6)
 
-    TODO: Start from valid config, then inject undeclared prefix:
-      - "a field property path" → fields: {"bad_field": "xyz:something"}
-      - "the rdf_type" → rdf_type: "foo:Organization"
-      - "the second segment of a multi-hop field path"
-          → fields: {"bad": "epo:address/unk:postCode"}
-    """
-    ctx["location"] = location
-    ctx["prefix"] = prefix
-    ctx["yaml_content"] = None  # TODO: build invalid config
+    if location == "a field property path":
+        data["entity_types"]["ORGANISATION"]["fields"]["bad_field"] = f"{prefix}:something"
+    elif location == "the rdf_type":
+        data["entity_types"]["ORGANISATION"]["rdf_type"] = f"{prefix}:Organization"
+    elif location == "the second segment of a multi-hop field path":
+        data["entity_types"]["ORGANISATION"]["fields"]["bad_field"] = (
+            f"epo:address/{prefix}:postCode"
+        )
+
+    ctx["yaml_content"] = data
 
 
 @given(parsers.parse('a YAML configuration where "{structural_problem}"'))
 def yaml_with_structural_problem(ctx, structural_problem):
-    """
-    Build a YAML config with the described structural problem.
+    data = _base_valid_config(4, 1, "ORGANISATION", 6)
 
-    TODO: Build per structural_problem:
-      - "entity_types is an empty map" → {"namespaces": {...}, "entity_types": {}}
-      - "the ORGANISATION entry has an empty fields map"
-          → entity_types: {"ORGANISATION": {"rdf_type": "org:Organization", "fields": {}}}
-      - "the namespaces section is missing entirely" → no "namespaces" key
-      - "a field value contains an invalid property path syntax"
-          → fields: {"bad": "not a path"}
-      - "a field value uses double slashes in the property path"
-          → fields: {"bad": "epo://bad"}
-    """
-    ctx["structural_problem"] = structural_problem
-    ctx["yaml_content"] = None  # TODO: build invalid config
+    if structural_problem.startswith("entity_types is an empty map"):
+        data["entity_types"] = {}
+    elif structural_problem.startswith("the ORGANISATION entry has an empty fields map"):
+        data["entity_types"]["ORGANISATION"]["fields"] = {}
+    elif structural_problem.startswith("the namespaces section is missing entirely"):
+        del data["namespaces"]
+    elif structural_problem.startswith("a field value contains an invalid property path syntax"):
+        data["entity_types"]["ORGANISATION"]["fields"]["bad"] = "not a path"
+    elif structural_problem.startswith("a field value uses double slashes in the property path"):
+        data["entity_types"]["ORGANISATION"]["fields"]["bad"] = "epo://bad"
+
+    ctx["yaml_content"] = data
 
 
 @given(parsers.parse('a parser configuration with ORGANISATION mapped to "{rdf_type}"'))
 def config_with_organisation_mapped(ctx, rdf_type):
-    """
-    Load a valid config for URI resolution testing.
-
-    TODO: Build a real ParserConfig with ORGANISATION → rdf_type.
-    """
-    ctx["rdf_type"] = rdf_type
-    ctx["config"] = None  # TODO: build real ParserConfig
+    data = {
+        "namespaces": dict(_FOUR_NAMESPACES),
+        "entity_types": {
+            "ORGANISATION": {
+                "rdf_type": rdf_type,
+                "fields": dict(_ORGANISATION_FIELDS_6),
+            }
+        },
+    }
+    ctx["config"] = RDFMappingConfig(**data)
 
 
 # ---------------------------------------------------------------------------
@@ -165,31 +199,18 @@ def config_with_organisation_mapped(ctx, rdf_type):
 
 @when("the configuration is loaded")
 def load_configuration(ctx):
-    """
-    Load the ParserConfig from the prepared YAML content.
-
-    TODO: try:
-              ctx["config"] = ParserConfig(**ctx["yaml_content"])
-          except (ValidationError, ...) as exc:
-              ctx["raised_exception"] = exc
-    """
-    ctx["config"] = None  # TODO: replace with real loading
-    ctx["raised_exception"] = None  # TODO: capture validation errors
+    try:
+        ctx["config"] = RDFConfigReader.from_string(yaml.dump(ctx["yaml_content"]))
+    except (ValidationError, TypeError, KeyError) as exc:
+        ctx["raised_exception"] = exc
 
 
 @when(parsers.parse('entity type URI "{entity_type_uri}" is resolved'))
 def resolve_entity_type_uri(ctx, entity_type_uri):
-    """
-    Call the config's entity type resolution method.
-
-    TODO: try:
-              ctx["result"] = ctx["config"].resolve_entity_type(entity_type_uri)
-          except UnsupportedEntityTypeError as exc:
-              ctx["raised_exception"] = exc
-    """
-    ctx["entity_type_uri"] = entity_type_uri
-    ctx["result"] = None  # TODO: replace with real resolution
-    ctx["raised_exception"] = None
+    try:
+        ctx["result"] = ctx["config"].resolve_entity_type(entity_type_uri)
+    except UnsupportedEntityTypeError as exc:
+        ctx["raised_exception"] = exc
 
 
 # ---------------------------------------------------------------------------
@@ -199,11 +220,9 @@ def resolve_entity_type_uri(ctx, entity_type_uri):
 
 @then("a parser configuration is created")
 def config_created(ctx):
-    """
-    TODO: assert ctx["config"] is not None
-          assert ctx["raised_exception"] is None
-    """
-    assert True  # TODO: implement
+    assert ctx.get("raised_exception") is None, f"Unexpected error: {ctx['raised_exception']}"
+    assert ctx["config"] is not None
+    assert isinstance(ctx["config"], RDFMappingConfig)
 
 
 @then(
@@ -212,11 +231,8 @@ def config_created(ctx):
     )
 )
 def config_has_counts(ctx, namespace_count, type_count):
-    """
-    TODO: assert len(ctx["config"].namespaces) == namespace_count
-          assert len(ctx["config"].entity_types) == type_count
-    """
-    assert True  # TODO: implement
+    assert len(ctx["config"].namespaces) == namespace_count
+    assert len(ctx["config"].entity_types) == type_count
 
 
 @then(
@@ -226,34 +242,30 @@ def config_has_counts(ctx, namespace_count, type_count):
     )
 )
 def entity_type_has_fields(ctx, entity_type, field_count):
-    """
-    TODO: fields = ctx["config"].entity_types[entity_type].fields
-          assert len(fields) == field_count
-          for name, path in fields.items():
-              assert isinstance(name, str) and isinstance(path, str)
-              assert "/" in path or ":" in path  # valid property path
-    """
-    assert True  # TODO: implement
+    fields = ctx["config"].entity_types[entity_type].fields
+    assert len(fields) == field_count
+    for name, path in fields.items():
+        assert isinstance(name, str)
+        assert isinstance(path, str)
+        assert ":" in path  # every valid property path segment contains a prefix colon
 
 
 @then("a configuration validation error is raised")
 def config_validation_error(ctx):
-    """
-    TODO: assert ctx["raised_exception"] is not None
-    """
-    assert True  # TODO: implement
+    assert ctx.get("raised_exception") is not None, (
+        "Expected a validation error but none was raised"
+    )
+    assert isinstance(ctx["raised_exception"], (ValidationError, TypeError, KeyError))
 
 
 @then(parsers.parse("{resolution_outcome}"))
 def assert_resolution_outcome(ctx, resolution_outcome):
-    """
-    Assert entity type URI resolution outcome from Examples table.
-
-    TODO:
-      if "configuration is returned" in resolution_outcome:
-          assert ctx["result"] is not None
-          assert ctx["raised_exception"] is None
-      elif "unsupported entity type error" in resolution_outcome:
-          assert ctx["raised_exception"] is not None
-    """
-    assert True  # TODO: implement
+    if "configuration is returned" in resolution_outcome:
+        assert ctx.get("raised_exception") is None, (
+            f"Unexpected error: {ctx.get('raised_exception')}"
+        )
+        assert ctx.get("result") is not None
+        assert isinstance(ctx["result"], EntityTypeConfig)
+    elif "unsupported entity type error is raised" in resolution_outcome:
+        assert ctx.get("raised_exception") is not None
+        assert isinstance(ctx["raised_exception"], UnsupportedEntityTypeError)

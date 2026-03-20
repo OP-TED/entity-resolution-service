@@ -37,10 +37,11 @@
 
 ## Current Phase
 
-- Branch: `feature/ERS1-142` — project setup + architecture guardrails
+- Branch: `feature/ERS1-142-task4` — EPIC-02 RDF Mention Parser implementation
 - **[2026-03-17] Architecture guardrails complete** — tier-based import-linter contracts in `.importlinter`
-- **[2026-03-17] Project setup refactored** — tool configs migrated to dedicated files, Makefile restructured with full command model
-- Next: Begin implementation phase (foundation EPICs 01–04), or write remaining curation EPICs (08–09)
+- **[2026-03-18] EPIC-02 Tasks 2, 3, 4 complete** — adapter + service + config loader + public API (`load_config`, `parse_entity_mention`); 44/44 tests passing
+- **[2026-03-18] Task 5 complete** — global config management: `env_property` + `ConfigResolverABC` pattern in `ers/commons/adapters/config_resolver.py`; all config classes + `config` singleton in `ers/__init__.py`; `pydantic-settings` removed, `python-dotenv` added; 390 unit+feature tests passing
+- Next: integration tests + Gherkin `rdf_parsing.feature` for EPIC-02, then PR
 
 ## Project Automation
 
@@ -61,6 +62,10 @@
 - 2026-03-17: `.dockerignore` moved to `infra/docker/Dockerfile.dockerignore`; `data/` excluded to avoid permission errors on postgres volume.
 - 2026-03-17: `.env` lives at `infra/.env`; all `docker compose` make targets use `--env-file infra/.env` explicitly.
 - 2026-03-18: Tests split into high-level folders by type: `tests/unit/`, `tests/feature/`, `tests/e2e/`. Markers (`unit`, `feature`, `e2e`, `integration`) applied via `pytest_collection_modifyitems` hook in `tests/conftest.py`. Makefile targets use `-m <marker>`. `pytestmark` in `conftest.py` is silently ignored by pytest — do not use it there.
+- 2026-03-18: rdflib returns 0 rows (not 1 all-None row) when an entity exists but has no configured SPARQL fields. `has_entity_of_type` must be retained alongside SPARQL to distinguish `EntityTypeMismatchError` from `EmptyExtractionError`.
+- 2026-03-18: Services layer exposes two public functions for entrypoints — `load_config()` and `parse_entity_mention(...)`. Entrypoints never instantiate `MentionParserService` directly. The class stays for unit-testability; the functions own dependency wiring.
+- 2026-03-18: Config pattern — `env_property(default_value=...)` decorator + `ConfigResolverABC` in `ers/commons/adapters/config_resolver.py`. Domain config classes in `ers/__init__.py` use UPPER_SNAKE_CASE method names (= env var keys). N802 ruff rule suppressed for that file via `ruff.toml` `[lint.per-file-ignores]`. `load_dotenv()` called at module import. Singleton: `config = AppConfigResolver()`.
+- 2026-03-18: `ers/config.py` (pydantic_settings) was deleted. If `ers/config.py` exists, Python resolves `from ers import config` as the submodule, shadowing the `__init__.py` attribute. Delete the file first, then rename.
 
 ## Codebase Patterns
 

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import ApplicationError, NotFoundError
@@ -49,7 +49,7 @@ class UserManagementService:
             is_active=dto.is_active,
             is_superuser=dto.is_superuser,
             is_verified=dto.is_verified,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await self._user_repo.save(user)
         return _to_user_response(user)
@@ -75,7 +75,7 @@ class UserManagementService:
 
         updates = dto.model_dump(exclude_none=True)
         if updates:
-            updates["updated_at"] = datetime.now(timezone.utc)
+            updates["updated_at"] = datetime.now(UTC)
             user = user.model_copy(update=updates)
             await self._user_repo.save(user)
 

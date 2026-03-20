@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
@@ -22,7 +22,7 @@ class TestListUserActions:
         client: AsyncClient,
         user_action_service: AsyncMock,
     ) -> None:
-        action = UserActionFactory.build(created_at=datetime.now(timezone.utc))
+        action = UserActionFactory.build(created_at=datetime.now(UTC))
         mention_preview = EntityMentionPreview(
             identified_by=action.about_entity_mention,
             parsed_representation='{"name": "Example Entity"}',

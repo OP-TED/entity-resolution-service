@@ -22,9 +22,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 # Scenario bindings
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(
-    Path(__file__).parent / "decision_persistence.feature"
-)
+FEATURE_FILE = str(Path(__file__).parent / "decision_persistence.feature")
 
 
 @scenario(FEATURE_FILE, "Atomic upsert preserves created_at and stores the decision")

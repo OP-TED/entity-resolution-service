@@ -5,7 +5,7 @@
 - **Component:** #2 — RDF Mention Parser
 - **Phase:** Gherkin features complete, ready for implementation
 - **Spines:** A (Resolution Intake)
-- **Last updated:** 2026-03-16
+- **Last updated:** 2026-03-18
 - **Dependencies:** ERS-EPIC-01 (JSONRepresentation model), er-spec library (domain models)
 
 ---
@@ -162,10 +162,10 @@ WHERE {
   OPTIONAL { ?entity cccev:registeredAddress/locn:postCode ?post_code . }
   OPTIONAL { ?entity cccev:registeredAddress/locn:postName ?post_name . }
   OPTIONAL { ?entity cccev:registeredAddress/locn:thoroughfare ?thoroughfare . }
-} LIMIT 1
+}
 ```
 
-Design: OPTIONAL per field (partial data OK); LIMIT 1 (single-entity); `?entity a <rdf_type>` anchors subject; SPARQL 1.1 property paths.
+Design: OPTIONAL per field (partial data OK); no LIMIT (multi-entity guard is in the service); `?entity a <rdf_type>` anchors subject; SPARQL 1.1 property paths. Built with `string.Template`.
 
 ### 6.3 Constants
 
@@ -229,6 +229,7 @@ Service level only (constraint #9):
 | `UnsupportedContentTypeError` | Not in SUPPORTED_CONTENT_TYPES | 415 | "Content type '{content_type}' not supported." | WARN |
 | `MalformedRDFError` | rdflib parse exception | 400 | "Content is not valid {content_type}." | ERROR |
 | `EntityTypeMismatchError` | No subject of declared rdf_type in graph | 422 | "No entity of type '{entity_type}' in content." | WARN |
+| `MultipleEntitiesFoundError` | SPARQL returns >1 row | 422 | "Expected exactly 1 entity of type '...', found N." | WARN |
 | `EmptyExtractionError` | All SPARQL result values None/empty | 422 | "No data extracted for type '{entity_type}'." | WARN |
 
 All errors are FATAL. No partial results. Each maps to a specific exception in `models/errors.py`.
@@ -311,11 +312,11 @@ At `tests/features/rdf_mention_parser/`:
 **Task 6: Gherkin Features** -- tests/features/ -- Needs Tasks 1-4 -- All scenarios pass via pytest-bdd.
 
 ## Roadmap
-- [ ] Task 1: Define Configuration Models (models)
-- [ ] Task 2: Implement RDF Parser Adapter (adapters)
-- [ ] Task 3: Implement Mention Parser Service (services)
-- [ ] Task 4: Configuration YAML and Loading (adapters)
-- [ ] Task 5: Unit and Integration Tests (tests)
+- [x] Task 1: Define Configuration Models (domain) — `EntityTypeConfig`, `RDFMappingConfig`, `UnsupportedEntityTypeError`
+- [x] Task 2: Implement RDF Parser Adapter (adapters) — RDFLib graph parsing + SPARQL execution
+- [x] Task 3: Implement Mention Parser Service (services) — full parse flow; `build_sparql_query` (string.Template, no LIMIT 1); `MultipleEntitiesFoundError`; public API `load_config` + `parse_entity_mention`; 23/23 unit tests passing
+- [x] Task 4: Configuration YAML and Loading (adapters) — `RDFConfigReader` + unit tests + Gherkin features (parser_configuration.feature 12/12)
+- [ ] Task 5: Unit and Integration Tests (tests) — TC-001..013, IT-001..003; >= 90% coverage
 - [ ] Task 6: Gherkin Features (tests/features)
 
 ## 15. References
