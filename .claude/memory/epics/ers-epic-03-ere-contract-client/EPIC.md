@@ -232,12 +232,12 @@ All error types defined in a local `models/errors.py` module. Each inherits from
 - All Gherkin scenarios from Section 11 pass via pytest-bdd.
 
 ## Roadmap
-- [ ] Task 1: Define Error Models and Configuration (models)
-- [ ] Task 2: Implement Redis Adapter (adapters)
-- [ ] Task 3: Implement Publish Service (services)
-- [ ] Task 4: Unit Tests (tests)
-- [ ] Task 5: Integration Tests (tests)
-- [ ] Task 6: Gherkin Features (tests/features)
+- [ ] Task 1: Define Error Models (models/errors.py)
+- [x] Task 2: Implement Redis Adapter (commons/adapters/redis_client.py) — Done
+- [ ] Task 3: Implement Publish Service (services/ere_publish_service.py)
+- [ ] Task 4: Unit Tests (errors + service)
+- [ ] Task 5: Integration Tests (service round-trip)
+- [ ] Task 6: Gherkin Features (wire step definitions)
 
 ## 8. Test Case Specifications
 
@@ -427,7 +427,159 @@ At `tests/features/ere_contract_client/`:
 
 # Part 2 — Implementation Log
 
-<!-- Written and updated by the implementer during Phase 3. -->
+## Implementation Plan
+
+**Status (2026-03-18):** Gherkin features + step scaffolding complete. Shared commons adapter implemented. Service layer in progress.
+
+### Current State
+
+**✅ Done:**
+- Feature files written (2 `.feature` files, 7 scenarios total)
+  - `tests/ere_contract_client/features/request_publishing.feature`
+  - `tests/ere_contract_client/features/request_validation_and_transport.feature`
+- BDD step definitions scaffolded (2 Python step modules with TODO placeholders)
+  - `tests/ere_contract_client/steps/test_request_publishing.py`
+  - `tests/ere_contract_client/steps/test_request_validation_and_transport.py`
+- **Redis adapter** (`src/ers/commons/adapters/redis_client.py`)
+  - `RedisEREClient` (async push/pull/close, context manager, testcontainers round-trip)
+  - `AbstractClient` ABC
+  - `RedisConnectionConfig` (plain class with host/port/db/timeout fields)
+  - Tests: `tests/commons/adapters/test_redis_client.py` (unit + integration, in progress)
+- **Message utilities** (`src/ers/commons/adapters/redis_messages.py`)
+  - `get_request_from_message` / `get_response_from_message` deserialisation
+
+**❌ Not started:**
+- Domain error models (`models/errors.py`)
+- Publish service (`services/ere_publish_service.py`)
+- Step implementations (wire real code to BDD steps)
+
+### Implementation Roadmap
+
+#### Phase 1: Foundation (Tasks 1–2)
+
+**Task 1: Models** — `ers/ere_contract_client/models/`
+- **File:** `models/__init__.py`
+- **File:** `models/errors.py` — Base `EREContractError` + 4 subclasses: `InvalidRequestError`, `SerializationError`, `ChannelUnavailableError`, `RedisConnectionError` (per Section 6)
+- **Dependencies:** None
+- **Acceptance:** All error classes instantiable; str(error) includes message; all inherit from `EREContractError`
+- **Note:** `RedisConnectionConfig` not needed here — reuse from `ers.commons.adapters.redis_client`
+
+**Task 2: Redis Adapter** — ✅ **DONE** — `src/ers/commons/adapters/redis_client.py`
+- `RedisEREClient` class provides async push/pull/close with context manager support
+- `AbstractClient` ABC for DIP
+- `RedisConnectionConfig` dataclass with host/port/db/timeout fields
+- Tests in `tests/commons/adapters/test_redis_client.py`
+- **Design rationale:** `pull_response()` instead of `subscribe_responses(Generator)` for fine-grained async control
+  - Internal loops block the event loop; callers cannot interleave other async tasks
+  - `pull_response()` is a single `await`-able call, allowing callers to use `asyncio.gather`, compose with other tasks, handle cancellation
+  - Correct async Python design pattern
+- **Error handling:** Adapter raises standard exceptions (`TimeoutError`, `redis.exceptions.RedisConnectionError`)
+  - Domain error wrapping happens at service layer (Task 3), not adapter, to preserve commons independence
+- **Acceptance:** Per TC-007 through TC-011 (Section 8) — all unit and integration tests pass
+
+#### Phase 2: Service & BDD Integration (Task 3)
+
+**Task 3: Publish Service** — `ers/ere_contract_client/services/`
+- **File:** `services/__init__.py`
+- **File:** `services/ere_publish_service.py` — `EREPublishService` class (per Section 5 steps 1–9)
+  - `__init__(adapter: AbstractClient)` — injects `RedisEREClient` from commons
+  - `publish_request(request: EntityMentionResolutionRequest) -> str` — returns `ere_request_id`
+  - Validates triad completeness (source_id, request_id, entity_type) — raises `InvalidRequestError` if incomplete
+  - Auto-generates `ere_request_id` (UUID4) if absent
+  - Auto-sets `timestamp` to UTC now if absent
+  - Calls `adapter.push_request()` (adapter handles serialization via JSONDumper)
+  - Catches adapter exceptions and wraps as domain errors: `TimeoutError` → `ChannelUnavailableError`, `redis.ConnectionError` → `RedisConnectionError`
+  - OTel span: `ere_contract_client.publish` with triad + ere_request_id + action_type attributes (service layer only, per constraint #9)
+  - Structured logging (INFO on success, ERROR on failure)
+- **Dependencies:** Task 1 (errors) + Task 2 (adapter from commons)
+- **Acceptance:** Per TC-012 through TC-017 (Section 8); all BDD scenarios pass
+
+**Step Definition Integration:**
+- Wire `test_request_publishing.py` steps to real `EREPublishService` and `RedisEREAdapter` (mocked)
+- Wire `test_request_validation_and_transport.py` steps to real service/adapter with failure scenarios
+
+#### Phase 3: Testing (Tasks 4–5)
+
+**Task 4: Unit Tests** — Focused tests per layer
+- `tests/ere_contract_client/unit/test_errors.py` — Error hierarchy (TC-006)
+- `tests/ere_contract_client/unit/test_publish_service.py` — Service behavior (TC-012 through TC-017) using mocked adapter
+- **Adapter tests:** Already in `tests/commons/adapters/test_redis_client.py` (TC-007 through TC-011)
+- **Target:** ≥ 90% coverage on errors + service modules
+
+**Task 5: Integration Tests** — Full round-trip with real Redis
+- `tests/ere_contract_client/integration/test_service_round_trip.py` — Full stack: service + real `RedisEREClient` + testcontainers (IT-001)
+- `tests/ere_contract_client/integration/test_service_error_scenarios.py` — Connection failures, serialization errors (derived from IT-002 through IT-005)
+- **Adapter integration tests:** Already in `tests/commons/adapters/test_redis_client.py`
+- Use `testcontainers` or local Redis; skip if unavailable
+- **Target:** All integration tests pass
+
+### File Structure
+
+**Source code (Shared commons adapter):**
+```
+ers/
+  commons/
+    adapters/
+      redis_client.py           ✅ Done — RedisEREClient, AbstractClient, RedisConnectionConfig
+      redis_messages.py         ✅ Done — deserialisation utilities
+  ere_contract_client/
+    __init__.py
+    models/
+      __init__.py
+      errors.py                 ← Task 1
+    services/
+      __init__.py
+      ere_publish_service.py    ← Task 3
+```
+
+**Tests:**
+```
+tests/
+  commons/
+    adapters/
+      test_redis_client.py      ✅ Done — unit + integration (testcontainers round-trip)
+  ere_contract_client/
+    features/
+      request_publishing.feature                    ✅ Done
+      request_validation_and_transport.feature      ✅ Done
+    steps/
+      test_request_publishing.py                    ✅ Scaffolding (fill in Task 3)
+      test_request_validation_and_transport.py      ✅ Scaffolding (fill in Task 3)
+    unit/
+      test_errors.py              ← Task 4
+      test_publish_service.py     ← Task 4
+    integration/
+      test_service_round_trip.py        ← Task 5
+      test_service_error_scenarios.py   ← Task 5
+```
+
+### Implementation Order & Dependencies
+
+```
+Task 1: Error Models
+  ↓ (blocks Task 3)
+Task 3: Publish Service + Fill BDD Steps
+  ↓ (blocks Task 4)
+Task 4: Unit Tests (errors + service)
+Task 5: Integration Tests (service round-trip)
+```
+
+**Rationale:**
+- Task 1 is dependency-free; provides error types for service
+- Task 2 is done (`commons/adapters/redis_client.py`); service injects `AbstractClient`
+- Task 3 depends on Task 1; wires step definitions; maps adapter exceptions to domain errors
+- Task 4 & 5 depend on 1–3 to have something to test
+
+### Next Action
+
+Start **Task 1: Error Models** immediately:
+1. Create `models/errors.py` with base `EREContractError` + 4 subclasses
+   - `InvalidRequestError` — triad validation failures
+   - `SerializationError` — JSON serialization fails (adapter level)
+   - `ChannelUnavailableError` — Redis push returns 0 or fails
+   - `RedisConnectionError` — connection refused, timeout
+2. Add unit tests
+3. Target: ≥ 90% coverage
 
 ---
 

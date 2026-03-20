@@ -1,0 +1,162 @@
+import logging
+from abc import ABC, abstractmethod
+
+import redis.asyncio as aioredis
+from linkml_runtime.dumpers import JSONDumper
+from redis.exceptions import ConnectionError as RedisConnectionError
+
+from ers.commons.adapters.redis_messages import get_response_from_message
+from erspec.models.ere import ERERequest, EREResponse
+
+log = logging.getLogger(__name__)
+
+_linkml_dumper = JSONDumper()
+
+
+ERE_REQUEST_CHANNEL_ID = "ere_requests"
+ERE_RESPONSE_CHANNEL_ID = "ere_responses"
+
+
+class RedisConnectionConfig:
+    """Simple data class to hold Redis connection configuration."""
+
+    def __init__(self, host: str = "localhost", port: int = 6379, db: int = 0):
+        self.host = host
+        self.port = port
+        self.db = db
+
+    def __str__(self) -> str:
+        return f'RedisConnectionConfig ( host: "{self.host}", port: "{self.port}", db: "{self.db}" )'
+
+
+class AbstractClient(ABC):
+    """Abstraction of a client to access with an ERS instance."""
+
+    @abstractmethod
+    async def push_request(self, request: ERERequest) -> None:
+        """Push a request onto the request channel."""
+
+    @abstractmethod
+    async def pull_response(self) -> EREResponse:
+        """Pull the next response from the response channel.
+
+        Blocks until a message is available or the timeout expires.
+
+        Returns:
+            The next EREResponse from the channel.
+
+        Raises:
+            TimeoutError: If timeout > 0 and no response arrives in time.
+            RedisConnectionError: On connection failure.
+        """
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Close the underlying connection and release resources."""
+
+    async def __aenter__(self) -> "AbstractClient":
+        return self
+
+    async def __aexit__(self, *_) -> None:
+        await self.close()
+
+
+class RedisEREClient(AbstractClient):
+    """A simple ERS client that interacts with a Redis queue."""
+
+    def __init__(
+        self,
+        config_or_client: RedisConnectionConfig | aioredis.Redis = RedisConnectionConfig(),
+        timeout: float = 0,
+    ):
+        """Initialise the Redis ERE client.
+
+        Args:
+            config_or_client: A RedisConnectionConfig to create a new connection
+                (owned and closed by this client), or an existing aioredis.Redis
+                instance to reuse (caller retains ownership and must close it).
+            timeout: Maximum seconds to wait for a response in pull_response().
+                0 (default) blocks indefinitely.
+        """
+        if isinstance(config_or_client, RedisConnectionConfig):
+            self.config = config_or_client
+            log.info("Redis ERE client: connecting to %s", self.config)
+            self._redis_client = aioredis.Redis(
+                host=self.config.host, port=self.config.port, db=self.config.db
+            )
+        else:
+            log.info("Redis ERE client: using existing redis client #%s", id(config_or_client))
+            conn_args = config_or_client.connection_pool.connection_kwargs
+            log.debug(
+                "Redis client config: host=%s, port=%s, db=%s, unix_socket_path=%s",
+                conn_args.get("host"),
+                conn_args.get("port"),
+                conn_args.get("db"),
+                conn_args.get("unix_socket_path"),
+            )
+            self._redis_client = config_or_client
+
+        self.character_encoding = "utf-8"
+        self.request_channel_id = ERE_REQUEST_CHANNEL_ID
+        self.response_channel_id = ERE_RESPONSE_CHANNEL_ID
+        self._owns_client = isinstance(config_or_client, RedisConnectionConfig)
+        self.timeout = timeout
+        if timeout:
+            log.debug("Redis ERE client: pull_response() timeout set to %ss", timeout)
+        else:
+            log.debug("Redis ERE client: pull_response() timeout not set, blocking indefinitely")
+
+    async def push_request(self, request: ERERequest) -> None:
+        """Push a request onto the request channel identified by ERE_REQUEST_CHANNEL_ID."""
+        log.debug(
+            "Redis ERE client, pushing request id: %s to channel: %s",
+            request.ere_request_id,
+            self.request_channel_id,
+        )
+        msg_json_str = _linkml_dumper.dumps(request)
+        await self._redis_client.lpush(self.request_channel_id, msg_json_str)
+        log.debug("Redis ERE client, request id: %s sent", request.ere_request_id)
+
+    async def pull_response(self) -> EREResponse:
+        """Pull the next response from the response channel identified by
+        ERE_RESPONSE_CHANNEL_ID.
+
+        Returns:
+            The next EREResponse from the channel.
+
+        Raises:
+            TimeoutError: If no response arrives within the configured timeout.
+            RedisConnectionError: On connection failure.
+        """
+        log.debug(
+            "Redis ERE client, waiting for response on channel: %s",
+            self.response_channel_id,
+        )
+        try:
+            result = await self._redis_client.brpop(self.response_channel_id, timeout=self.timeout)
+        except RedisConnectionError as ex:
+            log.error("Redis ERE client, pull_response() failed due to connection issue: %s", ex)
+            raise
+        if result is None:
+            raise TimeoutError(
+                f"No response received on channel '{self.response_channel_id}' within {self.timeout}s"
+            )
+        _, raw_msg = result
+        response = get_response_from_message(raw_msg, self.character_encoding)
+        log.debug("Redis ERE client, received response id: %s", response.ere_request_id)
+        return response
+
+    async def close(self) -> None:
+        """Close the connection if owned by this client; no-op otherwise.
+
+        Logs a warning if closing fails but does not raise, so callers
+        (including context manager exit) are never interrupted by cleanup errors.
+        """
+        if not self._owns_client:
+            log.debug("Redis ERE client: connection not owned, skipping close")
+            return
+        try:
+            log.info("Redis ERE client: closing connection")
+            await self._redis_client.aclose()
+        except Exception as ex:
+            log.warning("Redis ERE client: failed to close connection cleanly: %s", ex)

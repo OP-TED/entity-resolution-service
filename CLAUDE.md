@@ -60,6 +60,12 @@ These rules apply to ALL agents in this project.
   **Note:** The innermost layer is called `domain` (not `models`) in this project.
 - Always use Context7 when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
 
+### Code Documentation & Docstrings
+- All docstrings must follow **Google Python style** (see `.claude/references/google_python_docstring_style.md`).
+- Key rules: one-line summary first, then optional description, then `Args`, `Returns`, `Raises` sections.
+- Write for behaviour, not implementation; focus on inputs, outputs, and exceptions.
+- Keep docstrings concise; avoid redundancy with self-documenting code.
+
 ### Interaction
 
 - Never make assumptions — ask clarifying questions when information is missing.
