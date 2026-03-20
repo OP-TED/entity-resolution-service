@@ -7,14 +7,14 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from erspec.models.core import EntityMention, EntityMentionIdentifier
+from erspec.models.core import EntityMentionIdentifier
 from pymongo.errors import ConnectionFailure, DuplicateKeyError, PyMongoError
 
 from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
 )
-from ers.request_registry.domain.records import LookupState, ResolutionRequestRecord
+from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
 from ers.request_registry.services.exceptions import (
     DuplicateTriadError,
     RepositoryConnectionError,
@@ -40,18 +40,11 @@ def _identifier() -> EntityMentionIdentifier:
     )
 
 
-def _entity_mention() -> EntityMention:
-    return EntityMention(
+def _record() -> ResolutionRequestRecord:
+    return ResolutionRequestRecord(
         identifiedBy=_identifier(),
         content=CONTENT,
         content_type="application/ld+json",
-    )
-
-
-def _record() -> ResolutionRequestRecord:
-    return ResolutionRequestRecord(
-        identifier=_identifier(),
-        entity_mention=_entity_mention(),
         content_hash=VALID_HASH,
         received_at=datetime.now(UTC),
     )
@@ -221,13 +214,13 @@ class TestFindByTriad:
     ) -> None:
         record = _record()
         doc = record.model_dump(mode="json")
-        doc["_id"] = repo._triad_id(record.identifier)
+        doc["_id"] = repo._triad_id(record.identifiedBy)
         async_collection.find_one.return_value = doc
 
         result = await repo.find_by_triad(_identifier())
 
         assert result is not None
-        assert result.identifier == _identifier()
+        assert result.identifiedBy == _identifier()
         assert result.content_hash == VALID_HASH
 
 
@@ -240,18 +233,18 @@ class TestFromDocument:
     def test_pops_id_and_validates(self, repo: MongoResolutionRequestRepository) -> None:
         record = _record()
         doc = record.model_dump(mode="json")
-        doc["_id"] = repo._triad_id(record.identifier)
+        doc["_id"] = repo._triad_id(record.identifiedBy)
 
         result = repo._from_document(doc)
 
-        assert result.identifier.source_id == SOURCE_ID
+        assert result.identifiedBy.source_id == SOURCE_ID
         assert result.content_hash == VALID_HASH
         assert "_id" not in result.model_dump()
 
     def test_original_doc_not_mutated(self, repo: MongoResolutionRequestRepository) -> None:
         record = _record()
         doc = record.model_dump(mode="json")
-        doc["_id"] = repo._triad_id(record.identifier)
+        doc["_id"] = repo._triad_id(record.identifiedBy)
         original_keys = set(doc.keys())
 
         repo._from_document(doc)
@@ -282,7 +275,7 @@ class TestMongoLookupStateRepository:
         lookup_collection: AsyncMock,
     ) -> None:
         now = datetime.now(UTC)
-        state = LookupState(source_id=SOURCE_ID, last_snapshot=now, updated_at=now)
+        state = LookupRequestRecord(source_id=SOURCE_ID, last_snapshot=now, updated_at=now)
         lookup_collection.replace_one.return_value = MagicMock()
 
         result = await lookup_repo.upsert(state)
@@ -312,7 +305,7 @@ class TestMongoLookupStateRepository:
         lookup_collection: AsyncMock,
     ) -> None:
         now = datetime.now(UTC)
-        state = LookupState(source_id=SOURCE_ID, last_snapshot=now, updated_at=now)
+        state = LookupRequestRecord(source_id=SOURCE_ID, last_snapshot=now, updated_at=now)
         doc = state.model_dump(mode="json")
         doc["_id"] = SOURCE_ID
         lookup_collection.find_one.return_value = doc

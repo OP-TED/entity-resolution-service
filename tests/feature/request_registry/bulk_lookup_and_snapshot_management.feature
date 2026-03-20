@@ -1,61 +1,12 @@
-Feature: Lookup Request Registration and Snapshot State Management
-  As a process that coordinates entity mention lookups and delta exposure for source systems,
-  I want to register both single and bulk lookup requests and advance the snapshot watermark per source,
-  So that each source's lookup activity is tracked for audit
-  and each source's last successful bulk refresh point is tracked reliably
+Feature: Snapshot State Management
+  As a process that coordinates delta exposure for source systems,
+  I want to advance the snapshot watermark per source,
+  So that each source's last successful bulk refresh point is tracked reliably
   and backward time movement is detected and rejected.
 
   Background:
     Given the Request Registry service is available
     And the repository is empty
-
-  Scenario Outline: Register a bulk lookup request
-    Given a source system identified by "<source_id>"
-    When a bulk lookup request is registered for "<source_id>"
-    Then a lookup request record is returned for "<source_id>"
-    And the lookup request record has request type BULK
-    And the lookup request record has a requested_at timestamp set to the current UTC time
-
-    Examples:
-      | source_id       |
-      | source_system_a |
-      | source_system_b |
-
-  Scenario Outline: Register multiple bulk lookup requests from the same source
-    Given a source system identified by "<source_id>"
-    And a bulk lookup request has already been registered for "<source_id>"
-    When a second bulk lookup request is registered for "<source_id>"
-    Then both lookup request records exist in the repository for "<source_id>"
-    And the earlier record is not modified
-
-    Examples:
-      | source_id       |
-      | source_system_a |
-      | source_system_b |
-
-  Scenario Outline: Register a single lookup request
-    Given a source system identified by "<source_id>"
-    When a single lookup request is registered for "<source_id>"
-    Then a lookup request record is returned for "<source_id>"
-    And the lookup request record has request type SINGLE
-    And the lookup request record has a requested_at timestamp set to the current UTC time
-
-    Examples:
-      | source_id       |
-      | source_system_a |
-      | source_system_b |
-
-  Scenario Outline: Register lookup requests of different types from the same source
-    Given a source system identified by "<source_id>"
-    And a bulk lookup request has already been registered for "<source_id>"
-    When a single lookup request is registered for "<source_id>"
-    Then both lookup request records exist in the repository for "<source_id>"
-    And the earlier record is not modified
-
-    Examples:
-      | source_id       |
-      | source_system_a |
-      | source_system_b |
 
   Scenario Outline: Advance the snapshot for a source system
     Given a source system identified by "<source_id>"

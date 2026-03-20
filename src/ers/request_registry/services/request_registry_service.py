@@ -6,14 +6,11 @@ from erspec.models.core import EntityMention, EntityMentionIdentifier
 
 from ers.commons.adapters.hasher import ContentHasher
 from ers.request_registry.adapters.records_repository import (
-    LookupRequestRepository,
-    LookupStateRepository,
-    ResolutionRequestRepository,
+    MongoLookupStateRepository,
+    MongoResolutionRequestRepository,
 )
 from ers.request_registry.domain.records import (
     LookupRequestRecord,
-    LookupRequestType,
-    LookupState,
     ResolutionRequestRecord,
 )
 from ers.request_registry.services.exceptions import (
@@ -31,14 +28,12 @@ class RequestRegistryService:
 
     def __init__(
         self,
-        resolution_repo: ResolutionRequestRepository,
-        lookup_repo: LookupStateRepository,
-        lookup_request_repo: LookupRequestRepository,
+        resolution_repo: MongoResolutionRequestRepository,
+        lookup_repo: MongoLookupStateRepository,
         hasher: ContentHasher,
     ) -> None:
         self._resolution_repo = resolution_repo
         self._lookup_repo = lookup_repo
-        self._lookup_request_repo = lookup_request_repo
         self._hasher = hasher
 
     async def register_resolution_request(
@@ -64,8 +59,7 @@ class RequestRegistryService:
             raise IdempotencyConflictError(identifier)
 
         record = ResolutionRequestRecord(
-            identifier=identifier,
-            entity_mention=entity_mention,
+            **entity_mention.model_dump(),
             content_hash=content_hash,
             received_at=datetime.now(UTC),
         )
@@ -83,26 +77,11 @@ class RequestRegistryService:
         """Return a paginated list of records for a source."""
         return await self._resolution_repo.find_by_source_id(source_id, limit=limit, offset=offset)
 
-    async def register_lookup_request(
-        self, source_id: str, request_type: LookupRequestType
-    ) -> LookupRequestRecord:
-        """Register that a lookup was requested from a source (append-only).
-
-        Always succeeds. Sets requested_at to the current UTC time.
-        Multiple records per source_id are allowed — this is an audit log.
-        """
-        record = LookupRequestRecord(
-            source_id=source_id,
-            requested_at=datetime.now(UTC),
-            request_type=request_type,
-        )
-        return await self._lookup_request_repo.store(record)
-
-    async def get_lookup_state(self, source_id: str) -> LookupState | None:
+    async def get_lookup_state(self, source_id: str) -> LookupRequestRecord | None:
         """Return the current LookupState for a source, or None if unknown."""
         return await self._lookup_repo.get(source_id)
 
-    async def advance_snapshot(self, source_id: str, snapshot_time: datetime) -> LookupState:
+    async def advance_snapshot(self, source_id: str, snapshot_time: datetime) -> LookupRequestRecord:
         """Advance the per-source delta watermark to snapshot_time.
 
         Raises SnapshotRegressionError if snapshot_time <= current last_snapshot.
@@ -115,7 +94,7 @@ class RequestRegistryService:
                 attempted=snapshot_time,
             )
         now = datetime.now(UTC)
-        new_state = LookupState(
+        new_state = LookupRequestRecord(
             source_id=source_id,
             last_snapshot=snapshot_time,
             updated_at=now if now >= snapshot_time else snapshot_time,

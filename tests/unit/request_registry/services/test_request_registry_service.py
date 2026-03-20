@@ -11,11 +11,10 @@ from erspec.models.core import EntityMention, EntityMentionIdentifier
 
 from ers.commons.adapters.hasher import SHA256ContentHasher
 from ers.request_registry.adapters.records_repository import (
-    LookupRequestRepository,
-    LookupStateRepository,
-    ResolutionRequestRepository,
+    MongoLookupStateRepository,
+    MongoResolutionRequestRepository,
 )
-from ers.request_registry.domain.records import LookupState, ResolutionRequestRecord
+from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
 from ers.request_registry.services.exceptions import (
     IdempotencyConflictError,
     SnapshotRegressionError,
@@ -56,17 +55,12 @@ def _entity_mention(content: str = CONTENT) -> EntityMention:
 
 @pytest.fixture
 def resolution_repo() -> AsyncMock:
-    return create_autospec(ResolutionRequestRepository, instance=True)
+    return create_autospec(MongoResolutionRequestRepository, instance=True)
 
 
 @pytest.fixture
 def lookup_repo() -> AsyncMock:
-    return create_autospec(LookupStateRepository, instance=True)
-
-
-@pytest.fixture
-def lookup_request_repo() -> AsyncMock:
-    return create_autospec(LookupRequestRepository, instance=True)
+    return create_autospec(MongoLookupStateRepository, instance=True)
 
 
 @pytest.fixture
@@ -78,13 +72,11 @@ def hasher() -> SHA256ContentHasher:
 def service(
     resolution_repo: AsyncMock,
     lookup_repo: AsyncMock,
-    lookup_request_repo: AsyncMock,
     hasher: SHA256ContentHasher,
 ) -> RequestRegistryService:
     return RequestRegistryService(
         resolution_repo=resolution_repo,
         lookup_repo=lookup_repo,
-        lookup_request_repo=lookup_request_repo,
         hasher=hasher,
     )
 
@@ -106,7 +98,7 @@ class TestRegisterResolutionRequest:
         result = await service.register_resolution_request(_entity_mention())
 
         resolution_repo.store.assert_called_once()
-        assert result.identifier == _identifier()
+        assert result.identifiedBy == _identifier()
 
     async def test_new_registration_computes_correct_sha256_hash(
         self,
@@ -144,15 +136,15 @@ class TestRegisterResolutionRequest:
         resolution_repo: AsyncMock,
         hasher: SHA256ContentHasher,
     ) -> None:
+        mention = _entity_mention()
         existing = ResolutionRequestRecord(
-            identifier=_identifier(),
-            entity_mention=_entity_mention(),
+            **mention.model_dump(),
             content_hash=hasher.hash(CONTENT),
             received_at=datetime.now(UTC),
         )
         resolution_repo.find_by_triad.return_value = existing
 
-        result = await service.register_resolution_request(_entity_mention())
+        result = await service.register_resolution_request(mention)
 
         resolution_repo.store.assert_not_called()
         assert result is existing
@@ -164,16 +156,16 @@ class TestRegisterResolutionRequest:
         service: RequestRegistryService,
         resolution_repo: AsyncMock,
     ) -> None:
+        mention = _entity_mention()
         existing = ResolutionRequestRecord(
-            identifier=_identifier(),
-            entity_mention=_entity_mention(),
+            **mention.model_dump(),
             content_hash="a" * 64,  # different hash
             received_at=datetime.now(UTC),
         )
         resolution_repo.find_by_triad.return_value = existing
 
         with pytest.raises(IdempotencyConflictError) as exc_info:
-            await service.register_resolution_request(_entity_mention())
+            await service.register_resolution_request(mention)
 
         assert exc_info.value.identifier == _identifier()
 
@@ -182,16 +174,16 @@ class TestRegisterResolutionRequest:
         service: RequestRegistryService,
         resolution_repo: AsyncMock,
     ) -> None:
+        mention = _entity_mention()
         existing = ResolutionRequestRecord(
-            identifier=_identifier(),
-            entity_mention=_entity_mention(),
+            **mention.model_dump(),
             content_hash="b" * 64,
             received_at=datetime.now(UTC),
         )
         resolution_repo.find_by_triad.return_value = existing
 
         with pytest.raises(IdempotencyConflictError):
-            await service.register_resolution_request(_entity_mention())
+            await service.register_resolution_request(mention)
 
         resolution_repo.store.assert_not_called()
 
@@ -239,7 +231,7 @@ class TestAdvanceSnapshot:
     ) -> None:
         t1 = datetime(2026, 3, 1, tzinfo=UTC)
         t2 = datetime(2026, 3, 2, tzinfo=UTC)
-        current = LookupState(source_id=SOURCE_ID, last_snapshot=t1, updated_at=t1)
+        current = LookupRequestRecord(source_id=SOURCE_ID, last_snapshot=t1, updated_at=t1)
         lookup_repo.get.return_value = current
         lookup_repo.upsert.side_effect = lambda s: s
 
@@ -255,7 +247,7 @@ class TestAdvanceSnapshot:
     ) -> None:
         t1 = datetime(2026, 3, 5, tzinfo=UTC)
         t_earlier = datetime(2026, 3, 1, tzinfo=UTC)
-        current = LookupState(source_id=SOURCE_ID, last_snapshot=t1, updated_at=t1)
+        current = LookupRequestRecord(source_id=SOURCE_ID, last_snapshot=t1, updated_at=t1)
         lookup_repo.get.return_value = current
 
         with pytest.raises(SnapshotRegressionError) as exc_info:
@@ -271,7 +263,7 @@ class TestAdvanceSnapshot:
         lookup_repo: AsyncMock,
     ) -> None:
         t1 = datetime(2026, 3, 5, tzinfo=UTC)
-        current = LookupState(source_id=SOURCE_ID, last_snapshot=t1, updated_at=t1)
+        current = LookupRequestRecord(source_id=SOURCE_ID, last_snapshot=t1, updated_at=t1)
         lookup_repo.get.return_value = current
 
         with pytest.raises(SnapshotRegressionError):

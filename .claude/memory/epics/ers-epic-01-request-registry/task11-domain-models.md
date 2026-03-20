@@ -1,56 +1,23 @@
-# Task 1.1 — Domain Models: Request Registry
+# Task 1.1 — Domain Models: Request Registry (and rest API model adjustments)
 
 ## Specification Summary
 
-Implement the domain models for the Request Registry (`src/ers/request_registry/domain/`). All models are immutable Pydantic records (frozen). No I/O, no service logic, no framework deps. Also extend `src/ers/commons/adapters/hasher.py` with `SHA256ContentHasher`.
-
-### Files to Create/Modify
-
-- Create: `src/ers/request_registry/domain/records.py`
-- Create: `src/ers/request_registry/__init__.py`, `src/ers/request_registry/domain/__init__.py`
-- Extend: `src/ers/commons/adapters/hasher.py` — add `SHA256ContentHasher`
+Implement the domain models for the Request Registry (`src/ers/request_registry/domain/`). Also extend `src/ers/commons/adapters/hasher.py` with `SHA256ContentHasher`.
 
 ### Models (`records.py`)
 
-All inherit `FrozenDTO`. Standard `datetime` only (no Pydantic-specific types).
-
-**`JSONRepresentation`**
-- `data: dict[str, Any]` — arbitrary parsed payload; no internal validation. Placeholder for EPIC-02.
-
-**`ResolutionRequestRecord`**
-- `identifier: EntityMentionIdentifier` — triad, unique key
-- `entity_mention: EntityMention` — full payload as submitted
+**`ResolutionRequestRecord(FrozenDTO, EntityMention)`**
+- Inherits from erspec `EntityMention`: `identifiedBy`, `content`, `content_type`, `parsed_representation`, `context`
 - `content_hash: str` — SHA-256 hex, validated: `pattern=r'^[0-9a-f]{64}$'`
 - `received_at: datetime` — must be timezone-aware (field_validator)
-- `json_representation: JSONRepresentation | None = None`
 
-**`LookupState`**
-- `source_id: str` — `min_length=1`, unique key
-- `last_snapshot: datetime` — must be timezone-aware
+**`LookupRequestRecord(FrozenDTO, LookupState)`**
+- Inherits from erspec `LookupState`: `source_id`, `last_snapshot`
 - `updated_at: datetime` — must be timezone-aware; cross-field: `updated_at >= last_snapshot`
 
 ### Hasher Extension
 
-Add to `src/ers/commons/adapters/hasher.py`:
-
-```python
-class SHA256ContentHasher(ContentHasher):
-    """Fast, deterministic hasher for content deduplication. Not for passwords."""
-    def hash(self, content: str) -> str:
-        return hashlib.sha256(content.encode()).hexdigest()
-    def verify(self, content: str, hash: str) -> bool:
-        return self.hash(content) == hash
-```
-
-### Acceptance Criteria
-
-1. `from ers.request_registry.domain.records import ResolutionRequestRecord, LookupState` works.
-2. All models frozen: mutation raises `ValidationError`.
-3. `content_hash` rejects non-64-char or non-hex strings.
-4. Naive datetimes rejected on all datetime fields.
-5. `LookupState` rejects `updated_at < last_snapshot`.
-6. `SHA256ContentHasher().hash("")` == `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
-7. All unit tests pass.
+`SHA256ContentHasher` in `src/ers/commons/adapters/hasher.py`.
 
 ---
 
@@ -58,30 +25,39 @@ class SHA256ContentHasher(ContentHasher):
 
 ### What Was Accomplished
 
-- Created `src/ers/request_registry/__init__.py` (empty package marker)
-- Created `src/ers/request_registry/domain/__init__.py` (empty package marker)
-- Created `src/ers/request_registry/domain/records.py` with:
-  - `LookupRequestType(StrEnum)` — SINGLE and BULK values
-  - `JSONRepresentation(FrozenDTO)` — thin wrapper for parsed JSON dict
-  - `ResolutionRequestRecord(FrozenDTO)` — immutable intake record with identifier, entity_mention, content_hash, received_at, json_representation
-  - `LookupRequestRecord(FrozenDTO)` — append-only lookup audit record
-  - `LookupState(FrozenDTO)` — per-source watermark for bulk synchronisation
-- Extended `src/ers/commons/adapters/hasher.py` with `SHA256ContentHasher` implementing the `ContentHasher` ABC via `hashlib.sha256`
-- Created `tests/unit/commons/adapters/test_sha256_hasher.py` — 8 tests for the hasher
-- Created `tests/unit/request_registry/domain/test_records.py` — 27 tests across all 5 model types
-- **Total: 35 new tests, all pass. Full unit suite: 276/276 pass.**
+**Phase 1 (prior sessions):**
+- Created `src/ers/request_registry/domain/records.py`, package markers, `SHA256ContentHasher`
+- Created `tests/unit/commons/adapters/test_sha256_hasher.py` — 8 tests
+
+**Phase 2 (2026-03-20) — model simplification + test/adapter/service alignment:**
+
+Domain models were manually simplified to compose with erspec base classes instead of flat fields. This session aligned all tests, adapters, and services with the new models:
+
+- **Dropped classes:** `JSONRepresentation`, `LookupRequestType` (StrEnum), `LookupState` (standalone). Entity types are dynamic (from `RDFMappingConfig`), not hardcoded enums. `parsed_representation` field on `EntityMention` replaces `JSONRepresentation`.
+- **`ResolutionRequestRecord`** now inherits `EntityMention` directly — fields come from the mixin, no separate `identifier`/`entity_mention` fields. Service builds records via `**entity_mention.model_dump()`.
+- **`LookupRequestRecord`** inherits `LookupState` from erspec — provides `source_id` and `last_snapshot`. Adds `updated_at` with validation.
+- **Repository ABCs removed** (`ResolutionRequestRepository`, `LookupStateRepository`, `LookupRequestRepository`). Only one implementation per port; service type-hints against the Mongo classes directly.
+- **`MongoResolutionRequestRepository`** now extends `BaseMongoRepository` — reuses `__init__` and `find_by_id`. Custom `_to_document`/`_from_document` for composite triad key.
+- **Audit log concept dropped** — no append-only `LookupRequestRecord` for tracking SINGLE/BULK lookups.
+- **Feature file simplified** — `bulk_lookup_and_snapshot_management.feature` reduced from 8 to 4 scenarios (snapshot management only).
 
 ### Key Decisions
 
-- `LookupRequestType` uses `StrEnum` (consistent with `ResolutionOutcome` in commons), not `str, Enum` as shown in the EPIC spec overview. The task spec (`task11.md`) is authoritative here and explicitly requires `StrEnum`.
-- `SHA256ContentHasher` added as a new class in the existing `hasher.py` — no existing classes modified, blast radius is zero.
-- `records.py` imports only from stdlib, erspec, and `ers.commons.domain.data_transfer_objects` — no import from services, adapters (other than the base class in commons.domain), or entrypoints.
-- All fields decorated with `Field(..., description="...")` consistent with the REST API domain style.
+- Compose with erspec models (`EntityMention`, `LookupState`) over flat fields — fewer fields, stronger contract alignment.
+- erspec base classes override `FrozenDTO.frozen=True` via MRO — models are NOT frozen. Mutation tests removed.
+- erspec `LookupState.source_id` has no `min_length=1` — empty source_id test removed.
+- Repository file reduced from 135 to 85 lines by removing ABCs and reusing `BaseMongoRepository`.
 
-### Deviations from Spec
+### Test Results
 
-None. Implementation follows the task spec exactly.
+- **51 request_registry tests pass** (unit + feature)
+- **160 non-curation tests pass** (full suite minus erspec `EntityType` issue)
+
+### Known Issue
+
+- `mongo_client.py:52` index uses `identifier.source_id` — should be `identifiedBy.source_id` to match new document structure.
 
 ### Commits
 
-- Committed and merged.
+- Phase 1: committed and merged (prior session)
+- Phase 2: this session

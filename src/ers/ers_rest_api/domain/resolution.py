@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from erspec.models.core import EntityMentionIdentifier, EntityType
+from erspec.models.core import EntityMentionIdentifier, EntityMention
 from pydantic import Field, model_validator
 
 from ers.commons.domain.data_transfer_objects import ERSRequest, ERSResponse, ResolutionOutcome
-from ers.ers_rest_api.domain.errors import ErrorCode, ErrorResponse
+from ers.ers_rest_api.domain.errors import ErrorResponse
 
 
 # ---------------------------------------------------------------------------
@@ -17,18 +17,7 @@ from ers.ers_rest_api.domain.errors import ErrorCode, ErrorResponse
 class EntityMentionResolutionRequest(ERSRequest):
     """Request body for POST /resolve (and each item in a bulk batch)."""
 
-    identified_by: EntityMentionIdentifier = Field(
-        ..., description="Triad identifying the entity mention (source, request, type).",
-    )
-    content: str = Field(..., min_length=1, description="Serialised entity mention payload.")
-    content_type: str = Field(
-        default="application/ld+json",
-        description="MIME type of the content payload.",
-    )
-    context: str | None = Field(
-        default=None,
-        description="Optional context reference (e.g. notice or document ID).",
-    )
+    mention: EntityMention = Field(description="The entity mention to resolve.")
 
 
 class EntityMentionResolutionResult(ERSResponse):

@@ -25,9 +25,8 @@ from pytest_bdd import given, parsers, scenario, then, when
 
 from ers.commons.adapters.hasher import SHA256ContentHasher
 from ers.request_registry.adapters.records_repository import (
-    LookupRequestRepository,
-    LookupStateRepository,
-    ResolutionRequestRepository,
+    MongoLookupStateRepository,
+    MongoResolutionRequestRepository,
 )
 from ers.request_registry.domain.records import ResolutionRequestRecord
 from ers.request_registry.services.exceptions import IdempotencyConflictError
@@ -87,22 +86,14 @@ def ctx():
 
 @given("the Request Registry service is available")
 def request_registry_service_available(ctx):
-    """
-    Instantiate the RequestRegistryService with mocked repositories and a real hasher.
-
-    ResolutionRequestRepository and LookupStateRepository are created with
-    create_autospec to catch wrong method signatures.  SHA256ContentHasher is
-    used as-is (pure function — no I/O).
-    """
-    resolution_repo = create_autospec(ResolutionRequestRepository, instance=True)
-    lookup_repo = create_autospec(LookupStateRepository, instance=True)
-    lookup_request_repo = create_autospec(LookupRequestRepository, instance=True)
+    """Instantiate the RequestRegistryService with mocked repositories and a real hasher."""
+    resolution_repo = create_autospec(MongoResolutionRequestRepository, instance=True)
+    lookup_repo = create_autospec(MongoLookupStateRepository, instance=True)
     hasher = SHA256ContentHasher()
 
     service = RequestRegistryService(
         resolution_repo=resolution_repo,
         lookup_repo=lookup_repo,
-        lookup_request_repo=lookup_request_repo,
         hasher=hasher,
     )
 
@@ -114,11 +105,7 @@ def request_registry_service_available(ctx):
 
 @given("the repository is empty")
 def repository_is_empty(ctx):
-    """
-    Ensure the mocked repository reports no existing records.
-
-    find_by_triad returns None for any input, simulating a clean collection.
-    """
+    """Ensure the mocked repository reports no existing records."""
     ctx["resolution_repo"].find_by_triad.return_value = None
 
 
@@ -134,11 +121,7 @@ def repository_is_empty(ctx):
     )
 )
 def an_entity_mention(ctx, source_id, request_id, entity_type, content):
-    """
-    Build an EntityMention value object from the scenario parameters.
-
-    Uses erspec.models.core.EntityMention and EntityMentionIdentifier.
-    """
+    """Build an EntityMention value object from the scenario parameters."""
     identifier = EntityMentionIdentifier(
         source_id=source_id,
         request_id=request_id,
@@ -163,11 +146,7 @@ def an_entity_mention(ctx, source_id, request_id, entity_type, content):
     )
 )
 def an_entity_mention_single_quoted(ctx, source_id, request_id, entity_type, content):
-    """
-    Same as above but handles single-quoted content strings (used in the
-    idempotency scenarios where the content is a JSON literal).
-    Delegates to the double-quoted variant for DRY step reuse.
-    """
+    """Handle single-quoted content strings (used in idempotency scenarios)."""
     an_entity_mention(ctx, source_id, request_id, entity_type, content)
 
 
@@ -178,30 +157,20 @@ def an_entity_mention_single_quoted(ctx, source_id, request_id, entity_type, con
     )
 )
 def an_entity_mention_with_empty_content(ctx, source_id, request_id, entity_type):
-    """
-    Build an EntityMention with empty string content.
-
-    Used by the rejection scenario — the service must reject empty content
-    with a ValueError.
-    """
+    """Build an EntityMention with empty string content."""
     an_entity_mention(ctx, source_id, request_id, entity_type, "")
 
 
 @given("that entity mention has already been registered")
 def entity_mention_already_registered(ctx):
-    """
-    Pre-seed the mocked repository with an existing record for the triad.
-
-    Constructs a real ResolutionRequestRecord whose content_hash matches the
-    content stored in ctx, and configures find_by_triad to return it.
-    """
+    """Pre-seed the mocked repository with an existing record for the triad."""
     content = ctx.get("content", "")
     hasher = ctx["hasher"]
     expected_hash = hasher.hash(content)
+    mention = ctx["entity_mention"]
 
     existing_record = ResolutionRequestRecord(
-        identifier=ctx["entity_mention"].identifiedBy,
-        entity_mention=ctx["entity_mention"],
+        **mention.model_dump(),
         content_hash=expected_hash,
         received_at=datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC),
     )
@@ -216,14 +185,7 @@ def entity_mention_already_registered(ctx):
 
 @when("the resolution request is registered")
 def register_resolution_request(ctx):
-    """
-    Call RequestRegistryService.register_resolution_request with the entity
-    mention built in the Given step.
-
-    Configures store to return the record it receives (identity side-effect)
-    when the path is a new registration.  Captures the returned record or any
-    raised exception in ctx so the Then steps can inspect both paths.
-    """
+    """Call RequestRegistryService.register_resolution_request."""
     ctx["resolution_repo"].store.side_effect = lambda r: r
 
     try:
@@ -238,13 +200,7 @@ def register_resolution_request(ctx):
 
 @when("the same entity mention is submitted again with identical content")
 def resubmit_identical_entity_mention(ctx):
-    """
-    Re-submit the entity mention whose triad and content_hash already exist
-    in the repository (idempotent replay path).
-
-    The mocked repository already has find_by_triad returning the existing
-    record set up by the 'that entity mention has already been registered' step.
-    """
+    """Re-submit the entity mention (idempotent replay path)."""
     ctx["resolution_repo"].store.side_effect = lambda r: r
 
     try:
@@ -259,13 +215,7 @@ def resubmit_identical_entity_mention(ctx):
 
 @when(parsers.parse("the same triad is resubmitted with different content '{new_content}'"))
 def resubmit_with_different_content(ctx, new_content):
-    """
-    Re-submit the same triad but with different content, triggering the
-    IdempotencyConflictError path.
-
-    Builds a new EntityMention with identical triad but new_content, then
-    calls the service and captures the raised IdempotencyConflictError.
-    """
+    """Re-submit the same triad with different content (conflict path)."""
     conflicting_mention = EntityMention(
         identifiedBy=ctx["entity_mention"].identifiedBy,
         content=new_content,
@@ -290,7 +240,7 @@ def resubmit_with_different_content(ctx, new_content):
 
 @then("a resolution request record is returned")
 def a_resolution_request_record_is_returned(ctx):
-    """Assert that the service returned a ResolutionRequestRecord (not None, not an exception)."""
+    """Assert that the service returned a ResolutionRequestRecord."""
     assert ctx["raised_exception"] is None, (
         f"Expected a record but got exception: {ctx['raised_exception']}"
     )
@@ -308,9 +258,9 @@ def a_resolution_request_record_is_returned(ctx):
 def record_contains_correct_triad(ctx, source_id, request_id, entity_type):
     """Assert that the returned record's identifier matches the scenario values."""
     record = ctx["result"]
-    assert record.identifier.source_id == source_id
-    assert record.identifier.request_id == request_id
-    assert record.identifier.entity_type == entity_type
+    assert record.identifiedBy.source_id == source_id
+    assert record.identifiedBy.request_id == request_id
+    assert record.identifiedBy.entity_type == entity_type
 
 
 @then(parsers.parse('the record content_hash is the SHA-256 digest of "{content}"'))
@@ -322,9 +272,7 @@ def record_content_hash_is_sha256(ctx, content):
 
 @then("the record received_at timestamp is set to the current UTC time")
 def record_received_at_is_utc(ctx):
-    """
-    Assert that received_at is a timezone-aware UTC datetime within 2 seconds of now.
-    """
+    """Assert that received_at is a timezone-aware UTC datetime within 2 seconds of now."""
     record = ctx["result"]
     assert record.received_at.tzinfo is not None
     delta = abs(datetime.now(UTC) - record.received_at)

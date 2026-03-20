@@ -7,10 +7,8 @@ from datetime import datetime
 from erspec.models.core import ClusterReference, EntityMentionIdentifier
 from pydantic import Field, model_validator
 
+from ers import config
 from ers.commons.domain.data_transfer_objects import ERSRequest, ERSResponse
-
-REFRESH_BULK_MAX_LIMIT = 1000
-
 
 # ---------------------------------------------------------------------------
 # Lookup — single and bulk
@@ -55,9 +53,9 @@ class RefreshBulkRequest(ERSRequest):
         ..., min_length=1, description="Source system whose deltas to retrieve.",
     )
     limit: int = Field(
-        default=REFRESH_BULK_MAX_LIMIT,
+        default=config.REFRESH_BULK_MAX_LIMIT,
         gt=0,
-        le=REFRESH_BULK_MAX_LIMIT,
+        le=config.REFRESH_BULK_MAX_LIMIT,
         description="Maximum number of delta assignments to return per page.",
     )
     continuation_cursor: str | None = Field(

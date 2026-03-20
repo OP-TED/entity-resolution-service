@@ -39,9 +39,9 @@
 ## Current Phase
 
 - Branch: `feature/ERS1-143-task11` (stacked on `feature/ERS1-137-5`) — EPIC-01 Request Registry implementation
-- **[2026-03-19] Task 1.1 complete** — domain models (`ResolutionRequestRecord`, `LookupState`, `LookupRequestRecord`, `LookupRequestType`, `JSONRepresentation`) + `SHA256ContentHasher`; 276 tests passing
-- **[2026-03-20] Task 1.2 complete** — repository ABCs + Mongo implementations + `RequestRegistryService` + exceptions; 298 tests passing
-- **[2026-03-20] Task 1.3 complete** — BDD feature files wired with real service calls; all scenarios passing
+- **[2026-03-19] Task 1.1 complete** — domain models + `SHA256ContentHasher`
+- **[2026-03-20] Tasks 1.2–1.3 complete** — Mongo repositories + `RequestRegistryService` + BDD features
+- **[2026-03-20] Task 1.1 revised** — models simplified to compose with erspec (`EntityMention`, `LookupState`); dropped `JSONRepresentation`, `LookupRequestType`, repository ABCs, audit log concept. Adapter reuses `BaseMongoRepository`. 51 request_registry tests pass.
 - **[2026-03-20] Agent MCP tools** — all agents updated with gitnexus, ide, context7 MCP tools in frontmatter
 - Next: integration tests (Task 5) or PR
 

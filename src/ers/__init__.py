@@ -93,6 +93,12 @@ class ERSRestApiConfig:
         return int(config_value)
 
 
+class EREConfig:
+    @env_property(default_value="1000")
+    def REFRESH_BULK_MAX_LIMIT(self, config_value: str) -> int:
+        return int(config_value)
+
+
 class ERSConfigResolver(
     AppConfig,
     JWTConfig,
@@ -100,7 +106,7 @@ class ERSConfigResolver(
     CurationConfig,
     MongoDBConfig,
     RDFMentionParserConfig,
-    ERSRestApiConfig,
+    ERSRestApiConfig,EREConfig
 ):
     """Aggregates all ERS configuration.
 
