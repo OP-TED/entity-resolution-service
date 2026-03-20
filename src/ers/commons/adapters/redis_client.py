@@ -6,6 +6,7 @@ from linkml_runtime.dumpers import JSONDumper
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 from ers.commons.adapters.redis_messages import get_response_from_message
+from ers.config import Settings
 from erspec.models.ere import ERERequest, EREResponse
 
 log = logging.getLogger(__name__)
@@ -13,17 +14,25 @@ log = logging.getLogger(__name__)
 _linkml_dumper = JSONDumper()
 
 
-ERE_REQUEST_CHANNEL_ID = "ere_requests"
-ERE_RESPONSE_CHANNEL_ID = "ere_responses"
-
-
 class RedisConnectionConfig:
     """Simple data class to hold Redis connection configuration."""
 
-    def __init__(self, host: str = "localhost", port: int = 6379, db: int = 0):
+    def __init__(self, host: str, port: int, db: int):
         self.host = host
         self.port = port
         self.db = db
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> "RedisConnectionConfig":
+        """Construct a RedisConnectionConfig from application settings.
+
+        Args:
+            settings: Application settings instance.
+
+        Returns:
+            A RedisConnectionConfig populated from settings.
+        """
+        return cls(host=settings.redis_host, port=settings.redis_port, db=settings.redis_db)
 
     def __str__(self) -> str:
         return f'RedisConnectionConfig ( host: "{self.host}", port: "{self.port}", db: "{self.db}" )'
@@ -66,8 +75,10 @@ class RedisEREClient(AbstractClient):
 
     def __init__(
         self,
-        config_or_client: RedisConnectionConfig | aioredis.Redis = RedisConnectionConfig(),
+        config_or_client: RedisConnectionConfig | aioredis.Redis,
         timeout: float = 0,
+        request_channel: str = "ere_requests",
+        response_channel: str = "ere_responses",
     ):
         """Initialise the Redis ERE client.
 
@@ -77,6 +88,12 @@ class RedisEREClient(AbstractClient):
                 instance to reuse (caller retains ownership and must close it).
             timeout: Maximum seconds to wait for a response in pull_response().
                 0 (default) blocks indefinitely.
+            request_channel: Redis list key for outbound requests.
+                Defaults to "ere_requests"; real callers should pass
+                ``settings.ere_request_channel``.
+            response_channel: Redis list key for inbound responses.
+                Defaults to "ere_responses"; real callers should pass
+                ``settings.ere_response_channel``.
         """
         if isinstance(config_or_client, RedisConnectionConfig):
             self.config = config_or_client
@@ -97,8 +114,8 @@ class RedisEREClient(AbstractClient):
             self._redis_client = config_or_client
 
         self.character_encoding = "utf-8"
-        self.request_channel_id = ERE_REQUEST_CHANNEL_ID
-        self.response_channel_id = ERE_RESPONSE_CHANNEL_ID
+        self.request_channel_id = request_channel
+        self.response_channel_id = response_channel
         self._owns_client = isinstance(config_or_client, RedisConnectionConfig)
         self.timeout = timeout
         if timeout:

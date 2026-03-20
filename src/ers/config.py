@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     mongo_uri: str = "mongodb://localhost:27017"
     mongo_database_name: str = "ers"
 
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    ere_request_channel: str = "ere_requests"
+    ere_response_channel: str = "ere_responses"
+
 
 def get_settings() -> Settings:
     return Settings()
