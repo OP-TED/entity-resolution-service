@@ -55,6 +55,7 @@ These rules apply to ALL agents in this project.
 - Follow the Cosmic Python layered architecture: `entrypoints -> services -> domain`,
   `adapters -> domain`. Domain must not import from higher layers.
   **Note:** The innermost layer is called `domain` (not `models`) in this project.
+- Always use Context7 when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
 
 ### Interaction
 
