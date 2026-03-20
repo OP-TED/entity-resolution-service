@@ -8,26 +8,34 @@ Feature: Publish Resolution Requests to ERE via the Unified Resolution Envelope
     3. Auto-generation of missing metadata (ere_request_id, timestamp).
     4. Duplicate publish under at-least-once semantics.
 
-  These steps call the EREPublishService with a mocked adapter.
+  These steps call EREPublishService with a mocked adapter.
   No real Redis connection is required for unit-level BDD scenarios.
 """
 
-from pathlib import Path
+import hashlib
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
 
+from ers.ere_contract_client.services.ere_publish_service import EREPublishService
+from erspec.models.core import EntityMentionIdentifier
+from erspec.models.ere import EntityMention, EntityMentionResolutionRequest
+from tests.conftest import TESTS_ROOT_DIR
+from tests.feature.ere_contract_client.conftest import run_async
+
 # ---------------------------------------------------------------------------
-# Scenario bindings
+# Feature file path
 # ---------------------------------------------------------------------------
 
 FEATURE_FILE = str(
-    Path(__file__).parent.parent.parent
-    / "feature"
-    / "ere_contract_client"
-    / "request_publishing.feature"
+    TESTS_ROOT_DIR / "feature" / "ere_contract_client" / "request_publishing.feature"
 )
+
+
+# ---------------------------------------------------------------------------
+# Scenario bindings
+# ---------------------------------------------------------------------------
 
 
 @scenario(FEATURE_FILE, "Publish a resolution request with optional constraint fields")
@@ -68,22 +76,18 @@ def ctx():
 
 @given("the ERE Contract Client is available")
 def ere_contract_client_available(ctx):
-    """
-    Set up the EREPublishService with a mocked adapter.
-
-    TODO: Replace with create_autospec(RedisEREAdapter)
-    """
+    """Set up the EREPublishService with a mocked adapter."""
     adapter = MagicMock()
-    adapter.push_request = AsyncMock(return_value=1)
+    adapter.push_request = AsyncMock(return_value=None)
     adapter.ping = AsyncMock(return_value=True)
     ctx["adapter"] = adapter
-    ctx["service"] = None  # TODO: EREPublishService(adapter)
+    ctx["service"] = EREPublishService(adapter)
 
 
 @given("the messaging channel is reachable")
 def messaging_channel_reachable(ctx):
     """Confirm the mock adapter simulates a reachable channel."""
-    ctx["adapter"].push_request = AsyncMock(return_value=1)
+    ctx["adapter"].push_request = AsyncMock(return_value=None)
 
 
 # ---------------------------------------------------------------------------
@@ -98,14 +102,19 @@ def messaging_channel_reachable(ctx):
     )
 )
 def valid_entity_mention(ctx, source_id, request_id):
-    """
-    Build a valid EntityMentionResolutionRequest with the given triad.
-
-    TODO: Build a real EntityMention + EntityMentionIdentifier from erspec.
-    """
-    ctx["source_id"] = source_id
-    ctx["request_id"] = request_id
-    ctx["entity_type"] = "Organization"
+    """Build a valid EntityMentionResolutionRequest with the given triad."""
+    ctx["request"] = EntityMentionResolutionRequest(
+        ere_request_id="placeholder",
+        entity_mention=EntityMention(
+            identifiedBy=EntityMentionIdentifier(
+                source_id=source_id,
+                request_id=request_id,
+                entity_type="Organization",
+            ),
+            content="some content",
+            content_type="text/plain",
+        ),
+    )
 
 
 @given(
@@ -114,18 +123,13 @@ def valid_entity_mention(ctx, source_id, request_id):
     )
 )
 def request_with_optional_fields(ctx, proposed, excluded):
-    """
-    Configure proposed placements and excluded clusters on the request.
-
-    TODO: Parse comma-separated lists (or None if "none") and set on request:
-      request.proposed_cluster_ids = [p.strip() for p in proposed.split(",")]
-      request.excluded_cluster_ids = [e.strip() for e in excluded.split(",")]
-    """
-    ctx["proposed_placements"] = (
-        None if proposed == "none" else [p.strip() for p in proposed.split(",")]
+    """Configure proposed placements and excluded clusters on the request."""
+    request: EntityMentionResolutionRequest = ctx["request"]
+    request.proposed_cluster_ids = (
+        [] if proposed == "none" else [p.strip() for p in proposed.split(",")]
     )
-    ctx["excluded_clusters"] = (
-        None if excluded == "none" else [e.strip() for e in excluded.split(",")]
+    request.excluded_cluster_ids = (
+        [] if excluded == "none" else [e.strip() for e in excluded.split(",")]
     )
 
 
@@ -133,22 +137,28 @@ def request_with_optional_fields(ctx, proposed, excluded):
     "the request includes a single proposed placement using the SHA256-derived provisional cluster"
 )
 def request_with_singleton_proposal(ctx):
-    """
-    Configure the request with a single proposed placement = provisional cluster ID.
-
-    TODO: provisional_id = derive_provisional_cluster_id(identifier)
-          request.proposed_cluster_ids = [provisional_id]
-    """
-    ctx["singleton_proposal"] = True
+    """Configure the request with a single proposed placement equal to the provisional cluster ID."""
+    request: EntityMentionResolutionRequest = ctx["request"]
+    identifier = request.entity_mention.identifiedBy
+    raw = f"{identifier.source_id}:{identifier.request_id}:{identifier.entity_type}"
+    provisional_id = "provisional:" + hashlib.sha256(raw.encode()).hexdigest()
+    request.proposed_cluster_ids = [provisional_id]
+    ctx["provisional_id"] = provisional_id
 
 
 @given(parsers.parse('the resolution request has "{field}" not set'))
 def request_field_not_set(ctx, field):
-    """
-    Configure the request to have the specified field absent.
+    """Configure the request to have the specified field treated as absent.
 
-    TODO: Build request with field explicitly set to None.
+    Since erspec Pydantic models require ere_request_id at construction time,
+    we use an empty string as the 'not set' sentinel; the service replaces
+    any falsy ere_request_id with a generated UUID.
     """
+    request: EntityMentionResolutionRequest = ctx["request"]
+    if field == "ere_request_id":
+        request.ere_request_id = ""
+    elif field == "timestamp":
+        request.timestamp = None
     ctx["unset_field"] = field
 
 
@@ -159,27 +169,19 @@ def request_field_not_set(ctx, field):
 
 @when("the resolution request is published")
 def publish_request(ctx):
-    """
-    Call EREPublishService.publish_request.
-
-    TODO: ctx["ere_request_id"] = await service.publish_request(request)
-          ctx["publish_count"] = ctx.get("publish_count", 0) + 1
-    """
+    """Call EREPublishService.publish_request and store the result."""
+    result = run_async(ctx["service"].publish_request(ctx["request"]))
     ctx["publish_count"] = ctx.get("publish_count", 0) + 1
-    ctx["result"] = None  # TODO: replace with real service call
+    ctx["ere_request_id"] = result
     ctx["raised_exception"] = None
 
 
 @when("the same resolution request is published again")
 def publish_request_again(ctx):
-    """
-    Call EREPublishService.publish_request with the same request a second time.
-
-    TODO: ctx["ere_request_id_2"] = await service.publish_request(request)
-          ctx["publish_count"] = ctx.get("publish_count", 0) + 1
-    """
+    """Call EREPublishService.publish_request with the same request a second time."""
+    result = run_async(ctx["service"].publish_request(ctx["request"]))
     ctx["publish_count"] = ctx.get("publish_count", 0) + 1
-    ctx["result_2"] = None  # TODO: replace with real service call
+    ctx["ere_request_id_2"] = result
     ctx["raised_exception"] = None
 
 
@@ -190,57 +192,47 @@ def publish_request_again(ctx):
 
 @then("the request is enqueued on the messaging channel")
 def request_enqueued(ctx):
-    """
-    TODO: ctx["adapter"].push_request.assert_called()
-    """
-    assert True  # TODO: implement
+    """Assert the adapter's push_request was called at least once."""
+    ctx["adapter"].push_request.assert_called()
 
 
 @then("the published request contains the complete correlation triad")
 def published_request_has_triad(ctx):
-    """
-    TODO: Inspect the serialized request passed to adapter.push_request
-          and verify source_id, request_id, entity_type are all present.
-    """
-    assert True  # TODO: implement
+    """Inspect the request passed to push_request and verify triad fields."""
+    call_args = ctx["adapter"].push_request.call_args
+    published: EntityMentionResolutionRequest = call_args[0][0]
+    assert published.entity_mention.identifiedBy.source_id
+    assert published.entity_mention.identifiedBy.request_id
+    assert published.entity_mention.identifiedBy.entity_type
 
 
 @then("the ere_request_id is present in the published request")
 def ere_request_id_present(ctx):
-    """
-    TODO: Inspect the published request and assert ere_request_id is not None.
-    """
-    assert True  # TODO: implement
+    """Assert that the returned ere_request_id is non-empty."""
+    assert ctx["ere_request_id"]
 
 
 @then("the proposed placements contain exactly the provisional cluster identifier")
 def proposed_contains_provisional(ctx):
-    """
-    TODO: assert len(request.proposed_cluster_ids) == 1
-          assert request.proposed_cluster_ids[0] == derive_provisional_cluster_id(identifier)
-    """
-    assert True  # TODO: implement
+    """Assert the published request carries exactly the provisional cluster ID."""
+    call_args = ctx["adapter"].push_request.call_args
+    published: EntityMentionResolutionRequest = call_args[0][0]
+    assert len(published.proposed_cluster_ids) == 1
+    assert published.proposed_cluster_ids[0] == ctx["provisional_id"]
 
 
 @then(parsers.parse('the published request has "{field}" auto-populated'))
 def field_auto_populated(ctx, field):
-    """
-    Assert the specified field was auto-generated.
-
-    TODO:
-      if field == "ere_request_id":
-          assert request.ere_request_id is not None (UUID format)
-      elif field == "timestamp":
-          assert request.timestamp is not None (recent UTC)
-    """
-    assert True  # TODO: implement
+    """Assert the specified field was auto-generated by the service."""
+    call_args = ctx["adapter"].push_request.call_args
+    published: EntityMentionResolutionRequest = call_args[0][0]
+    if field == "ere_request_id":
+        assert published.ere_request_id
+    elif field == "timestamp":
+        assert published.timestamp is not None
 
 
 @then("both requests are enqueued on the messaging channel")
 def both_requests_enqueued(ctx):
-    """
-    Assert the adapter was called twice (at-least-once allows duplicates).
-
-    TODO: assert ctx["adapter"].push_request.call_count == 2
-    """
-    assert True  # TODO: implement
+    """Assert the adapter was called exactly twice (at-least-once allows duplicates)."""
+    assert ctx["adapter"].push_request.call_count == 2

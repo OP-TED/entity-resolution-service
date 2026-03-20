@@ -2,25 +2,20 @@
 Tests for RedisEREClient (ers.commons.adapters.redis_client).
 
 Happy-path and round-trip tests use a short-lived Redis instance provided by
-testcontainers (RedisContainer), which is started once per module and shared
-across all tests in the file. Since testcontainers does not provide an async
-Redis connector, an aioredis.Redis client is constructed manually from the
-container's host and port.
+testcontainers (RedisContainer) via the shared ``redis_container`` and
+``redis_client`` fixtures in ``tests/conftest.py``.
 
 Failure-path tests (connection errors, close behaviour) use AsyncMock in place
 of aioredis.Redis to avoid needing a real connection.
 """
 import asyncio
 import logging
-from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import redis.asyncio as aioredis
-from linkml_runtime.dumpers import JSONDumper
 from redis.exceptions import ConnectionError as RedisConnectionError
-from testcontainers.redis import RedisContainer
 
 from ers.commons.adapters.redis_client import (
     ERE_REQUEST_CHANNEL_ID,
@@ -35,10 +30,6 @@ from erspec.models.ere import (
     EntityMentionResolutionRequest,
     EntityMentionResolutionResponse,
 )
-
-_dumper = JSONDumper()
-
-
 
 @pytest.fixture
 def dummy_request() -> EntityMentionResolutionRequest:
@@ -71,23 +62,6 @@ def dummy_response() -> EntityMentionResolutionResponse:
     )
 
 
-@pytest.fixture(scope="module")
-def redis_container():
-    with RedisContainer() as container:
-        yield container
-
-
-@pytest.fixture
-async def redis_client(redis_container) -> AsyncGenerator[aioredis.Redis, None]:
-    client = aioredis.Redis(
-        host=redis_container.get_container_host_ip(),
-        port=int(redis_container.get_exposed_port(6379)),
-    )
-    yield client
-    await client.flushdb()
-    await client.aclose()
-
-
 @pytest.fixture
 def redis_ere_client(redis_client: aioredis.Redis) -> RedisEREClient:
     return RedisEREClient(config_or_client=redis_client)
@@ -99,7 +73,7 @@ async def mock_ere_service(redis_client: aioredis.Redis, dummy_response: EntityM
     pushes a fixed response to channel ERE_RESPONSE_CHANNEL_ID."""
     async def _serve():
         await redis_client.brpop(ERE_REQUEST_CHANNEL_ID)
-        await redis_client.lpush(ERE_RESPONSE_CHANNEL_ID, _dumper.dumps(dummy_response))
+        await redis_client.lpush(ERE_RESPONSE_CHANNEL_ID, dummy_response.model_dump_json())
 
     task = asyncio.create_task(_serve())
     yield

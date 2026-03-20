@@ -1,8 +1,6 @@
-"""Utilities for parsing raw message bytes into LinkML domain model instances."""
+"""Utilities for parsing raw message bytes into domain model instances."""
 
 import json
-
-from linkml_runtime.loaders import JSONLoader
 
 from erspec.models.ere import (
     EntityMentionResolutionRequest,
@@ -32,13 +30,10 @@ SUPPORTED_RESPONSE_CLASSES = {
     # FullRebuildResponse,  # Add when erspec implements it
 }
 
-# Cached JSON loader instance for reuse across parse operations.
-_json_loader = JSONLoader()
-
 
 def get_message_object(
     raw_msg: bytes,
-    supported_classes: dict[str, EREMessage],
+    supported_classes: dict[str, type[EREMessage]],
     encoding: str = "utf-8",
 ) -> EREMessage:
     """Parse raw message bytes into a request or response domain model instance.
@@ -55,7 +50,10 @@ def get_message_object(
         ValueError: If message lacks 'type' field or type is not in supported_classes.
     """
     msg_str = raw_msg.decode(encoding)
-    msg_json = json.loads(msg_str)
+    try:
+        msg_json = json.loads(msg_str)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Message is not valid JSON: {exc}") from exc
 
     message_type = msg_json.get("type")
     if not message_type:
@@ -65,7 +63,7 @@ def get_message_object(
     if not message_class:
         raise ValueError(f'Unsupported message type: "{message_type}"')
 
-    return _json_loader.load_any(source=msg_json, target_class=message_class)
+    return message_class.model_validate_json(msg_str)
 
 
 def get_response_from_message(

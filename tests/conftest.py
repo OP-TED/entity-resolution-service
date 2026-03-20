@@ -1,10 +1,41 @@
+from pathlib import Path
+
 import pytest
+import redis.asyncio as aioredis
 from erspec.models.core import ClusterReference, Decision
+from testcontainers.redis import RedisContainer
+
+TESTS_ROOT_DIR = Path(__file__).parent
 
 from tests.unit.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
 )
+
+
+@pytest.fixture(scope="module")
+def redis_container():
+    """Start a Redis container once per test module. Skips if Docker is unavailable."""
+    try:
+        with RedisContainer() as container:
+            yield container
+    except Exception:
+        pytest.skip("Docker not available")
+
+
+@pytest.fixture
+async def redis_client(redis_container) -> aioredis.Redis:
+    """Provide a live aioredis.Redis client connected to the test container.
+
+    Flushes the database and closes the client after each test.
+    """
+    client = aioredis.Redis(
+        host=redis_container.get_container_host_ip(),
+        port=int(redis_container.get_exposed_port(6379)),
+    )
+    yield client
+    await client.flushdb()
+    await client.aclose()
 
 
 def pytest_collection_modifyitems(items: list) -> None:
