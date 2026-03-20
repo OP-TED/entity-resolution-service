@@ -153,6 +153,7 @@ class TestProtectedEndpointUnverified:
         unverified = UserContext(
             id="u-1",
             email="unverified@example.com",
+            is_active=True,
             is_superuser=False,
             is_verified=False,
         )

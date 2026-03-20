@@ -11,13 +11,13 @@ Usage:
 import argparse
 import asyncio
 import random
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from erspec.models.core import UserActionType
 from pymongo import AsyncMongoClient
 
-from ers.commons.adapters import MongoCollections
+from ers.commons.adapters.mongo_collections_manager import MongoCollections
 from ers import config
 from ers.curation.adapters.decision_repository import MongoDecisionCurationRepository
 from ers.curation.adapters.entity_mention_repository import (
@@ -42,7 +42,7 @@ CURATORS = ["curator-1", "curator-2", "curator-3"]
 
 
 def _random_past(max_days: int = 90) -> datetime:
-    return datetime.now(timezone.utc) - timedelta(
+    return datetime.now(UTC) - timedelta(
         days=random.randint(0, max_days),
         hours=random.randint(0, 23),
         minutes=random.randint(0, 59),
@@ -111,9 +111,7 @@ def _build_candidates(
     key = mention.identifiedBy.source_id
     candidates = list(cluster_refs_by_mention.get(key, []))
     for _ in range(random.randint(0, 3)):
-        candidates.append(
-            ClusterReferenceFactory.build(cluster_id=random.choice(cluster_ids))
-        )
+        candidates.append(ClusterReferenceFactory.build(cluster_id=random.choice(cluster_ids)))
     return candidates or [ClusterReferenceFactory.build()]
 
 
@@ -138,15 +136,10 @@ async def _create_decisions(
     return decisions
 
 
-def _selected_cluster_for_action(
-    decision: Any, action_type: UserActionType
-) -> Any | None:
+def _selected_cluster_for_action(decision: Any, action_type: UserActionType) -> Any | None:
     if action_type == UserActionType.ACCEPT_TOP:
         return decision.current_placement
-    if (
-        action_type == UserActionType.ACCEPT_ALTERNATIVE
-        and len(decision.candidates) > 1
-    ):
+    if action_type == UserActionType.ACCEPT_ALTERNATIVE and len(decision.candidates) > 1:
         return random.choice(decision.candidates[1:])
     return None
 
@@ -155,9 +148,7 @@ async def _create_user_actions(
     decisions: list[Any],
     action_repo: MongoUserActionCurationRepository,
 ) -> int:
-    curated_decisions = random.sample(
-        decisions, k=min(len(decisions) // 3, len(decisions))
-    )
+    curated_decisions = random.sample(decisions, k=min(len(decisions) // 3, len(decisions)))
     action_count = 0
     for decision in curated_decisions:
         action_type = random.choice(ACTION_TYPES)
@@ -189,9 +180,7 @@ async def seed(
     action_repo = MongoUserActionCurationRepository(collections.user_actions)
 
     mentions = await _create_mentions(mention_repo, num_mentions, num_requests)
-    cluster_ids, cluster_refs_by_mention = _build_cluster_references(
-        mentions, num_clusters
-    )
+    cluster_ids, cluster_refs_by_mention = _build_cluster_references(mentions, num_clusters)
     decisions = await _create_decisions(
         mentions,
         cluster_refs_by_mention,
@@ -212,18 +201,12 @@ async def seed(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Seed the ERS database with sample data"
-    )
-    parser.add_argument(
-        "--mentions", type=int, default=100, help="Number of entity mentions"
-    )
+    parser = argparse.ArgumentParser(description="Seed the ERS database with sample data")
+    parser.add_argument("--mentions", type=int, default=100, help="Number of entity mentions")
     parser.add_argument(
         "--clusters", type=int, default=30, help="Number of canonical entity clusters"
     )
-    parser.add_argument(
-        "--requests", type=int, default=8, help="Number of resolution requests"
-    )
+    parser.add_argument("--requests", type=int, default=8, help="Number of resolution requests")
     args = parser.parse_args()
     asyncio.run(
         seed(

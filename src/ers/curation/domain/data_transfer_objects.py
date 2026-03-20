@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any, TypeVar
 
 from erspec.models.core import (
@@ -16,7 +16,7 @@ T = TypeVar("T")
 BULK_ACTION_MAX_SIZE = 200
 
 
-class DecisionOrdering(str, Enum):
+class DecisionOrdering(StrEnum):
     """Allowed ordering options for decision listing."""
 
     CONFIDENCE_ASC = "confidence_score"
@@ -45,6 +45,15 @@ class StatisticsFilters(FrozenDTO):
     entity_type: EntityType | None = None
     timeframe_start: datetime | None = None
     timeframe_end: datetime | None = None
+
+
+class UserActionFilters(FrozenDTO):
+    """Filtering criteria for user action queries."""
+
+    action_type: UserActionType | None = None
+    actor: str | None = None
+    time_range_start: datetime | None = None
+    time_range_end: datetime | None = None
 
 
 class EntityMentionPreview(FrozenDTO):
@@ -117,7 +126,7 @@ class AssignRequest(FrozenDTO):
     cluster_id: str
 
 
-class BulkItemStatus(str, Enum):
+class BulkItemStatus(StrEnum):
     """Outcome of an individual bulk action item."""
 
     SUCCESS = "success"

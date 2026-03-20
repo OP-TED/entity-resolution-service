@@ -69,6 +69,7 @@ class TestListUserActions:
         regular_user = UserContext(
             id="u-2",
             email="regular@example.com",
+            is_active=True,
             is_superuser=False,
             is_verified=True,
         )
