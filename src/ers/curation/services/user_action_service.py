@@ -7,6 +7,7 @@ from ers.curation.adapters.entity_mention_repository import (
 from ers.curation.adapters.user_action_repository import UserActionCurationRepository
 from ers.curation.domain.data_transfer_objects import (
     EntityMentionPreview,
+    UserActionFilters,
     UserActionSummary,
 )
 from ers.curation.domain.exceptions import AlreadyCuratedError
@@ -37,9 +38,10 @@ class UserActionService:
     async def list_user_actions(
         self,
         pagination: PaginationParams,
+        filters: UserActionFilters | None = None,
     ) -> PaginatedResult[UserActionSummary]:
         """Return paginated user actions ordered by latest first."""
-        paginated = await self._user_action_repository.find_paginated(pagination)
+        paginated = await self._user_action_repository.find_paginated(pagination, filters)
         identifiers = [action.about_entity_mention for action in paginated.results]
         entity_mentions = await self._entity_mention_repository.find_by_identifiers(
             identifiers,

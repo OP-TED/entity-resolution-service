@@ -92,6 +92,7 @@ class AuthService:
         return UserContext(
             id=user.id,
             email=user.email,
+            is_active=user.is_active,
             is_superuser=user.is_superuser,
             is_verified=user.is_verified,
         )

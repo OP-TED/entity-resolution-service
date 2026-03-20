@@ -31,6 +31,7 @@ from ers.users.services import AuthService, UserManagementService
 TEST_USER_CONTEXT = UserContext(
     id="test-user-id",
     email="test@example.com",
+    is_active=True,
     is_superuser=True,
     is_verified=True,
 )

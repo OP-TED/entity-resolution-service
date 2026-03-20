@@ -6,6 +6,7 @@ from ers.commons.domain.data_transfer_objects import PaginatedResult, Pagination
 from ers.commons.services.exceptions import ApplicationError, NotFoundError
 from ers.users.adapters import PasswordHasher, UserRepository
 from ers.users.domain.data_transfer_objects import CreateUserRequest, UserPatchRequest
+from ers.users.domain.exceptions import LastAdminError
 from ers.users.services import UserManagementService
 from tests.unit.factories import UserFactory
 
@@ -138,24 +139,40 @@ class TestPatchUser:
             await service.patch_user("missing-id", UserPatchRequest(is_active=False))
 
 
-class TestDeleteUser:
-    async def test_deletes_existing_user(
+class TestLastAdminGuard:
+    async def test_patch_deactivate_last_admin_raises(
         self,
         service: UserManagementService,
         user_repository: AsyncMock,
     ) -> None:
-        user_repository.delete.return_value = True
+        user = UserFactory.build(id="admin-1", is_active=True, is_superuser=True)
+        user_repository.find_by_id.return_value = user
+        user_repository.count_active_admins.return_value = 1
 
-        await service.delete_user("user-1")
+        with pytest.raises(LastAdminError):
+            await service.patch_user("admin-1", UserPatchRequest(is_active=False))
 
-        user_repository.delete.assert_called_once_with("user-1")
-
-    async def test_delete_nonexistent_user_raises(
+    async def test_patch_remove_superuser_from_last_admin_raises(
         self,
         service: UserManagementService,
         user_repository: AsyncMock,
     ) -> None:
-        user_repository.delete.return_value = False
+        user = UserFactory.build(id="admin-1", is_active=True, is_superuser=True)
+        user_repository.find_by_id.return_value = user
+        user_repository.count_active_admins.return_value = 1
 
-        with pytest.raises(NotFoundError):
-            await service.delete_user("missing-id")
+        with pytest.raises(LastAdminError):
+            await service.patch_user("admin-1", UserPatchRequest(is_superuser=False))
+
+    async def test_patch_deactivate_non_admin_succeeds(
+        self,
+        service: UserManagementService,
+        user_repository: AsyncMock,
+    ) -> None:
+        user = UserFactory.build(id="user-1", is_active=True, is_superuser=False)
+        user_repository.find_by_id.return_value = user
+        user_repository.save.side_effect = lambda u: u
+
+        result = await service.patch_user("user-1", UserPatchRequest(is_active=False))
+
+        assert result.is_active is False

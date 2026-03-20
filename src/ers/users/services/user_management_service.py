@@ -10,6 +10,7 @@ from ers.users.domain.data_transfer_objects import (
     UserPatchRequest,
     UserResponse,
 )
+from ers.users.domain.exceptions import LastAdminError
 from ers.users.domain.users import User
 
 
@@ -68,21 +69,29 @@ class UserManagementService:
         )
 
     async def patch_user(self, user_id: str, dto: UserPatchRequest) -> UserResponse:
-        """Update user flags (admin operation)."""
+        """Update user flags (admin operation).
+
+        Raises:
+             LastAdminError when deactivating the last active administrator.
+        """
         user = await self._user_repo.find_by_id(user_id)
         if user is None:
             raise NotFoundError("User", user_id)
 
         updates = dto.model_dump(exclude_none=True)
         if updates:
+            await self._guard_last_admin(user, updates)
             updates["updated_at"] = datetime.now(UTC)
             user = user.model_copy(update=updates)
             await self._user_repo.save(user)
 
         return _to_user_response(user)
 
-    async def delete_user(self, user_id: str) -> None:
-        """Delete a user by id (admin operation)."""
-        deleted = await self._user_repo.delete(user_id)
-        if not deleted:
-            raise NotFoundError("User", user_id)
+    async def _guard_last_admin(self, user: User, updates: dict) -> None:
+        """Raise LastAdminError if deactivating the last active admin."""
+        is_deactivating = updates.get("is_active") is False and user.is_active
+        is_removing_superuser = updates.get("is_superuser") is False and user.is_superuser
+        if (is_deactivating and user.is_superuser) or (is_removing_superuser and user.is_active):
+            active_admin_count = await self._user_repo.count_active_admins()
+            if active_admin_count <= 1:
+                raise LastAdminError()

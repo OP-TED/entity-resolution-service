@@ -67,6 +67,10 @@
 - 2026-03-18: Config pattern — `env_property(default_value=...)` decorator + `ConfigResolverABC` in `ers/commons/adapters/config_resolver.py`. Domain config classes in `ers/__init__.py` use UPPER_SNAKE_CASE method names (= env var keys). N802 ruff rule suppressed for that file via `ruff.toml` `[lint.per-file-ignores]`. `load_dotenv()` called at module import. Singleton: `config = AppConfigResolver()`.
 - 2026-03-18: `ers/config.py` (pydantic_settings) was deleted. If `ers/config.py` exists, Python resolves `from ers import config` as the submodule, shadowing the `__init__.py` attribute. Delete the file first, then rename.
 
+## Feature File Assessment
+
+- [epics/link-curation/2026-03-19-feature-file-assessment.md](epics/link-curation/2026-03-19-feature-file-assessment.md) — Critical review of BDD features vs architecture (UC-W2, UC-B2.1/2.2, UC-W4, UC-W5, Spines C/D)
+
 ## Codebase Patterns
 
 - Agent files in `.claude/agents/` with YAML frontmatter + markdown system prompt.

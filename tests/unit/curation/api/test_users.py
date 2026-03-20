@@ -41,6 +41,7 @@ class TestCreateUser:
         regular = UserContext(
             id="u-2",
             email="regular@example.com",
+            is_active=True,
             is_superuser=False,
             is_verified=True,
         )
@@ -96,6 +97,7 @@ class TestListUsers:
         regular_user = UserContext(
             id="u-2",
             email="regular@example.com",
+            is_active=True,
             is_superuser=False,
             is_verified=True,
         )
@@ -133,34 +135,25 @@ class TestPatchUser:
         assert response.json()["is_verified"] is True
 
 
-class TestDeleteUser:
-    async def test_admin_can_delete_user(
+class TestDeactivateViaPatch:
+    async def test_admin_can_deactivate_user_via_patch(
         self,
         client: AsyncClient,
         user_management_service: AsyncMock,
     ) -> None:
-        user_management_service.delete_user.return_value = None
-
-        response = await client.delete(f"{USERS_URL}/u-1")
-
-        assert response.status_code == 204
-        assert response.content == b""
-
-    async def test_non_admin_gets_403(
-        self,
-        app: FastAPI,
-    ) -> None:
-        regular = UserContext(
-            id="u-2",
-            email="regular@example.com",
+        user_management_service.patch_user.return_value = UserResponse(
+            id="u-1",
+            email="a@example.com",
+            is_active=False,
             is_superuser=False,
             is_verified=True,
+            created_at=datetime.now(UTC),
         )
-        app.dependency_overrides[get_current_user] = lambda: regular
 
-        from httpx import ASGITransport, AsyncClient
+        response = await client.patch(
+            f"{USERS_URL}/u-1",
+            json={"is_active": False},
+        )
 
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            response = await c.delete(f"{USERS_URL}/u-1")
-
-        assert response.status_code == 403
+        assert response.status_code == 200
+        assert response.json()["is_active"] is False

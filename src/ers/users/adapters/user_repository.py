@@ -24,8 +24,8 @@ class UserRepository(AsyncReadRepository[User, str], AsyncWriteRepository[User, 
         """Return paginated users ordered by latest first."""
 
     @abstractmethod
-    async def delete(self, user_id: str) -> bool:
-        """Delete a user by id. Returns True if deleted, False if not found."""
+    async def count_active_admins(self) -> int:
+        """Return the number of active superuser accounts."""
 
 
 class MongoUserRepository(BaseMongoRepository[User, str], UserRepository):
@@ -63,6 +63,7 @@ class MongoUserRepository(BaseMongoRepository[User, str], UserRepository):
             results=results,
         )
 
-    async def delete(self, user_id: str) -> bool:
-        result = await self._collection.delete_one({"_id": user_id})
-        return result.deleted_count > 0
+    async def count_active_admins(self) -> int:
+        return await self._collection.count_documents(
+            {"is_active": True, "is_superuser": True},
+        )
