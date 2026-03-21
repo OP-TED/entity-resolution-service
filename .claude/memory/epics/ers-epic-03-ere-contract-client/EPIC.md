@@ -233,16 +233,14 @@ All error types defined in a local `models/errors.py` module. Each inherits from
 
 ## Roadmap
 - [x] Task 0: Serialization migration — commons `redis_client.py` + `redis_messages.py` switched from LinkML to Pydantic `model_dump_json()` / `model_validate_json()` (2026-03-20)
-- [x] Task 1: Define Error Models — `domain/errors.py` with `EREContractError` base + 4 subclasses (2026-03-20)
-- [x] Task 2: Implement Redis Adapter — `commons/adapters/redis_client.py` — Done; `push_request` now wraps `redis.exceptions.ConnectionError` as built-in `ConnectionError`
-- [x] Task 3: Implement Publish Service — `services/ere_publish_service.py` — Done (2026-03-20)
-- [x] Task 4: Unit Tests — `test_errors.py` + `test_publish_service.py` (TC-012 → TC-017 + OTel) — Done (2026-03-20)
+- [x] Task 1: Define Error Models — `domain/errors.py` with `EREContractError` base + 5 subclasses (incl. `DeserializationError`) (2026-03-21)
+- [x] Task 2: Implement Redis Adapter — `commons/adapters/redis_client.py` — `push_request` returns `int`; `pull_response` wraps redis `ConnectionError` as built-in; `ping()` added to `AbstractClient` + `RedisEREClient` (2026-03-21)
+- [x] Task 3: Implement Publish Service — `services/ere_publish_service.py` — pre-serialization check (`SerializationError`), zero-push check (`ChannelUnavailableError`), `_span` converted to `asynccontextmanager`, validation constants defined (2026-03-21)
+- [x] Task 4: Unit Tests — `test_errors.py` + `test_publish_service.py` (TC-012 → TC-018 + serialization + OTel) — Done (2026-03-21)
 - [x] Task 5: Integration Tests — `test_service_round_trip.py` with testcontainers Redis — Done (2026-03-20)
-- [x] Task 6: Gherkin Features — step definitions wired to real service; shared `run_async` helper in `conftest.py` — Done (2026-03-20)
+- [x] Task 6: Gherkin Features — all scenarios active; serialization + health-check scenarios unskipped; `run_async` uses `asyncio.run()` (2026-03-21)
 
 **Deferred (tracked):**
-- `SerializationError` scenario — skipped pending explicit pre-publish serialization wrapping in service
-- `ping()` / health-check scenario — skipped; `AbstractClient` has no `ping()` contract yet
 - `opentelemetry-api` not yet in `pyproject.toml` — service falls back to no-op span
 
 ## 8. Test Case Specifications
@@ -590,8 +588,8 @@ Start **Task 4: Unit Tests** for the service layer (TC-012 through TC-017 from S
 
 - `src/ers/ere_contract_client/services/ere_publish_service.py` — validates triad, enriches metadata (UUID4 ere_request_id, UTC timestamp), pushes via `AbstractClient`, wraps `TimeoutError` / `redis.exceptions.ConnectionError` as `RedisConnectionError`.
 - OTel span `ere_contract_client.publish` with try/except import fallback (OTel not yet in `pyproject.toml` — pending dependency addition).
-- Both BDD step files replaced: 17 scenarios pass, 1 correctly skipped (serialization failure — not implemented, documented).
-- Key spec alignment: `TimeoutError` → `RedisConnectionError` (not `ChannelUnavailableError`) per EPIC Section 6 error catalogue.
+- Both BDD step files replaced: 17 scenarios pass, all serialization + health-check scenarios now active (2026-03-21 PR#25 review).
+- Key spec alignment: `TimeoutError` → `ChannelUnavailableError` per EPIC Section 6 error catalogue.
 - Key erspec constraint: `ere_request_id` is required at model construction; empty string used as "absent" sentinel; `model_construct()` used for `entity_mention=None` test case.
 
 **Open item:** Add `opentelemetry-api` to `pyproject.toml` dependencies to enable real OTel tracing (currently falls back to no-op).
@@ -618,7 +616,7 @@ Start **Task 1: Error Models** immediately:
 | EPIC spec | Actual implementation | Reason |
 |-----------|----------------------|--------|
 | `models/errors.py` | `domain/errors.py` | Project convention: innermost layer is `domain`, not `models` (per CLAUDE.md) |
-| `EREContractError` + 5 subclasses | `EREContractError` + 4 subclasses (no `DeserializationError`) | `DeserializationError` belongs to EPIC-05 (response consumption path); not in scope here |
+| `EREContractError` + 5 subclasses | `EREContractError` + 5 subclasses ✅ | `DeserializationError` added (2026-03-21 PR#25 review) |
 | `TimeoutError → ChannelUnavailableError` in service | `TimeoutError → ChannelUnavailableError` ✅ and `ConnectionError → RedisConnectionError` ✅ | Consistent with BDD feature file and EPIC Section 6 |
 | `redis.exceptions.ConnectionError` caught in service | Built-in `ConnectionError` caught in service | Adapter now wraps redis library error to built-in, keeping service free of redis imports (DIP) |
 

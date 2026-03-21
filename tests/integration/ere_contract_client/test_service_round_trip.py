@@ -5,7 +5,8 @@ Uses testcontainers to spin up a Redis instance. Skips if Docker is unavailable.
 
 import pytest
 
-from ers.commons.adapters.redis_client import ERE_REQUEST_CHANNEL_ID, RedisEREClient
+from ers import config
+from ers.commons.adapters.redis_client import RedisEREClient
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from erspec.models.core import EntityMentionIdentifier
 from erspec.models.ere import EntityMention, EntityMentionResolutionRequest
@@ -48,7 +49,7 @@ class TestPublishServiceRoundTrip:
         ere_request_id = await service.publish_request(sample_request)
 
         # Verify the request was pushed (lpush → read with rpop)
-        raw = await redis_client.rpop(ERE_REQUEST_CHANNEL_ID)
+        raw = await redis_client.rpop(config.ERE_REQUEST_CHANNEL)
         assert raw is not None, "Expected a message in the Redis list"
 
         # Deserialize and verify
@@ -65,7 +66,7 @@ class TestPublishServiceRoundTrip:
 
         ere_request_id = await service.publish_request(sample_request)
 
-        raw = await redis_client.rpop(ERE_REQUEST_CHANNEL_ID)
+        raw = await redis_client.rpop(config.ERE_REQUEST_CHANNEL)
         deserialized = EntityMentionResolutionRequest.model_validate_json(raw)
         assert deserialized.ere_request_id == ere_request_id
         assert len(ere_request_id) > 0
@@ -76,6 +77,6 @@ class TestPublishServiceRoundTrip:
         """Auto-populated timestamp is present in published request bytes."""
         await service.publish_request(sample_request)
 
-        raw = await redis_client.rpop(ERE_REQUEST_CHANNEL_ID)
+        raw = await redis_client.rpop(config.ERE_REQUEST_CHANNEL)
         deserialized = EntityMentionResolutionRequest.model_validate_json(raw)
         assert deserialized.timestamp is not None

@@ -99,14 +99,38 @@ class EREConfig:
         return int(config_value)
 
 
+class RedisConfig:
+    @env_property(default_value="localhost")
+    def REDIS_HOST(self, config_value: str) -> str:
+        return config_value
+
+    @env_property(default_value="6379")
+    def REDIS_PORT(self, config_value: str) -> int:
+        return int(config_value)
+
+    @env_property(default_value="0")
+    def REDIS_DB(self, config_value: str) -> int:
+        return int(config_value)
+
+    @env_property(default_value="ere_requests")
+    def ERE_REQUEST_CHANNEL(self, config_value: str) -> str:
+        return config_value
+
+    @env_property(default_value="ere_responses")
+    def ERE_RESPONSE_CHANNEL(self, config_value: str) -> str:
+        return config_value
+
+
 class ERSConfigResolver(
     AppConfig,
     JWTConfig,
     AdminConfig,
     CurationConfig,
     MongoDBConfig,
+    RedisConfig,
     RDFMentionParserConfig,
-    ERSRestApiConfig,EREConfig
+    ERSRestApiConfig,
+    EREConfig,
 ):
     """Aggregates all ERS configuration.
 

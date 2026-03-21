@@ -10,6 +10,7 @@ from ers.ere_contract_client.domain.errors import (
     ChannelUnavailableError,
     InvalidRequestError,
     RedisConnectionError,
+    SerializationError,
 )
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from erspec.models.core import EntityMentionIdentifier
@@ -59,9 +60,10 @@ def make_request(
 
 @pytest.fixture
 def mock_adapter() -> AbstractClient:
-    """Return a mock AbstractClient with push_request as AsyncMock."""
+    """Return a mock AbstractClient with push_request as AsyncMock returning 1."""
     adapter = MagicMock(spec=AbstractClient)
-    adapter.push_request = AsyncMock(return_value=None)
+    adapter.push_request = AsyncMock(return_value=1)
+    adapter.request_channel_id = "ere_requests"
     return adapter
 
 
@@ -164,9 +166,55 @@ class TestPublishRequestAdapterErrors:
         with pytest.raises(RedisConnectionError):
             await service.publish_request(make_request())
 
+    async def test_zero_push_raises_channel_unavailable(self, service, mock_adapter):
+        """TC-018: adapter returns 0 (channel accepted nothing) → ChannelUnavailableError."""
+        mock_adapter.push_request = AsyncMock(return_value=0)
+        with pytest.raises(ChannelUnavailableError):
+            await service.publish_request(make_request())
+
+
+class TestPublishRequestSerializationError:
+    async def test_serialization_failure_raises_serialization_error(self, service):
+        """Pre-serialization failure → SerializationError before adapter is called."""
+        identifier = make_request().entity_mention.identifiedBy
+        # Inject a non-serializable value via model_construct to bypass Pydantic validation
+        from erspec.models.core import EntityMentionIdentifier
+        from erspec.models.ere import EntityMention
+
+        bad_identifier = EntityMentionIdentifier.model_construct(
+            source_id=object(),  # not JSON-serializable
+            request_id="req",
+            entity_type="ORG",
+        )
+        bad_mention = EntityMention.model_construct(
+            identifiedBy=bad_identifier,
+            content="c",
+            content_type="text/plain",
+        )
+        from erspec.models.ere import EntityMentionResolutionRequest
+        bad_request = EntityMentionResolutionRequest.model_construct(
+            entity_mention=bad_mention,
+            ere_request_id="pre-check",
+        )
+        with pytest.raises(SerializationError):
+            await service.publish_request(bad_request)
+
 
 class TestPublishRequestOTel:
-    """OTel tests patch _otel_available=True and tracer so _span() enters the real branch."""
+    """OTel tests patch _otel_available=True and tracer so _span() enters the real branch.
+
+    ``_span`` is an async context manager; ``tracer.start_as_current_span`` returns a
+    *sync* context manager that is used with ``with`` inside the async generator body.
+    """
+
+    def _make_mock_tracer(self, mock_span):
+        """Build a mock tracer whose start_as_current_span returns a sync CM yielding mock_span."""
+        mock_tracer = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
+            return_value=mock_span
+        )
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+        return mock_tracer
 
     async def test_span_created_with_correct_attributes(self, service):
         """Successful publish creates OTel span with required attributes."""
@@ -174,11 +222,7 @@ class TestPublishRequestOTel:
             source_id="SRC", request_id="REQ", entity_type="ORG", ere_request_id="req-1"
         )
         mock_span = MagicMock()
-        mock_tracer = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+        mock_tracer = self._make_mock_tracer(mock_span)
 
         with (
             patch(
@@ -202,11 +246,7 @@ class TestPublishRequestOTel:
         """OTel span records exception when adapter raises."""
         mock_adapter.push_request = AsyncMock(side_effect=TimeoutError("timeout"))
         mock_span = MagicMock()
-        mock_tracer = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+        mock_tracer = self._make_mock_tracer(mock_span)
 
         with (
             patch(

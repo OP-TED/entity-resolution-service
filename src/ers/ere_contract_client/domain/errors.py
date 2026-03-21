@@ -23,5 +23,9 @@ class ChannelUnavailableError(EREContractError):
     """Raised when the message queue channel cannot accept the request (e.g. push returned 0)."""
 
 
+class DeserializationError(EREContractError):
+    """Raised when deserialization of a response message fails."""
+
+
 class RedisConnectionError(EREContractError):
     """Raised when a message queue connection is refused or times out."""

@@ -5,7 +5,6 @@ import redis.asyncio as aioredis
 from redis.exceptions import ConnectionError as _RedisLibConnectionError
 
 from ers.commons.adapters.redis_messages import get_response_from_message
-from ers.config import Settings
 from erspec.models.ere import ERERequest, EREResponse
 
 log = logging.getLogger(__name__)
@@ -20,16 +19,16 @@ class RedisConnectionConfig:
         self.db = db
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> "RedisConnectionConfig":
+    def from_settings(cls, settings) -> "RedisConnectionConfig":
         """Construct a RedisConnectionConfig from application settings.
 
         Args:
-            settings: Application settings instance.
+            settings: Application settings instance (ERSConfigResolver or compatible).
 
         Returns:
             A RedisConnectionConfig populated from settings.
         """
-        return cls(host=settings.redis_host, port=settings.redis_port, db=settings.redis_db)
+        return cls(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)
 
     def __str__(self) -> str:
         return f'RedisConnectionConfig ( host: "{self.host}", port: "{self.port}", db: "{self.db}" )'
@@ -39,11 +38,14 @@ class AbstractClient(ABC):
     """Abstraction of a client to access with an ERS instance."""
 
     @abstractmethod
-    async def push_request(self, request: ERERequest) -> None:
+    async def push_request(self, request: ERERequest) -> int:
         """Push a request onto the request channel.
 
         Args:
             request: The ERE request to serialize and enqueue.
+
+        Returns:
+            The length of the list after the push (0 means the channel did not accept the request).
 
         Raises:
             ConnectionError: If the underlying transport cannot reach the channel.
@@ -61,6 +63,14 @@ class AbstractClient(ABC):
         Raises:
             TimeoutError: If a timeout is configured and no response arrives in time.
             ConnectionError: On connection failure.
+        """
+
+    @abstractmethod
+    async def ping(self) -> bool:
+        """Check if the underlying transport is reachable.
+
+        Returns:
+            True if the channel is reachable, False otherwise.
         """
 
     @abstractmethod
@@ -127,11 +137,14 @@ class RedisEREClient(AbstractClient):
         else:
             log.debug("Redis ERE client: pull_response() timeout not set, blocking indefinitely")
 
-    async def push_request(self, request: ERERequest) -> None:
+    async def push_request(self, request: ERERequest) -> int:
         """Push a request onto the request channel identified by ERE_REQUEST_CHANNEL_ID.
 
         Args:
             request: The ERE request to serialize and enqueue.
+
+        Returns:
+            The length of the list after the push (0 means the channel did not accept the request).
 
         Raises:
             ConnectionError: If the Redis connection is refused or unavailable.
@@ -143,10 +156,11 @@ class RedisEREClient(AbstractClient):
         )
         try:
             msg_json_str = request.model_dump_json()
-            await self._redis_client.lpush(self.request_channel_id, msg_json_str)
+            count = await self._redis_client.lpush(self.request_channel_id, msg_json_str)
         except _RedisLibConnectionError as exc:
             raise ConnectionError(str(exc)) from exc
         log.debug("Redis ERE client, request id: %s sent", request.ere_request_id)
+        return count
 
     async def pull_response(self) -> EREResponse:
         """Pull the next response from the response channel identified by ERE_RESPONSE_CHANNEL_ID.
@@ -168,7 +182,7 @@ class RedisEREClient(AbstractClient):
             result = await self._redis_client.brpop(self.response_channel_id, timeout=self.timeout)
         except _RedisLibConnectionError as ex:
             log.error("Redis ERE client, pull_response() failed due to connection issue: %s", ex)
-            raise
+            raise ConnectionError(str(ex)) from ex
         if result is None:
             raise TimeoutError(
                 f"No response received on channel '{self.response_channel_id}' within {self.timeout}s"
@@ -177,6 +191,18 @@ class RedisEREClient(AbstractClient):
         response = get_response_from_message(raw_msg, self.character_encoding)
         log.debug("Redis ERE client, received response id: %s", response.ere_request_id)
         return response
+
+    async def ping(self) -> bool:
+        """Check if the Redis server is reachable.
+
+        Returns:
+            True if the server responded to PING, False on any error.
+        """
+        try:
+            result = await self._redis_client.ping()
+            return bool(result)
+        except Exception:
+            return False
 
     async def close(self) -> None:
         """Close the connection if owned by this client; no-op otherwise.

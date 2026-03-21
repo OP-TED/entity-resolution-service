@@ -5,6 +5,7 @@ import pytest
 from ers.commons.domain.exceptions import DomainError
 from ers.ere_contract_client.domain.errors import (
     ChannelUnavailableError,
+    DeserializationError,
     EREContractError,
     InvalidRequestError,
     RedisConnectionError,
@@ -14,6 +15,7 @@ from ers.ere_contract_client.domain.errors import (
 ALL_ERROR_CLASSES = [
     InvalidRequestError,
     SerializationError,
+    DeserializationError,
     ChannelUnavailableError,
     RedisConnectionError,
 ]

@@ -4,7 +4,7 @@ import asyncio
 
 
 def run_async(coro):
-    """Run a coroutine synchronously in a fresh event loop.
+    """Run a coroutine synchronously.
 
     pytest-bdd step functions cannot be async, so this helper bridges the gap
     between synchronous step definitions and async service calls.
@@ -15,8 +15,4 @@ def run_async(coro):
     Returns:
         The coroutine's return value.
     """
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+    return asyncio.run(coro)
