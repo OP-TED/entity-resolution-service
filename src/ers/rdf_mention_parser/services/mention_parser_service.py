@@ -43,7 +43,7 @@ def build_sparql_query(config: RDFMappingConfig, entity_config: EntityTypeConfig
         prefixes="\n".join(
             f"PREFIX {prefix}: <{uri}>" for prefix, uri in config.namespaces.items()
         ),
-        variables=" ".join(f"?{name}" for name in entity_config.fields),
+        variables="?entity " + " ".join(f"?{name}" for name in entity_config.fields),
         rdf_type=entity_config.rdf_type,
         optionals="\n".join(
             f"  OPTIONAL {{ ?entity {path} ?{name} . }}"
@@ -58,7 +58,8 @@ class MentionParserService:
     Orchestrates: content-length guard → entity type resolution → RDF parsing
     → entity type validation → SPARQL extraction → empty-result guard → result dict.
 
-    All errors are fatal; no partial results are returned.
+    Errors are fatal (raised, never swallowed). Individual fields may be ``None``
+    when absent in the RDF — only a completely empty extraction is rejected.
     """
 
     def __init__(self, config: RDFMappingConfig, adapter: RDFParserAdapter) -> None:
@@ -113,24 +114,40 @@ class MentionParserService:
         query = build_sparql_query(self._config, entity_config)
         rows = self._adapter.execute_sparql(graph, query)
 
-        if len(rows) > 1:
-            logger.warning(
-                "Multiple entities found: entity_type=%s count=%d", entity_type, len(rows)
-            )
-            raise MultipleEntitiesFoundError(entity_type, len(rows))
-
-        if not rows or all(v is None for v in rows[0].values()):
+        if not rows:
             logger.warning("Empty extraction: entity_type=%s", entity_type)
             raise EmptyExtractionError(entity_type)
 
-        result = rows[0]
+        # Count distinct entities — multi-valued OPTIONAL properties can produce
+        # multiple rows for the same ?entity (cartesian product).
+        distinct_entities = {row["entity"] for row in rows if row.get("entity")}
+        if len(distinct_entities) > 1:
+            logger.warning(
+                "Multiple entities found: entity_type=%s count=%d",
+                entity_type,
+                len(distinct_entities),
+            )
+            raise MultipleEntitiesFoundError(entity_type, len(distinct_entities))
+
+        # Merge all rows for the single entity — pick first non-None value per field.
+        field_names = [name for name in entity_config.fields]
+        merged: dict[str, str | None] = {name: None for name in field_names}
+        for row in rows:
+            for name in field_names:
+                if merged[name] is None and row.get(name) is not None:
+                    merged[name] = row[name]
+
+        if all(v is None for v in merged.values()):
+            logger.warning("Empty extraction: entity_type=%s", entity_type)
+            raise EmptyExtractionError(entity_type)
+
         logger.info(
             "Parsed entity_type=%s content_type=%s fields_extracted=%d",
             entity_type,
             content_type,
-            sum(1 for v in result.values() if v is not None),
+            sum(1 for v in merged.values() if v is not None),
         )
-        return result
+        return merged
 
 
 # ---------------------------------------------------------------------------

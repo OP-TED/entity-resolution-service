@@ -61,3 +61,64 @@ Domain models were manually simplified to compose with erspec base classes inste
 
 - Phase 1: committed and merged (prior session)
 - Phase 2: this session
+
+---
+
+## PR Review Comments Summary (2026-03-21)
+
+### PR #22 — `feat(request-registry): EPIC-01 Request Registry implementation`
+
+**No review comments received.** PR has not been reviewed yet.
+
+### PR #20 — `feat/ers rest api`
+
+**WIP PR, no review comments.**
+
+### PR #19 — `feat(ERS1-142): EPIC-02 tasks 4-5 — global config + RDF mention parser service`
+
+This PR is EPIC-02 scope but contains comments relevant to shared code and patterns also used by EPIC-01.
+
+#### Copilot comments (2 items)
+
+1. **Multi-entity detection is unreliable** (`mention_parser_service.py:126`)
+   - `len(rows) > 1` incorrectly flags multi-valued properties (cartesian products from OPTIONAL patterns) as multiple entities. Should use `COUNT(DISTINCT ?entity)` or aggregate field values.
+   - **Status:** Not addressed — EPIC-02 scope, not related to EPIC-01.
+   - **Should be addressed:** Yes, in EPIC-02 follow-up. Valid bug.
+
+2. **Docstring contradicts behaviour** (`mention_parser_service.py:61`)
+   - Class docstring says "no partial results" but `parse()` returns `None` for absent fields (partial extraction is allowed).
+   - **Status:** Not addressed — EPIC-02 scope.
+   - **Should be addressed:** Yes, minor docstring fix in EPIC-02.
+
+#### gkostkowski comments (4 items)
+
+3. **Obscure `inspect` invocation in `config_resolver.py:14`**
+   - Requested extracting to a meaningful utility function or adding an explanatory comment.
+   - **Status:** Not addressed.
+   - **Should be addressed:** Yes, in EPIC-02 or commons follow-up. Improves readability.
+
+4. **`[ENV]` logging specifier convention** (`config_resolver.py:32`)
+   - Side comment about aligning on how to use extra specifiers/suffixes in log lines for context.
+   - **Status:** Not addressed — acknowledged as future alignment topic.
+   - **Should be addressed:** Not urgent. Track as a convention discussion.
+
+5. **Working directory for default config path** (`ers/__init__.py:79`)
+   - Suggested commenting on what working directory resolves the default absolute path, but noted the comment belongs in infra docs rather than code.
+   - **Status:** Not addressed.
+   - **Should be addressed:** Low priority. Better suited for infra/deployment docs.
+
+6. **`TEST_ROOT_DIR` in conftest** (`test_parser_configuration.py:32`)
+   - Proposed introducing a shared `TEST_ROOT_DIR` constant in a conftest file instead of repeating path construction in each test file.
+   - **Status:** Not addressed.
+   - **Should be addressed:** Yes — applies across all test files including EPIC-01 tests. Good DRY improvement.
+
+### Summary
+
+| # | Comment | Scope | Addressed | Action needed |
+|---|---------|-------|-----------|---------------|
+| 1 | Multi-entity detection bug | EPIC-02 | No | Fix in EPIC-02 |
+| 2 | Docstring contradiction | EPIC-02 | No | Fix in EPIC-02 |
+| 3 | Obscure inspect invocation | commons | No | Fix in EPIC-02/commons |
+| 4 | Logging specifier convention | commons | No | Future convention alignment |
+| 5 | Default config path docs | infra | No | Low priority, infra docs |
+| 6 | TEST_ROOT_DIR in conftest | cross-cutting | No | Apply across all test files |

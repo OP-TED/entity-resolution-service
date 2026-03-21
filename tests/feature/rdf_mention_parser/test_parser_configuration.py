@@ -27,9 +27,7 @@ from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, R
 # Scenario bindings
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(
-    Path(__file__).parent.parent / "rdf_mention_parser" / "parser_configuration.feature"
-)
+FEATURE_FILE = str(Path(__file__).parent / "parser_configuration.feature")
 
 
 @scenario(FEATURE_FILE, "Load a valid parser configuration")
