@@ -43,7 +43,8 @@
 - **[2026-03-20] Tasks 1.2–1.3 complete** — Mongo repositories + `RequestRegistryService` + BDD features
 - **[2026-03-20] Task 1.1 revised** — models simplified to compose with erspec (`EntityMention`, `LookupState`); dropped `JSONRepresentation`, `LookupRequestType`, repository ABCs, audit log concept. Adapter reuses `BaseMongoRepository`. 51 request_registry tests pass.
 - **[2026-03-20] Agent MCP tools** — all agents updated with gitnexus, ide, context7 MCP tools in frontmatter
-- Next: integration tests (Task 5) or PR
+- **[2026-03-21] PR review + refactoring** — addressed PR #19/20/22 comments; removed `MongoCollections`; `_collection_name` pattern in `BaseMongoRepository`; erspec `EntityType` removal fixes; `ResolutionRequestRecord` triad validator; 302 unit + 200 feature tests green
+- **[2026-03-21] PR created** — `feature/ERS1-143-task11` → `develop`, assigned to gkostkowski
 
 ## Project Automation
 
@@ -74,6 +75,9 @@
 - 2026-03-18: Services layer exposes two public functions for entrypoints — `load_config()` and `parse_entity_mention(...)`. Entrypoints never instantiate `MentionParserService` directly. The class stays for unit-testability; the functions own dependency wiring.
 - 2026-03-18: Config pattern — `env_property(default_value=...)` decorator + `ConfigResolverABC` in `ers/commons/adapters/config_resolver.py`. Domain config classes in `ers/__init__.py` use UPPER_SNAKE_CASE method names (= env var keys). N802 ruff rule suppressed for that file via `ruff.toml` `[lint.per-file-ignores]`. `load_dotenv()` called at module import. Singleton: `config = AppConfigResolver()`.
 - 2026-03-18: `ers/config.py` (pydantic_settings) was deleted. If `ers/config.py` exists, Python resolves `from ers import config` as the submodule, shadowing the `__init__.py` attribute. Delete the file first, then rename.
+- 2026-03-21: `MongoCollections` façade deleted. `BaseMongoRepository.__init__` now takes `AsyncDatabase`; each concrete repo declares `_collection_name: ClassVar[str]` (alongside `_model_class`, `_id_field`). `MongoStatisticsRepository` is the only exception — it uses 3 collections and takes `AsyncDatabase` directly.
+- 2026-03-21: `erspec` no longer exports `EntityType` enum — entity types are plain `str` throughout ERS. All `EntityType` references and `.value` accesses removed from domain, adapters, and tests.
+- 2026-03-21: `ResolutionRequestRecord` has a `_identified_by_fields_must_be_non_empty` model validator; `EntityMentionIdentifier` is explicitly imported in `records.py` (fixes Pydantic schema resolution without needing `model_rebuild()` in test conftest).
 
 ## Feature File Assessment
 
