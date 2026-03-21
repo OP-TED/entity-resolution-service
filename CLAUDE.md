@@ -55,6 +55,9 @@ These rules apply to ALL agents in this project.
 - Follow the Cosmic Python layered architecture: `entrypoints -> services -> domain`,
   `adapters -> domain`. Domain must not import from higher layers.
   **Note:** The innermost layer is called `domain` (not `models`) in this project.
+- Always use Context7 when you need up-to-date library/API documentation or other
+  documentation context before generating code or configuration, rather than
+  waiting for the developer to request it explicitly.
 
 ### Code Documentation & Docstrings
 - All docstrings must follow **Google Python style** (see `.claude/references/google_python_docstring_style.md`).
