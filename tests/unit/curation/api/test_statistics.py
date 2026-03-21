@@ -65,4 +65,4 @@ class TestGetStatistics:
 
         call_args = statistics_service.get_statistics.call_args
         filters = call_args.kwargs["filters"]
-        assert filters.entity_type.value == "ORGANISATION"
+        assert filters.entity_type == "ORGANISATION"

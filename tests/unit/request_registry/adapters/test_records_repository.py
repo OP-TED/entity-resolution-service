@@ -65,7 +65,9 @@ def async_collection() -> AsyncMock:
 
 @pytest.fixture
 def repo(async_collection: AsyncMock) -> MongoResolutionRequestRepository:
-    return MongoResolutionRequestRepository(collection=async_collection)
+    db = MagicMock()
+    db.__getitem__ = MagicMock(return_value=async_collection)
+    return MongoResolutionRequestRepository(db)
 
 
 def _async_iter(items: list):
@@ -267,7 +269,9 @@ class TestMongoLookupStateRepository:
     def lookup_repo(
         self, lookup_collection: AsyncMock
     ) -> MongoLookupStateRepository:
-        return MongoLookupStateRepository(collection=lookup_collection)
+        db = MagicMock()
+        db.__getitem__ = MagicMock(return_value=lookup_collection)
+        return MongoLookupStateRepository(db)
 
     async def test_upsert_calls_replace_one_with_upsert_true(
         self,

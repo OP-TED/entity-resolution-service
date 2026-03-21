@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar
+from typing import Any, ClassVar, Generic, TypeVar
 
-from pymongo.asynchronous.collection import AsyncCollection
+from pymongo.asynchronous.database import AsyncDatabase
 
 T = TypeVar("T")
 ID = TypeVar("ID")
@@ -32,9 +32,10 @@ class BaseMongoRepository(AsyncReadRepository[T, ID], AsyncWriteRepository[T, ID
 
     _model_class: type[T]
     _id_field: str = "id"
+    _collection_name: ClassVar[str]
 
-    def __init__(self, collection: AsyncCollection) -> None:
-        self._collection = collection
+    def __init__(self, database: AsyncDatabase) -> None:
+        self._collection = database[self._collection_name]
 
     def _to_document(self, entity: T) -> dict[str, Any]:
         doc = entity.model_dump(exclude={"object_description"})

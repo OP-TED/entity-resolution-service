@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from erspec.models.core import EntityMention, LookupState
+from erspec.models.core import EntityMention, LookupState, EntityMentionIdentifier
 from pydantic import Field, field_validator, model_validator
 
 from ers.commons.domain.data_transfer_objects import FrozenDTO
@@ -64,3 +64,14 @@ class ResolutionRequestRecord(FrozenDTO, EntityMention):
         if v.tzinfo is None:
             raise ValueError("received_at must be timezone-aware")
         return v
+
+    @model_validator(mode="after")
+    def _identified_by_fields_must_be_non_empty(self) -> ResolutionRequestRecord:
+        ident: EntityMentionIdentifier = self.identifiedBy
+        if not ident.source_id:
+            raise ValueError("source_id must not be empty")
+        if not ident.request_id:
+            raise ValueError("request_id must not be empty")
+        if not ident.entity_type:
+            raise ValueError("entity_type must not be empty")
+        return self

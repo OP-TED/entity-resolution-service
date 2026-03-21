@@ -23,6 +23,7 @@ class MongoResolutionRequestRepository(BaseMongoRepository[ResolutionRequestReco
     """
 
     _model_class = ResolutionRequestRecord
+    _collection_name = "resolution_requests"
 
     @staticmethod
     def _triad_id(identifier: EntityMentionIdentifier) -> str:
@@ -78,6 +79,7 @@ class MongoLookupStateRepository(BaseMongoRepository[LookupRequestRecord, str]):
 
     _model_class = LookupRequestRecord
     _id_field = "source_id"
+    _collection_name = "lookup_states"
 
     async def get(self, source_id: str) -> LookupRequestRecord | None:
         """Return the watermark for a source. Returns None if not found."""

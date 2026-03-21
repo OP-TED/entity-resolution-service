@@ -35,6 +35,9 @@ These rules apply to ALL agents in this project.
   in subject/intention).
 - PRs are triggered upon completing an EPIC. Exceptionally, large Epics may have
   intermediate PRs grouping stories that deliver business value.
+- **Before creating any PR, always ask the developer:** should this be a
+  **stacked PR** (targeting a previous feature branch) or a **direct PR**
+  (targeting `develop`/`main`)? Never assume one or the other.
 - **Stacked PRs (non-cumulative diffs):** Each feature branch is based on the
   previous feature branch, not on `develop`. This keeps each PR's diff scoped to
   its own changes only.
@@ -175,7 +178,7 @@ make clean-docs       # Remove build artifacts
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **entity-resolution-service** (1930 symbols, 3587 relationships, 52 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **entity-resolution-service** (2529 symbols, 4793 relationships, 68 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

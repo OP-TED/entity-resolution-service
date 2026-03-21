@@ -8,7 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ers import config
 from ers.commons.adapters.mongo_client import MongoClientManager
-from ers.commons.adapters.mongo_collections_manager import MongoCollections
 from ers.curation.entrypoints.api.exception_handlers import register_exception_handlers
 from ers.curation.entrypoints.api.health import router as health_router
 from ers.curation.entrypoints.api.v1.router import v1_router
@@ -40,8 +39,7 @@ async def _seed_admin_user(db: object) -> None:
 
     from ers.users.domain.users import User
 
-    collections = MongoCollections(db)  # type: ignore[arg-type]
-    repo = MongoUserRepository(collections.users)
+    repo = MongoUserRepository(db)  # type: ignore[arg-type]
     existing = await repo.find_by_email(config.ADMIN_EMAIL)
     if existing is not None:
         return

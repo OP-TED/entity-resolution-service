@@ -8,7 +8,6 @@ from ers.commons.adapters.entity_mention_repository import (
     EntityMentionRepository,
     MongoEntityMentionRepository,
 )
-from ers.commons.adapters.mongo_collections_manager import MongoCollections
 from ers.ers_rest_api.services.lookup_service import LookupService
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
 from ers.ers_rest_api.services.resolve_service import ResolveService
@@ -26,23 +25,19 @@ def _get_database(request: Request) -> AsyncDatabase:
     return request.app.state.mongo_db
 
 
-def _get_collections(request: Request) -> MongoCollections:
-    return MongoCollections(_get_database(request))
-
-
 # Repository providers
 
 
 async def get_decision_repository(
-    collections: Annotated[MongoCollections, Depends(_get_collections)],
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> DecisionRepository:
-    return MongoDecisionRepository(collections.decisions)
+    return MongoDecisionRepository(db)
 
 
 async def get_entity_mention_repository(
-    collections: Annotated[MongoCollections, Depends(_get_collections)],
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> EntityMentionRepository:
-    return MongoEntityMentionRepository(collections.entity_mentions)
+    return MongoEntityMentionRepository(db)
 
 
 # Module service providers (implementations pending their respective EPICs)

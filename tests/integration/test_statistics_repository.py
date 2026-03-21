@@ -4,7 +4,6 @@ import pytest
 from erspec.models.core import UserActionType
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.adapters.mongo_collections_manager import MongoCollections
 from ers.curation.adapters.statistics_repository import MongoStatisticsRepository
 from ers.curation.domain.data_transfer_objects import StatisticsFilters
 from tests.unit.factories import (
@@ -34,10 +33,9 @@ async def _seed_data(db: AsyncDatabase) -> None:
         MongoUserActionCurationRepository,
     )
 
-    collections = MongoCollections(db)
-    mention_repo = MongoEntityMentionCurationRepository(collections.entity_mentions)
-    decision_repo = MongoDecisionCurationRepository(collections.decisions)
-    action_repo = MongoUserActionCurationRepository(collections.user_actions)
+    mention_repo = MongoEntityMentionCurationRepository(db)
+    decision_repo = MongoDecisionCurationRepository(db)
+    action_repo = MongoUserActionCurationRepository(db)
 
     mentions = EntityMentionFactory.batch(4)
     mentions[0].identifiedBy.entity_type = "ORGANISATION"

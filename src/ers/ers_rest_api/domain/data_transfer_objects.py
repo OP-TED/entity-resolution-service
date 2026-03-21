@@ -9,6 +9,7 @@ from ers.commons.domain.data_transfer_objects import FrozenDTO
 DEFAULT_REFRESH_BULK_LIMIT = 1000
 MAX_REFRESH_BULK_LIMIT = 1000
 
+# TODO: delete this module file once the new ones are used
 
 class EntityMentionRequest(FrozenDTO):
     """Request body for POST /resolve."""

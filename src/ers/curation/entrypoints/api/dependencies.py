@@ -4,7 +4,6 @@ from fastapi import Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ers import config
-from ers.commons.adapters.mongo_collections_manager import MongoCollections
 from ers.curation.adapters import (
     DecisionCurationRepository,
     EntityMentionCurationRepository,
@@ -32,10 +31,6 @@ def _get_database(request: Request) -> AsyncDatabase:
     return request.app.state.mongo_db
 
 
-def _get_collections(request: Request) -> MongoCollections:
-    return MongoCollections(_get_database(request))
-
-
 # Infrastructure providers
 
 
@@ -56,21 +51,21 @@ def get_token_service() -> TokenService:
 
 
 async def get_decision_repository(
-    collections: Annotated[MongoCollections, Depends(_get_collections)],
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> DecisionCurationRepository:
-    return MongoDecisionCurationRepository(collections.decisions)
+    return MongoDecisionCurationRepository(db)
 
 
 async def get_entity_mention_repository(
-    collections: Annotated[MongoCollections, Depends(_get_collections)],
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> EntityMentionCurationRepository:
-    return MongoEntityMentionCurationRepository(collections.entity_mentions)
+    return MongoEntityMentionCurationRepository(db)
 
 
 async def get_user_action_repository(
-    collections: Annotated[MongoCollections, Depends(_get_collections)],
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> UserActionCurationRepository:
-    return MongoUserActionCurationRepository(collections.user_actions)
+    return MongoUserActionCurationRepository(db)
 
 
 async def get_statistics_repository(
@@ -80,9 +75,9 @@ async def get_statistics_repository(
 
 
 async def get_user_repository(
-    collections: Annotated[MongoCollections, Depends(_get_collections)],
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> UserRepository:
-    return MongoUserRepository(collections.users)
+    return MongoUserRepository(db)
 
 
 # Service providers
