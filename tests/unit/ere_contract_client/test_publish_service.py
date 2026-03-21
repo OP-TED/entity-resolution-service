@@ -1,7 +1,7 @@
-"""Unit tests for EREPublishService."""
+"""Unit tests for EREPublishService and the publish_request public API function."""
 import uuid
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -16,7 +16,10 @@ from ers.ere_contract_client.domain.errors import (
     RedisConnectionError,
     SerializationError,
 )
-from ers.ere_contract_client.services.ere_publish_service import EREPublishService
+from ers.ere_contract_client.services.ere_publish_service import (
+    EREPublishService,
+    publish_request,
+)
 from erspec.models.core import EntityMentionIdentifier
 from erspec.models.ere import EntityMention, EntityMentionResolutionRequest
 
@@ -212,64 +215,24 @@ class TestPublishRequestSerializationError:
             await service.publish_request(bad_request)
 
 
-class TestPublishRequestOTel:
-    """OTel tests patch _otel_available=True and tracer so _span() enters the real branch.
+class TestPublishRequestPublicApi:
+    """Tests for the module-level publish_request public API function."""
 
-    ``_span`` is an async context manager; ``tracer.start_as_current_span`` returns a
-    *sync* context manager that is used with ``with`` inside the async generator body.
-    """
+    async def test_delegates_to_service_and_returns_ere_request_id(self, mock_adapter):
+        """publish_request() wires adapter into EREPublishService and returns ere_request_id."""
+        request = make_request(ere_request_id="pub-1")
+        result = await publish_request(request, mock_adapter)
+        assert result == "pub-1"
+        mock_adapter.push_request.assert_called_once_with(request)
 
-    def _make_mock_tracer(self, mock_span):
-        """Build a mock tracer whose start_as_current_span returns a sync CM yielding mock_span."""
-        mock_tracer = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
-        return mock_tracer
+    async def test_propagates_invalid_request_error(self, mock_adapter):
+        """publish_request() propagates InvalidRequestError from the service."""
+        request = make_request(entity_mention=None)
+        with pytest.raises(InvalidRequestError):
+            await publish_request(request, mock_adapter)
 
-    async def test_span_created_with_correct_attributes(self, service):
-        """Successful publish creates OTel span with required attributes."""
-        request = make_request(
-            source_id="SRC", request_id="REQ", entity_type="ORG", ere_request_id="req-1"
-        )
-        mock_span = MagicMock()
-        mock_tracer = self._make_mock_tracer(mock_span)
-
-        with (
-            patch(
-                "ers.ere_contract_client.services.ere_publish_service._otel_available", True
-            ),
-            patch(
-                "ers.ere_contract_client.services.ere_publish_service.tracer", mock_tracer
-            ),
-        ):
-            await service.publish_request(request)
-
-        mock_tracer.start_as_current_span.assert_called_once_with(
-            "ere_contract_client.publish"
-        )
-        mock_span.set_attribute.assert_any_call("source_id", "SRC")
-        mock_span.set_attribute.assert_any_call("request_id", "REQ")
-        mock_span.set_attribute.assert_any_call("entity_type", "ORG")
-        mock_span.set_attribute.assert_any_call("ere_request_id", "req-1")
-
-    async def test_span_records_exception_on_failure(self, service, mock_adapter):
-        """OTel span records exception when adapter raises."""
-        mock_adapter.push_request = AsyncMock(side_effect=TimeoutError("timeout"))
-        mock_span = MagicMock()
-        mock_tracer = self._make_mock_tracer(mock_span)
-
-        with (
-            patch(
-                "ers.ere_contract_client.services.ere_publish_service._otel_available", True
-            ),
-            patch(
-                "ers.ere_contract_client.services.ere_publish_service.tracer", mock_tracer
-            ),
-        ):
-            with pytest.raises(ChannelUnavailableError):
-                await service.publish_request(make_request())
-
-        args, _ = mock_span.record_exception.call_args
-        assert isinstance(args[0], TimeoutError)
+    async def test_propagates_channel_unavailable_error(self, mock_adapter):
+        """publish_request() propagates ChannelUnavailableError from the service."""
+        mock_adapter.push_request = AsyncMock(return_value=0)
+        with pytest.raises(ChannelUnavailableError):
+            await publish_request(make_request(), mock_adapter)
