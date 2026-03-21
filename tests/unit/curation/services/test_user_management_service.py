@@ -4,7 +4,7 @@ import pytest
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import ApplicationError, NotFoundError
-from ers.users.adapters import PasswordHasher, UserRepository
+from ers.users.adapters import ContentHasher, UserRepository
 from ers.users.domain.data_transfer_objects import CreateUserRequest, UserPatchRequest
 from ers.users.domain.exceptions import LastAdminError
 from ers.users.services import UserManagementService
@@ -18,7 +18,7 @@ def user_repository() -> AsyncMock:
 
 @pytest.fixture
 def password_hasher() -> AsyncMock:
-    return create_autospec(PasswordHasher, instance=True)
+    return create_autospec(ContentHasher, instance=True)
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 
-from ers.users.adapters import PasswordHasher, UserRepository
+from ers.users.adapters import ContentHasher, UserRepository
 from ers.users.domain.data_transfer_objects import (
     LoginRequest,
     RefreshRequest,
@@ -22,7 +22,7 @@ def user_repository() -> AsyncMock:
 
 @pytest.fixture
 def password_hasher() -> AsyncMock:
-    return create_autospec(PasswordHasher, instance=True)
+    return create_autospec(ContentHasher, instance=True)
 
 
 @pytest.fixture

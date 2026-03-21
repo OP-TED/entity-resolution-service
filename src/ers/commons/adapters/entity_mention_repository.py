@@ -22,6 +22,7 @@ class MongoEntityMentionRepository(
 ):
     _model_class = EntityMention
     _id_field = "identifiedBy"
+    _collection_name = "entity_mentions"
 
     def _to_document(self, entity: EntityMention) -> dict[str, Any]:
         doc = entity.model_dump(exclude={"identifiedBy", "object_description"})

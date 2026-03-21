@@ -1,8 +1,6 @@
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
-from erspec.models.core import EntityType
-
 from ers.curation.adapters import StatisticsRepository
 from ers.curation.domain.data_transfer_objects import (
     CurationStatistics,
@@ -55,7 +53,7 @@ class TestGetStatistics:
         service: StatisticsService,
         statistics_repository: MagicMock,
     ) -> None:
-        filters = StatisticsFilters(entity_type=EntityType.ORGANISATION)
+        filters = StatisticsFilters(entity_type="ORGANISATION")
         statistics_repository.get_curation_statistics.return_value = CurationStatistics(
             total_decisions=0,
             selected_top=0,

@@ -35,13 +35,19 @@ These rules apply to ALL agents in this project.
   in subject/intention).
 - PRs are triggered upon completing an EPIC. Exceptionally, large Epics may have
   intermediate PRs grouping stories that deliver business value.
-- **PR base targeting:** When opening a PR for a branch that builds on a previous
-  feature branch (not yet merged to `develop`), target the PR at the previous
-  feature branch — not at `develop`. This keeps each PR's diff scoped to its own
-  changes only. Use `gh pr edit <number> --base <previous-branch>` to fix after
-  creation if needed. When the earlier PR merges, GitHub automatically re-targets
-  the dependent PR to `develop`. Always use **merge commits** (not squash/rebase)
-  to preserve the shared history that makes this work.
+- **Before creating any PR, always ask the developer:** should this be a
+  **stacked PR** (targeting a previous feature branch) or a **direct PR**
+  (targeting `develop`/`main`)? Never assume one or the other.
+- **Stacked PRs (non-cumulative diffs):** Each feature branch is based on the
+  previous feature branch, not on `develop`. This keeps each PR's diff scoped to
+  its own changes only.
+  - When creating a PR for a branch built on a previous feature branch, pass
+    `--base <previous-branch>` to `/commit-push-pr` (e.g.
+    `/commit-push-pr --base feature/ERS1-142-task3`).
+  - When the earlier PR merges, GitHub automatically re-targets the dependent PR
+    to `develop`.
+  - Always use **merge commits** — squash/rebase destroys the shared history that
+    makes auto-retargeting work correctly.
 
 ### Working Methodology
 
@@ -174,7 +180,7 @@ make clean-docs       # Remove build artifacts
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **entity-resolution-service** (1443 symbols, 2524 relationships, 42 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **entity-resolution-service** (2514 symbols, 4748 relationships, 67 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

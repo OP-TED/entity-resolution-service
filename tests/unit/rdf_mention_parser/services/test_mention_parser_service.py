@@ -67,6 +67,7 @@ def adapter_mock():
     mock.has_entity_of_type.return_value = True
     mock.execute_sparql.return_value = [
         {
+            "entity": "http://example.org/org/1",
             "legal_name": "Test Org",
             "country_code": "http://publications.europa.eu/resource/authority/country/DEU",
             "nuts_code": "http://data.europa.eu/nuts/code/DE1",
@@ -94,8 +95,9 @@ class TestBuildSparqlQuery:
         for prefix in _NAMESPACES:
             assert f"PREFIX {prefix}:" in query
 
-    def test_selects_all_field_variables(self, config):
+    def test_selects_entity_and_all_field_variables(self, config):
         query = build_sparql_query(config, config.entity_types["ORGANISATION"])
+        assert "?entity" in query
         for field in _ORG_FIELDS:
             assert f"?{field}" in query
 
@@ -145,6 +147,7 @@ class TestMentionParserServiceParse:
     def test_partial_result_returned_when_some_fields_none(self, service, adapter_mock, config):
         adapter_mock.execute_sparql.return_value = [
             {
+                "entity": "http://example.org/org/1",
                 "legal_name": "Test Org",
                 "country_code": "DEU",
                 "nuts_code": None,
@@ -198,20 +201,39 @@ class TestEntityTypeMismatch:
 
 
 class TestMultipleEntitiesFound:
-    def test_raises_when_sparql_returns_multiple_rows(self, service, adapter_mock):
-        row = {
-            "legal_name": "Test Org",
-            "country_code": "http://publications.europa.eu/resource/authority/country/DEU",
-            "nuts_code": "http://data.europa.eu/nuts/code/DE1",
-            "post_code": "10115",
-            "post_name": "Berlin",
-            "thoroughfare": "Unter den Linden 1",
-        }
-        adapter_mock.execute_sparql.return_value = [row, row]
+    def test_raises_when_multiple_distinct_entities_found(self, service, adapter_mock):
+        adapter_mock.execute_sparql.return_value = [
+            {"entity": "http://example.org/org/1", "legal_name": "Org A",
+             "country_code": "DEU", "nuts_code": None, "post_code": None,
+             "post_name": None, "thoroughfare": None},
+            {"entity": "http://example.org/org/2", "legal_name": "Org B",
+             "country_code": "FRA", "nuts_code": None, "post_code": None,
+             "post_name": None, "thoroughfare": None},
+        ]
 
         with pytest.raises(MultipleEntitiesFoundError) as exc_info:
             service.parse("turtle content", "text/turtle", _ORG_URI)
         assert exc_info.value.count == 2
+
+    def test_merges_rows_for_same_entity(self, service, adapter_mock):
+        """Multi-valued OPTIONAL properties produce multiple rows for one entity.
+
+        The service should merge them (first non-None wins) instead of raising.
+        """
+        adapter_mock.execute_sparql.return_value = [
+            {"entity": "http://example.org/org/1", "legal_name": "Test Org",
+             "country_code": "DEU", "nuts_code": None, "post_code": "10115",
+             "post_name": None, "thoroughfare": None},
+            {"entity": "http://example.org/org/1", "legal_name": "Test Org",
+             "country_code": None, "nuts_code": "DE1", "post_code": None,
+             "post_name": "Berlin", "thoroughfare": None},
+        ]
+
+        result = service.parse("turtle content", "text/turtle", _ORG_URI)
+        assert result["legal_name"] == "Test Org"
+        assert result["country_code"] == "DEU"
+        assert result["nuts_code"] == "DE1"
+        assert result["post_name"] == "Berlin"
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +245,7 @@ class TestEmptyExtraction:
     def test_raises_when_all_fields_are_none(self, service, adapter_mock):
         adapter_mock.execute_sparql.return_value = [
             {
+                "entity": "http://example.org/org/1",
                 "legal_name": None,
                 "country_code": None,
                 "nuts_code": None,

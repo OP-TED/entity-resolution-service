@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Annotated
 
-from erspec.models.core import EntityType
 from fastapi import Depends, Query
 from pydantic import BaseModel
 
@@ -33,7 +32,7 @@ def get_pagination(
 
 
 def get_decision_filters(
-    entity_type: EntityType | None = Query(None, description="Filter by entity type"),
+    entity_type: str | None = Query(None, description="Filter by entity type"),
     confidence_min: float | None = Query(None, ge=0, le=1, description="Minimum confidence"),
     confidence_max: float | None = Query(
         config.CURATION_CONFIDENCE_THRESHOLD,  # evaluated once at import time
@@ -58,7 +57,7 @@ def get_decision_filters(
 
 
 def get_statistics_filters(
-    entity_type: EntityType | None = Query(None, description="Filter by entity type"),
+    entity_type: str | None = Query(None, description="Filter by entity type"),
     timeframe_start: datetime | None = Query(None, description="Start of timeframe"),
     timeframe_end: datetime | None = Query(None, description="End of timeframe"),
 ) -> StatisticsFilters:

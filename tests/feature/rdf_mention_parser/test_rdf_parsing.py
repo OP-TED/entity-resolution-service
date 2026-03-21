@@ -28,9 +28,7 @@ MAX_CONTENT_LENGTH = config.ERS_PARSER_MAX_CONTENT_LENGTH
 # Scenario bindings
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(
-    Path(__file__).parent.parent.parent / "feature" / "rdf_mention_parser" / "rdf_parsing.feature"
-)
+FEATURE_FILE = str(Path(__file__).parent / "rdf_parsing.feature")
 
 
 @scenario(FEATURE_FILE, "Extract configured fields from valid RDF content")

@@ -40,7 +40,7 @@ from ers.curation.services import (
     StatisticsService,
     UserActionService,
 )
-from ers.users.adapters.hasher import PasswordHasher
+from ers.commons.adapters.hasher import Argon2PasswordHasher
 from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.data_transfer_objects import UserContext
 from ers.users.services import AuthService, UserManagementService
@@ -114,7 +114,7 @@ def user_repository() -> AsyncMock:
 
 @pytest.fixture
 def password_hasher() -> MagicMock:
-    mock = create_autospec(PasswordHasher, instance=True)
+    mock = create_autospec(Argon2PasswordHasher, instance=True)
     mock.hash.side_effect = lambda pw: f"hashed:{pw}"
     mock.verify.side_effect = lambda pw, hashed: hashed == f"hashed:{pw}"
     return mock

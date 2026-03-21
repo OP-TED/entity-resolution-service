@@ -1,3 +1,5 @@
+from datetime import datetime
+from enum import StrEnum
 from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,6 +13,24 @@ class FrozenDTO(BaseModel):
     """Base model for all application-layer DTOs."""
 
     model_config = ConfigDict(frozen=True)
+
+
+class ERSRequest(FrozenDTO):
+    """Base class for all ERS REST API request DTOs.
+
+    Mirrors the ERERequest / EREResponse pattern from erspec,
+    providing an extraction point if these models are later
+    promoted to the erspec contract.
+    """
+
+
+class ERSResponse(FrozenDTO):
+    """Base class for all ERS REST API response DTOs.
+
+    Mirrors the ERERequest / EREResponse pattern from erspec,
+    providing an extraction point if these models are later
+    promoted to the erspec contract.
+    """
 
 
 class PaginationParams(FrozenDTO):
@@ -27,3 +47,14 @@ class PaginatedResult(FrozenDTO, Generic[T]):
     previous: int | None = None
     next: int | None = None
     results: list[T]
+
+
+class ResolutionOutcome(StrEnum):
+    """Possible outcomes of a single entity mention resolution.
+
+    CANONICAL — the cluster ID was produced by the Entity Resolution Engine.
+    PROVISIONAL — the cluster ID was derived deterministically (singleton).
+    """
+
+    CANONICAL = "CANONICAL"
+    PROVISIONAL = "PROVISIONAL"

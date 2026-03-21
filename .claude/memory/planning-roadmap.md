@@ -205,3 +205,22 @@ When all 10 epics are written + Clarity Gate passes → implementation phase beg
 ## Next Action
 
 All component-level Gherkin features (EPICs 01–07) and UC-level integration features complete. EPICs 08–09 (curation) and EPIC-X (observability) pending. Next: begin implementation phase starting with foundation EPICs (01–04), or write remaining curation EPICs (08–09) if needed before implementation.
+
+---
+
+## PR #14 Review Comments Analysis (2026-03-19)
+
+PR #14: "feat: BDD Gherkin features for all 7 EPICs + UC-level integration and E2E" (merged into develop).
+Reviewers: **gkostkowski** (human), **Copilot** (bot). Comments from **costezki** acknowledge deferred items.
+
+### Gherkin Feature Adjustments (from gkostkowski's human review)
+
+| # | File | Comment | Status |
+|---|------|---------|--------|
+| A1 | `ere_contract_client/request_validation_and_transport.feature` | Field names in ERE message structure examples are placeholders — must align with domain models once defined. | **Deferred → EPIC-03 implementation.** |
+| A2 | `ere_contract_client/request_validation_and_transport.feature` | Error types (`connection`, `serialization`, etc.) are placeholders — must map to concrete domain exceptions. | **Deferred → EPIC-03 implementation.** |
+| A3 | `decision_store/decision_persistence.feature` | Triad format normalized from `SYSTEM_E/r1` shorthand to explicit `("SYSTEM_E", "r1", "Organization")` tuples. | ✅ **Fixed 2026-03-19.** |
+| A4 | `ere_result_integrator/contract_validation.feature` | Added `zero candidate alternatives are provided` malformation example. | ✅ **Fixed 2026-03-19.** |
+| A5 | `ere_result_integrator/outcome_acceptance.feature` | Removed redundant Background; registry setup moved into per-scenario Given steps. | ✅ **Fixed 2026-03-19.** |
+| A6 | `ere_result_integrator/outcome_acceptance.feature` | Count-based candidate test should use concrete candidate IDs instead. | **Deferred → EPIC-05 implementation.** |
+| A7 | `decision_store/decision_persistence.feature` | Singleton confidence/similarity corrected from 1.0 to 0.0 (matches ERE convention). | ✅ **Fixed 2026-03-19.** |
