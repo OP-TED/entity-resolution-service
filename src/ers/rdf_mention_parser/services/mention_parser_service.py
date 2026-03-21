@@ -2,7 +2,10 @@ import logging
 from string import Template
 from typing import Any
 
+from erspec.models.core import EntityMention
+
 from ers import config
+from ers.commons.adapters.tracing import trace_function
 from ers.rdf_mention_parser.adapter.rdf_mapping_config_reader import RDFConfigReader
 from ers.rdf_mention_parser.adapter.rdf_parser_adapter import RDFParserAdapter
 from ers.rdf_mention_parser.domain.exceptions import (
@@ -66,28 +69,26 @@ class MentionParserService:
         self._config = config
         self._adapter = adapter
 
-    def parse(self, content: str, content_type: str, entity_type: str) -> dict[str, Any]:
+    @trace_function(span_name="mention_parser.parse")
+    def parse(self, entity_mention: EntityMention) -> dict[str, Any]:
         """Parse an RDF mention and return its JSON representation.
 
         Args:
-            content: Raw RDF string.
-            content_type: MIME type (``text/turtle`` or ``application/rdf+xml``).
-            entity_type: Full URI of the entity type, e.g.
-                         ``http://www.w3.org/ns/org#Organization``.
+            entity_mention: The entity mention to parse. Provides content,
+                            content_type, and entity_type identifier.
 
         Returns:
             Dict mapping configured field names to extracted string values.
             Fields absent in the RDF are mapped to ``None``.
 
         Raises:
-            ContentTooLargeError: Content exceeds MAX_CONTENT_LENGTH bytes.
-            UnsupportedEntityTypeError: entity_type not found in config.
-            UnsupportedContentTypeError: content_type not in supported set.
-            MalformedRDFError: Content cannot be parsed as the declared format.
-            EntityTypeMismatchError: Graph contains no entity of the declared type.
-            MultipleEntitiesFoundError: Graph contains more than one entity of the declared type.
-            EmptyExtractionError: All configured fields resolve to None.
+            ContentTooLargeError, UnsupportedEntityTypeError, UnsupportedContentTypeError,
+            MalformedRDFError, EntityTypeMismatchError, MultipleEntitiesFoundError,
+            EmptyExtractionError: see class docstring.
         """
+        content = entity_mention.content
+        content_type = entity_mention.content_type
+        entity_type = str(entity_mention.identifiedBy.entity_type)
         content_bytes = content.encode("utf-8")
         max_bytes = config.ERS_PARSER_MAX_CONTENT_LENGTH
         if len(content_bytes) > max_bytes:
@@ -169,19 +170,13 @@ def load_config() -> RDFMappingConfig:
 
 
 def parse_entity_mention(
-    content: str,
-    content_type: str,
-    entity_type: str,
+    entity_mention: EntityMention,
     config: RDFMappingConfig,
 ) -> dict[str, Any]:
     """Parse a raw RDF entity mention into a JSON representation.
 
-    Wires up the adapter and service, then delegates to MentionParserService.
-
     Args:
-        content: Raw RDF string.
-        content_type: MIME type (``text/turtle`` or ``application/rdf+xml``).
-        entity_type: Full URI of the entity type.
+        entity_mention: The entity mention to parse.
         config: Validated RDF mapping configuration.
 
     Returns:
@@ -193,4 +188,4 @@ def parse_entity_mention(
         EmptyExtractionError: see MentionParserService.parse.
     """
     service = MentionParserService(config, RDFParserAdapter())
-    return service.parse(content, content_type, entity_type)
+    return service.parse(entity_mention)

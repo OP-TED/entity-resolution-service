@@ -7,6 +7,7 @@ Adapter is mocked; domain logic is tested in isolation.
 from unittest.mock import MagicMock, patch
 
 import pytest
+from erspec.models.core import EntityMention, EntityMentionIdentifier
 from rdflib import Graph
 
 from ers import config as ers_config  # aliased: 'config' fixture name conflicts in this module
@@ -48,6 +49,18 @@ _ORG_FIELDS = {
 }
 
 _ORG_URI = "http://www.w3.org/ns/org#Organization"
+
+
+def _make_entity_mention(content: str, content_type: str = "text/turtle", entity_type: str = _ORG_URI) -> EntityMention:
+    return EntityMention(
+        identifiedBy=EntityMentionIdentifier(
+            source_id="test-source",
+            request_id="test-request-001",
+            entity_type=entity_type,
+        ),
+        content=content,
+        content_type=content_type,
+    )
 
 
 @pytest.fixture
@@ -133,7 +146,7 @@ class TestBuildSparqlQuery:
 
 class TestMentionParserServiceParse:
     def test_returns_dict_with_all_six_fields(self, service, adapter_mock):
-        result = service.parse("dummy content", "text/turtle", _ORG_URI)
+        result = service.parse(_make_entity_mention("dummy content"))
 
         assert isinstance(result, dict)
         assert len(result) == 6
@@ -141,7 +154,7 @@ class TestMentionParserServiceParse:
         assert result["post_code"] == "10115"
 
     def test_passes_content_and_type_to_adapter(self, service, adapter_mock):
-        service.parse("my content", "text/turtle", _ORG_URI)
+        service.parse(_make_entity_mention("my content"))
         adapter_mock.parse_to_graph.assert_called_once_with("my content", "text/turtle")
 
     def test_partial_result_returned_when_some_fields_none(self, service, adapter_mock, config):
@@ -156,7 +169,7 @@ class TestMentionParserServiceParse:
                 "thoroughfare": None,
             }
         ]
-        result = service.parse("dummy", "text/turtle", _ORG_URI)
+        result = service.parse(_make_entity_mention("dummy"))
         assert result["legal_name"] == "Test Org"
         assert result["nuts_code"] is None
 
@@ -170,14 +183,14 @@ class TestContentTooLarge:
     def test_raises_at_one_byte_over_limit(self, service):
         oversized = "x" * (ers_config.ERS_PARSER_MAX_CONTENT_LENGTH + 1)
         with pytest.raises(ContentTooLargeError) as exc_info:
-            service.parse(oversized, "text/turtle", _ORG_URI)
+            service.parse(_make_entity_mention(oversized))
         assert exc_info.value.max_bytes == ers_config.ERS_PARSER_MAX_CONTENT_LENGTH
 
     def test_passes_at_exact_limit(self, service, adapter_mock):
         # Build a string whose UTF-8 encoding is exactly ers_config.ERS_PARSER_MAX_CONTENT_LENGTH bytes.
         padding = "x" * ers_config.ERS_PARSER_MAX_CONTENT_LENGTH
         # The adapter mock returns a valid result, so parse succeeds.
-        result = service.parse(padding, "text/turtle", _ORG_URI)
+        result = service.parse(_make_entity_mention(padding))
         assert isinstance(result, dict)
 
 
@@ -191,7 +204,7 @@ class TestEntityTypeMismatch:
         adapter_mock.has_entity_of_type.return_value = False
 
         with pytest.raises(EntityTypeMismatchError) as exc_info:
-            service.parse("turtle content", "text/turtle", _ORG_URI)
+            service.parse(_make_entity_mention("turtle content"))
         assert _ORG_URI in exc_info.value.message
 
 
@@ -212,7 +225,7 @@ class TestMultipleEntitiesFound:
         ]
 
         with pytest.raises(MultipleEntitiesFoundError) as exc_info:
-            service.parse("turtle content", "text/turtle", _ORG_URI)
+            service.parse(_make_entity_mention("turtle content"))
         assert exc_info.value.count == 2
 
     def test_merges_rows_for_same_entity(self, service, adapter_mock):
@@ -229,7 +242,7 @@ class TestMultipleEntitiesFound:
              "post_name": "Berlin", "thoroughfare": None},
         ]
 
-        result = service.parse("turtle content", "text/turtle", _ORG_URI)
+        result = service.parse(_make_entity_mention("turtle content"))
         assert result["legal_name"] == "Test Org"
         assert result["country_code"] == "DEU"
         assert result["nuts_code"] == "DE1"
@@ -256,14 +269,14 @@ class TestEmptyExtraction:
         ]
 
         with pytest.raises(EmptyExtractionError) as exc_info:
-            service.parse("turtle content", "text/turtle", _ORG_URI)
+            service.parse(_make_entity_mention("turtle content"))
         assert _ORG_URI in exc_info.value.message
 
     def test_raises_when_sparql_returns_no_rows(self, service, adapter_mock):
         adapter_mock.execute_sparql.return_value = []
 
         with pytest.raises(EmptyExtractionError):
-            service.parse("turtle content", "text/turtle", _ORG_URI)
+            service.parse(_make_entity_mention("turtle content"))
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +289,7 @@ class TestMalformedRDF:
         adapter_mock.parse_to_graph.side_effect = MalformedRDFError("text/turtle")
 
         with pytest.raises(MalformedRDFError):
-            service.parse("bad turtle", "text/turtle", _ORG_URI)
+            service.parse(_make_entity_mention("bad turtle"))
 
 
 # ---------------------------------------------------------------------------
@@ -289,11 +302,11 @@ class TestErrorPropagation:
         adapter_mock.parse_to_graph.side_effect = UnsupportedContentTypeError("application/json")
 
         with pytest.raises(UnsupportedContentTypeError):
-            service.parse("{}", "application/json", _ORG_URI)
+            service.parse(_make_entity_mention("{}", content_type="application/json"))
 
     def test_raises_unsupported_entity_type_for_unknown_uri(self, service):
         with pytest.raises(UnsupportedEntityTypeError):
-            service.parse("content", "text/turtle", "http://example.org/Unknown#Type")
+            service.parse(_make_entity_mention("content", entity_type="http://example.org/Unknown#Type"))
 
 
 # ---------------------------------------------------------------------------
@@ -324,22 +337,22 @@ class TestLoadConfig:
 class TestParseEntityMention:
     def test_delegates_to_service(self, config):
         expected = {"legal_name": "Test Org", "country_code": "DEU"}
+        entity_mention = _make_entity_mention("content")
         with (
             patch(f"{_SERVICE_MODULE}.RDFParserAdapter") as mock_adapter_cls,
             patch(f"{_SERVICE_MODULE}.MentionParserService") as mock_service_cls,
         ):
             mock_service_cls.return_value.parse.return_value = expected
 
-            result = parse_entity_mention("content", "text/turtle", _ORG_URI, config)
+            result = parse_entity_mention(entity_mention, config)
 
         mock_adapter_cls.assert_called_once_with()
         mock_service_cls.assert_called_once_with(config, mock_adapter_cls.return_value)
-        mock_service_cls.return_value.parse.assert_called_once_with(
-            "content", "text/turtle", _ORG_URI
-        )
+        mock_service_cls.return_value.parse.assert_called_once_with(entity_mention)
         assert result == expected
 
     def test_propagates_domain_errors(self, config):
+        entity_mention = _make_entity_mention("content")
         with (
             patch(f"{_SERVICE_MODULE}.RDFParserAdapter"),
             patch(f"{_SERVICE_MODULE}.MentionParserService") as mock_service_cls,
@@ -347,4 +360,4 @@ class TestParseEntityMention:
             mock_service_cls.return_value.parse.side_effect = EntityTypeMismatchError(_ORG_URI)
 
             with pytest.raises(EntityTypeMismatchError):
-                parse_entity_mention("content", "text/turtle", _ORG_URI, config)
+                parse_entity_mention(entity_mention, config)
