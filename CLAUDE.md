@@ -71,6 +71,32 @@ These rules apply to ALL agents in this project.
 - Write for behaviour, not implementation; focus on inputs, outputs, and exceptions.
 - Keep docstrings concise; avoid redundancy with self-documenting code.
 
+### Observability (Tracing)
+
+- Tracing infrastructure lives in `src/ers/commons/adapters/tracing.py`.
+- **`@trace_function` belongs on module-level public functions, not class methods.**
+  The public function is the API boundary — trace there. Class methods are implementation details.
+  ```python
+  # Correct — trace the public API function (auto span name: "mention_parser_service.parse_entity_mention")
+  @trace_function
+  def parse_entity_mention(entity_mention: EntityMention, config: ...) -> dict:
+      ...
+
+  # Or with an explicit shorter name:
+  @trace_function(span_name="mention_parser.parse")
+  def parse_entity_mention(entity_mention: EntityMention, config: ...) -> dict:
+      ...
+  ```
+- All three forms are equivalent: `@trace_function`, `@trace_function()`, `@trace_function(span_name="...")`.
+  Default span name is `<module_file>.<qualname>` (e.g. `mention_parser_service.parse_entity_mention`).
+- Span attribute extraction is automatic via the extractor registry — register extractors
+  in `<module>/adapters/span_extractors.py`, imported at startup (not at module level).
+- `set_request_id()` / `get_request_id()` carry the **ERS business UUID**, not the OTel trace ID.
+  Set once per incoming request in HTTP middleware or service entry points.
+- To add a real exporter: `add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))`.
+- To wire FastAPI: see `configure_fastapi_telemetry()` docstring — activate when
+  `opentelemetry-instrumentation-fastapi` is added as a dependency.
+
 ### Interaction
 
 - Never make assumptions — ask clarifying questions when information is missing.
@@ -180,7 +206,7 @@ make clean-docs       # Remove build artifacts
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **entity-resolution-service** (2514 symbols, 4748 relationships, 67 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **entity-resolution-service** (2590 symbols, 4944 relationships, 67 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

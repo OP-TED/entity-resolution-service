@@ -7,6 +7,7 @@ Feature: Parse RDF Entity Mention into JSON Representation
 from pathlib import Path
 
 import pytest
+from erspec.models.core import EntityMention, EntityMentionIdentifier
 from pytest_bdd import given, parsers, scenario, then, when
 
 from ers import config
@@ -319,11 +320,16 @@ def invalid_rdf_input(ctx, invalid_input):
 @when("the mention is parsed")
 def parse_mention_default_uri(ctx):
     try:
-        ctx["result"] = ctx["service"].parse(
+        entity_mention = EntityMention(
+            identifiedBy=EntityMentionIdentifier(
+                source_id="test-source",
+                request_id="test-request-001",
+                entity_type=ctx["entity_type_uri"],
+            ),
             content=ctx["content"],
             content_type=ctx["content_type"],
-            entity_type=ctx["entity_type_uri"],
         )
+        ctx["result"] = ctx["service"].parse(entity_mention)
         ctx["raised_exception"] = None
     except Exception as exc:
         ctx["result"] = None
@@ -333,11 +339,16 @@ def parse_mention_default_uri(ctx):
 @when(parsers.parse('the mention is parsed for entity type URI "{entity_type_uri}"'))
 def parse_mention_with_uri(ctx, entity_type_uri):
     try:
-        ctx["result"] = ctx["service"].parse(
+        entity_mention = EntityMention(
+            identifiedBy=EntityMentionIdentifier(
+                source_id="test-source",
+                request_id="test-request-001",
+                entity_type=entity_type_uri,
+            ),
             content=ctx["content"],
             content_type=ctx["content_type"],
-            entity_type=entity_type_uri,
         )
+        ctx["result"] = ctx["service"].parse(entity_mention)
         ctx["raised_exception"] = None
     except Exception as exc:
         ctx["result"] = None

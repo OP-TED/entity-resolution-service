@@ -121,6 +121,16 @@ class RedisConfig:
         return config_value
 
 
+class ObservabilityConfig:
+    @env_property(default_value="false")
+    def TRACING_ENABLED(self, config_value: str) -> bool:
+        return config_value.lower() == "true"
+
+    @env_property(default_value="entity-resolution-service")
+    def OTEL_SERVICE_NAME(self, config_value: str) -> str:
+        return config_value
+
+
 class ERSConfigResolver(
     AppConfig,
     JWTConfig,
@@ -131,6 +141,7 @@ class ERSConfigResolver(
     RDFMentionParserConfig,
     ERSRestApiConfig,
     EREConfig,
+    ObservabilityConfig,
 ):
     """Aggregates all ERS configuration.
 
