@@ -13,7 +13,7 @@ class ContentHasher(ABC):
         """Hash a plaintext content."""
 
     @abstractmethod
-    def verify(self, content: str, hash: str) -> bool:
+    def verify(self, content: str, expected_hash: str) -> bool:
         """Verify a plaintext content against a hash."""
 
 
@@ -26,9 +26,9 @@ class Argon2PasswordHasher(ContentHasher):
     def hash(self, content: str) -> str:
         return self._hasher.hash(content)
 
-    def verify(self, content: str, hash: str) -> bool:
+    def verify(self, content: str, expected_hash: str) -> bool:
         try:
-            return self._hasher.verify(hash, content)
+            return self._hasher.verify(expected_hash, content)
         except VerifyMismatchError:
             return False
 
@@ -43,5 +43,5 @@ class SHA256ContentHasher(ContentHasher):
     def hash(self, content: str) -> str:
         return hashlib.sha256(content.encode()).hexdigest()
 
-    def verify(self, content: str, hash: str) -> bool:
-        return self.hash(content) == hash
+    def verify(self, content: str, expected_hash: str) -> bool:
+        return self.hash(content) == expected_hash

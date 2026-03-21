@@ -54,11 +54,11 @@ class EntityMentionResolutionResult(ERSResponse):
     @model_validator(mode="after")
     def _check_success_xor_error(self) -> EntityMentionResolutionResult:
         is_success = self.canonical_entity_id is not None and self.status is not None
-        is_error = self.error_code is not None
+        is_error = self.error is not None
         if not (is_success ^ is_error):
             raise ValueError(
                 "EntityMentionResolutionResult must have either success fields "
-                "(canonical_entity_id + status) or error fields (error_code), "
+                "(canonical_entity_id + status) or error fields (error), "
                 "not both or neither."
             )
         return self

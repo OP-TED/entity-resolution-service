@@ -45,8 +45,8 @@ class MongoResolutionRequestRepository(BaseMongoRepository[ResolutionRequestReco
         doc = self._to_document(record)
         try:
             await self._collection.insert_one(doc)
-        except DuplicateKeyError:
-            raise DuplicateTriadError(record.identifiedBy)
+        except DuplicateKeyError as exc:
+            raise DuplicateTriadError(record.identifiedBy) from exc
         except ConnectionFailure as exc:
             raise RepositoryConnectionError(str(exc)) from exc
         except PyMongoError as exc:

@@ -252,7 +252,7 @@ class TestFromDocument:
         repo._from_document(doc)
 
         # Original doc must still contain _id (not mutated in place)
-        assert "_id" in original_keys
+        assert "_id" in doc
 
 
 # ---------------------------------------------------------------------------
