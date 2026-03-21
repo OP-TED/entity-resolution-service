@@ -97,12 +97,36 @@ def test_trace_function_preserves_function_name():
     assert my_function.__doc__ == "My docstring."
 
 
-def test_trace_function_default_span_name_uses_qualname():
-    @trace_function()
+def test_trace_function_no_parens():
+    """@trace_function without parentheses must work identically to @trace_function()."""
+    @trace_function
     def standalone():
         return "ok"
 
     assert standalone() == "ok"
+    assert standalone.__name__ == "standalone"
+
+
+def test_trace_function_default_span_name_uses_module_and_qualname():
+    """Default span name is <module_file>.<qualname> — verified via exported span."""
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    exporter = InMemorySpanExporter()
+    configure_tracing(_make_config(enabled=True))
+    tracing_module._provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+    @trace_function
+    def my_operation():
+        pass
+
+    my_operation()
+
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    # Module file is "test_tracing", qualname is "test_trace_function_default_span_name_uses_module_and_qualname.<locals>.my_operation"
+    assert spans[0].name.startswith("test_tracing.")
+    assert spans[0].name.endswith(".my_operation")
 
 
 def test_trace_function_sync_exception_propagates():
@@ -180,8 +204,9 @@ def test_add_span_processor_noop_when_not_configured():
 def test_add_span_processor_registers_when_configured():
     configure_tracing(_make_config(enabled=True))
     mock_processor = MagicMock()
+    tracing_module._provider.add_span_processor = MagicMock()
     add_span_processor(mock_processor)
-    assert tracing_module._provider is not None
+    tracing_module._provider.add_span_processor.assert_called_once_with(mock_processor)
 
 
 # ---------------------------------------------------------------------------
@@ -194,18 +219,17 @@ class _SampleDomain:
 
 
 def test_extractor_called_for_registered_type():
-    register_span_extractor(
-        _SampleDomain,
-        lambda obj: {"sample.value": obj.value},
-    )
+    extractor = MagicMock(return_value={"sample.value": "hello"})
+    register_span_extractor(_SampleDomain, extractor)
 
     @trace_function(span_name="test.extractor")
     def service_fn(domain_obj: _SampleDomain) -> str:
         return domain_obj.value
 
-    result = service_fn(_SampleDomain("hello"))
+    domain_obj = _SampleDomain("hello")
+    result = service_fn(domain_obj)
     assert result == "hello"
-    assert _SampleDomain in tracing_module._extractors
+    extractor.assert_called_once_with(domain_obj)
 
 
 def test_unregistered_type_silently_ignored():

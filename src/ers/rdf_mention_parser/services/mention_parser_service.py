@@ -69,7 +69,6 @@ class MentionParserService:
         self._config = config
         self._adapter = adapter
 
-    @trace_function(span_name="mention_parser.parse")
     def parse(self, entity_mention: EntityMention) -> dict[str, Any]:
         """Parse an RDF mention and return its JSON representation.
 
@@ -169,6 +168,7 @@ def load_config() -> RDFMappingConfig:
     return RDFConfigReader.from_file(config.RDF_MENTION_CONFIG_FILE)
 
 
+@trace_function(span_name="mention_parser.parse")
 def parse_entity_mention(
     entity_mention: EntityMention,
     config: RDFMappingConfig,

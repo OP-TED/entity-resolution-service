@@ -7,6 +7,25 @@ This module provides a clean, minimal tracing API that:
 - Exposes ``span()`` and ``trace_function()`` as the only application-facing API
 - Extracts span attributes from domain objects via a type registry (never raw args)
 
+Placement convention — where to put ``@trace_function``::
+
+    Prefer module-level public functions (the API boundary) over class methods.
+    This keeps tracing at the right boundary, avoids ``self`` in the argument
+    list (which the extractor registry silently ignores), and keeps the
+    service class implementation detail-free.
+
+    # Preferred — instrument the public API function:
+    @trace_function(span_name="mention_parser.parse")
+    def parse_entity_mention(entity_mention: EntityMention, ...) -> dict:
+        service = MentionParserService(...)
+        return service.parse(entity_mention)
+
+    # Avoid — decorating the class method instead:
+    class MentionParserService:
+        @trace_function(span_name="mention_parser.parse")
+        def parse(self, entity_mention: EntityMention) -> dict:
+            ...
+
 Usage::
 
     from ers.commons.adapters.tracing import configure_tracing, span, trace_function
@@ -14,9 +33,9 @@ Usage::
     # In app factory or test setup — never at module level:
     configure_tracing(config)
 
-    # In service layer:
-    @trace_function(span_name="request_registry.register")
-    def register(self, entity_mention: EntityMention) -> RequestRecord:
+    # In service layer — on the public function:
+    @trace_function(span_name="mention_parser.parse")
+    def parse_entity_mention(entity_mention: EntityMention, config: ...) -> dict:
         ...
 
     with span("mention_parser.extraction", fields_extracted=count):
@@ -149,12 +168,18 @@ _request_id_var: ContextVar[str | None] = ContextVar("ers_request_id", default=N
 
 
 def set_request_id(request_id: str | None = None) -> str:
-    """Set the current correlation/request ID. Generates a UUID4 if none given.
+    """Set the current ERS business-level correlation ID. Generates a UUID4 if none given.
 
+    This is the ERS ``ResolutionRequest`` UUID — NOT the OTel trace ID.
+    OTel generates its own 128-bit trace/span IDs for distributed tracing.
+    This ID is the business-level correlation handle used across async call
+    chains within a single resolution request.
+
+    Call once per incoming request in HTTP middleware or the service entry point.
     Async-safe via ``contextvars`` — each task/coroutine has an isolated value.
 
     Args:
-        request_id: ID to set. A UUID4 string is generated when ``None``.
+        request_id: ERS request UUID to propagate. A UUID4 is generated when ``None``.
 
     Returns:
         The request ID that was set.
@@ -165,10 +190,13 @@ def set_request_id(request_id: str | None = None) -> str:
 
 
 def get_request_id() -> str | None:
-    """Return the current correlation/request ID, or ``None`` if not set.
+    """Return the current ERS business-level correlation ID, or ``None`` if not set.
+
+    Returns ``None`` when called outside a request context (e.g. in background tasks
+    not initiated by an HTTP request). Callers should handle ``None`` gracefully.
 
     Returns:
-        The current request ID string, or ``None``.
+        The current ERS request UUID string, or ``None``.
     """
     return _request_id_var.get()
 
@@ -194,13 +222,31 @@ def span(name: str, **attributes: Any):
         with span("mention_parser.extraction", fields_extracted=count):
             ...
     """
+    # ``attributes or None``: an empty dict is falsy and becomes None.
+    # OTel treats None and {} identically — both mean "no attributes".
     return trace.get_tracer(__name__).start_as_current_span(
         name, attributes=attributes or None
     )
 
 
-def trace_function(span_name: str | None = None) -> Callable:
+def trace_function(
+    func: Callable | None = None,
+    *,
+    span_name: str | None = None,
+) -> Callable:
     """Decorator for service-layer functions. Supports both sync and async.
+
+    Can be used with or without parentheses::
+
+        @trace_function                              # auto span name
+        @trace_function()                            # auto span name
+        @trace_function(span_name="module.op")       # explicit span name
+
+    The default span name is ``<module_file>.<qualname>``
+    (e.g. ``mention_parser_service.parse_entity_mention``), derived from
+    ``func.__module__`` and ``func.__qualname__``. Override with ``span_name``
+    when a shorter or more intuitive name is preferred
+    (e.g. ``"mention_parser.parse"``).
 
     Automatically extracts span attributes from typed arguments that have
     registered extractors (see ``register_span_extractor``). Arguments whose
@@ -208,51 +254,61 @@ def trace_function(span_name: str | None = None) -> Callable:
     never captured. This is the only attribute capture mechanism.
 
     ``functools.wraps`` preserves ``__name__``, ``__doc__``, and other metadata.
-    Exceptions propagate unchanged; the span records the exception type only
-    (never the message, to avoid capturing PII).
+    Exceptions propagate unchanged; the span records the exception type and
+    message.
 
     Args:
-        span_name: Explicit span name. Defaults to ``func.__qualname__``
-                   (e.g. ``"RequestRegistryService.register"``).
+        func: The function to decorate. Supplied automatically when used as
+              ``@trace_function`` (no parentheses); ``None`` otherwise.
+        span_name: Explicit span name. Defaults to
+                   ``<module_file>.<qualname>`` when omitted.
 
     Example::
 
-        @trace_function(span_name="request_registry.register")
-        def register(self, entity_mention: EntityMention) -> RequestRecord:
+        @trace_function
+        def parse_entity_mention(entity_mention: EntityMention, ...) -> dict:
+            ...
+
+        @trace_function(span_name="mention_parser.parse")
+        def parse_entity_mention(entity_mention: EntityMention, ...) -> dict:
             ...
     """
-    def decorator(func: Callable) -> Callable:
-        effective_name = span_name or func.__qualname__
+    def decorator(f: Callable) -> Callable:
+        module_short = f.__module__.rsplit(".", 1)[-1]
+        effective_name = span_name or f"{module_short}.{f.__qualname__}"
 
-        if asyncio.iscoroutinefunction(func):
-            @functools.wraps(func)
+        if asyncio.iscoroutinefunction(f):
+            @functools.wraps(f)
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 attributes = _extract_attributes(args, kwargs)
                 with trace.get_tracer(__name__).start_as_current_span(
                     effective_name, attributes=attributes or None
                 ) as current_span:
                     try:
-                        return await func(*args, **kwargs)
+                        return await f(*args, **kwargs)
                     except Exception as exc:
                         current_span.set_attribute("error.type", type(exc).__name__)
                         current_span.record_exception(exc)
                         raise
             return async_wrapper
 
-        @functools.wraps(func)
+        @functools.wraps(f)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             attributes = _extract_attributes(args, kwargs)
             with trace.get_tracer(__name__).start_as_current_span(
                 effective_name, attributes=attributes or None
             ) as current_span:
                 try:
-                    return func(*args, **kwargs)
+                    return f(*args, **kwargs)
                 except Exception as exc:
                     current_span.set_attribute("error.type", type(exc).__name__)
                     current_span.record_exception(exc)
                     raise
         return sync_wrapper
 
+    if func is not None:
+        # Used as @trace_function (no parentheses)
+        return decorator(func)
     return decorator
 
 
@@ -264,35 +320,29 @@ def trace_function(span_name: str | None = None) -> Callable:
 def configure_fastapi_telemetry(app: Any, config: Any) -> None:
     """Register OTel instrumentation middleware on a FastAPI application.
 
-    Currently a no-op stub. When ``opentelemetry-instrumentation-fastapi`` is
-    added as a dependency, this function will call::
+    Currently a no-op stub. Activate when ``opentelemetry-instrumentation-fastapi``
+    is added as a dependency (``poetry add opentelemetry-instrumentation-fastapi``).
 
-        FastAPIInstrumentor.instrument_app(app, tracer_provider=_provider)
+    When activated, replace the body with::
+
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        if config.TRACING_ENABLED:
+            FastAPIInstrumentor.instrument_app(app, tracer_provider=_provider)
+
+    This automatically:
+    - Creates a root span for every incoming HTTP request
+    - Extracts W3C ``traceparent`` / ``tracestate`` from incoming headers
+    - Attaches HTTP method, route, and status code as span attributes
 
     Call once from each app factory (``entrypoints/api/app.py``) after
     ``configure_tracing()``.
+
+    Note:
+        ``make_otel_http_headers()`` is NOT needed alongside this. When
+        ``opentelemetry-instrumentation-httpx`` is also installed, outgoing
+        httpx calls propagate trace context automatically.
 
     Args:
         app: The FastAPI application instance.
         config: ``ERSConfigResolver`` instance.
     """
-
-
-def make_otel_http_headers() -> dict[str, str]:
-    """Return W3C trace-context propagation headers for outgoing HTTP requests.
-
-    Currently returns an empty dict (no-op). When
-    ``opentelemetry-instrumentation-httpx`` is added, this will inject the
-    current span's ``traceparent`` and ``tracestate`` headers so ERE client
-    calls participate in the distributed trace.
-
-    Usage in ERE client adapters::
-
-        headers = {**base_headers, **make_otel_http_headers()}
-        response = httpx.post(url, headers=headers)
-
-    Returns:
-        Dict of HTTP headers to merge into outgoing requests. Empty when
-        tracing is disabled or no active span exists.
-    """
-    return {}
