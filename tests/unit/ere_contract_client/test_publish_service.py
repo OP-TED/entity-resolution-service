@@ -9,6 +9,10 @@ from ers.commons.adapters.redis_client import AbstractClient
 from ers.ere_contract_client.domain.errors import (
     ChannelUnavailableError,
     InvalidRequestError,
+    MissingEntityMentionError,
+    MissingEntityTypeError,
+    MissingRequestIdError,
+    MissingSourceIdError,
     RedisConnectionError,
     SerializationError,
 )
@@ -89,9 +93,16 @@ class TestPublishRequestValidTriad:
 
 
 class TestPublishRequestMissingTriad:
-    @pytest.mark.parametrize("missing", ["source_id", "request_id", "entity_type"])
-    async def test_raises_on_missing_triad_field(self, service, mock_adapter, missing):
-        """TC-013: incomplete triad → InvalidRequestError, adapter not called.
+    @pytest.mark.parametrize(
+        "missing,expected_exc",
+        [
+            ("source_id", MissingSourceIdError),
+            ("request_id", MissingRequestIdError),
+            ("entity_type", MissingEntityTypeError),
+        ],
+    )
+    async def test_raises_on_missing_triad_field(self, service, mock_adapter, missing, expected_exc):
+        """TC-013: incomplete triad → specific InvalidRequestError subclass, adapter not called.
 
         Uses model_construct to bypass Pydantic validation so that falsy string
         values reach the service's _validate_triad check rather than being
@@ -109,14 +120,15 @@ class TestPublishRequestMissingTriad:
             entity_mention=mention,
             ere_request_id="",
         )
-        with pytest.raises(InvalidRequestError):
+        with pytest.raises(expected_exc) as exc_info:
             await service.publish_request(request)
+        assert exc_info.value.identifier is identifier
         mock_adapter.push_request.assert_not_called()
 
     async def test_raises_when_entity_mention_absent(self, service, mock_adapter):
-        """TC-013: absent entity_mention → InvalidRequestError."""
+        """TC-013: absent entity_mention → MissingEntityMentionError."""
         request = make_request(entity_mention=None)
-        with pytest.raises(InvalidRequestError):
+        with pytest.raises(MissingEntityMentionError):
             await service.publish_request(request)
         mock_adapter.push_request.assert_not_called()
 

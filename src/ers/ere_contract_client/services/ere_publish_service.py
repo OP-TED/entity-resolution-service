@@ -17,7 +17,10 @@ except ImportError:  # pragma: no cover - OTel not yet in project dependencies
 from ers.commons.adapters.redis_client import AbstractClient
 from ers.ere_contract_client.domain.errors import (
     ChannelUnavailableError,
-    InvalidRequestError,
+    MissingEntityMentionError,
+    MissingEntityTypeError,
+    MissingRequestIdError,
+    MissingSourceIdError,
     RedisConnectionError,
     SerializationError,
 )
@@ -25,10 +28,6 @@ from erspec.models.ere import EntityMentionResolutionRequest
 
 log = logging.getLogger(__name__)
 
-_ERR_ENTITY_MENTION_REQUIRED = "entity_mention is required"
-_ERR_SOURCE_ID_REQUIRED = "source_id is required"
-_ERR_REQUEST_ID_REQUIRED = "request_id is required"
-_ERR_ENTITY_TYPE_REQUIRED = "entity_type is required"
 
 
 @contextlib.asynccontextmanager
@@ -133,14 +132,14 @@ class EREPublishService:
             InvalidRequestError: If entity_mention is absent or any triad field is empty.
         """
         if request.entity_mention is None:
-            raise InvalidRequestError(_ERR_ENTITY_MENTION_REQUIRED)
+            raise MissingEntityMentionError()
         identifier = request.entity_mention.identifiedBy
         if not identifier.source_id:
-            raise InvalidRequestError(_ERR_SOURCE_ID_REQUIRED)
+            raise MissingSourceIdError(identifier)
         if not identifier.request_id:
-            raise InvalidRequestError(_ERR_REQUEST_ID_REQUIRED)
+            raise MissingRequestIdError(identifier)
         if not identifier.entity_type:
-            raise InvalidRequestError(_ERR_ENTITY_TYPE_REQUIRED)
+            raise MissingEntityTypeError(identifier)
 
     def _enrich_metadata(self, request: EntityMentionResolutionRequest) -> None:
         """Auto-populate ere_request_id and timestamp if absent.
