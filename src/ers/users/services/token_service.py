@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -39,7 +39,7 @@ class JWTTokenService(TokenService):
         self._refresh_expire = refresh_expire_minutes
 
     def create_access_token(self, subject: str, extra_claims: dict[str, Any]) -> str:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         payload = {
             "sub": subject,
             "type": "access",
@@ -50,7 +50,7 @@ class JWTTokenService(TokenService):
         return jwt.encode(payload, self._secret, algorithm=self._algorithm)
 
     def create_refresh_token(self, subject: str) -> str:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         payload = {
             "sub": subject,
             "type": "refresh",

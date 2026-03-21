@@ -7,7 +7,7 @@ from ers.curation.domain.exceptions import (
     AlreadyCuratedError,
     InvalidClusterError,
 )
-from ers.users.domain.exceptions import AuthenticationError, AuthorizationError
+from ers.users.domain.exceptions import AuthenticationError, AuthorizationError, LastAdminError
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -57,6 +57,16 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def invalid_cluster_handler(
         request: Request,
         exc: InvalidClusterError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={"detail": exc.message},
+        )
+
+    @app.exception_handler(LastAdminError)
+    async def last_admin_handler(
+        request: Request,
+        exc: LastAdminError,
     ) -> JSONResponse:
         return JSONResponse(
             status_code=409,

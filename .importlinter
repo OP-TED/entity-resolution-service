@@ -40,9 +40,9 @@ layers =
 containers =
     ers.users
     ers.commons
+    ers.ere_contract_client
 
 ; --- Intra-component layers: adapters, services ---
-; When package is created, add: ers.ere_contract_client
 
 ; --- Intra-component layers: adapters, entrypoints, services ---
 ; When package is created, add: ers.ere_result_integrator

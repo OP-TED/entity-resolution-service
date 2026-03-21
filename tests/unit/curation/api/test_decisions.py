@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
@@ -37,7 +37,7 @@ class TestListDecisions:
                 parsed_representation='{"name": "Example"}',
             ),
             current_placement=ClusterReferenceFactory.build(),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         decision_curation_service.list_decisions.return_value = PaginatedResult(
             count=1, previous=None, next=None, results=[summary]

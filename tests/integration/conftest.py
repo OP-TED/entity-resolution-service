@@ -4,15 +4,14 @@ import pytest
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
+from ers import config
 from ers.commons.adapters.mongo_collections_manager import MongoCollections
-from ers.config import get_settings
 
 
 @pytest.fixture
 async def mongo_db() -> AsyncDatabase:
     """Provide an isolated test database that is dropped after each test."""
-    settings = get_settings()
-    client = AsyncMongoClient(settings.mongo_uri)
+    client = AsyncMongoClient(config.MONGO_URI)
     db_name = f"ers_test_{uuid.uuid4().hex[:8]}"
     db = client[db_name]
     collections = MongoCollections(db)

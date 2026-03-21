@@ -27,11 +27,11 @@ Feature: Validate Resolution Requests and Handle Transport Failures
     Then a "<error_type>" error is raised
 
     Examples:
-      | failure_mode              | error_type         |
-      | connection refused        | connection         |
-      | response timeout          | connection         |
-      | serialization failure     | serialization      |
-      | channel accepted zero     | channel_unavailable|
+      | failure_mode              | error_type          |
+      | connection refused        | connection          |
+      | response timeout          | channel_unavailable |
+      | serialization failure     | serialization       |
+      | channel accepted zero     | channel_unavailable |
 
   Scenario Outline: Report messaging channel health
     Given the messaging channel is "<channel_state>"

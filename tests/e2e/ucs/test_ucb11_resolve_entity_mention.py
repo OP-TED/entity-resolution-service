@@ -21,7 +21,7 @@ UC-B1.1 — Resolve Entity Mention via ERS API (Integration)
 """
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
@@ -30,9 +30,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 # Scenario bindings
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(
-    Path(__file__).parent / "ucb11_resolve_entity_mention.feature"
-)
+FEATURE_FILE = str(Path(__file__).parent / "ucb11_resolve_entity_mention.feature")
 
 
 @scenario(
@@ -188,7 +186,11 @@ def entity_mention_with_triad(ctx, source_id, request_id, entity_type):
     }
 
 
-@given(parsers.re(r'the mention content is "(?P<content_fixture>[^"]+)" with context "(?P<context>[^"]*)"'))
+@given(
+    parsers.re(
+        r'the mention content is "(?P<content_fixture>[^"]+)" with context "(?P<context>[^"]*)"'
+    )
+)
 def mention_content_with_context(ctx, content_fixture, context):
     """
     Set content (RDF Turtle fixture reference) and optional context on the request.

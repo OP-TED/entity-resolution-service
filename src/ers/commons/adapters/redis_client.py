@@ -2,16 +2,13 @@ import logging
 from abc import ABC, abstractmethod
 
 import redis.asyncio as aioredis
-from linkml_runtime.dumpers import JSONDumper
-from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import ConnectionError as _RedisLibConnectionError
 
 from ers.commons.adapters.redis_messages import get_response_from_message
 from ers.config import Settings
 from erspec.models.ere import ERERequest, EREResponse
 
 log = logging.getLogger(__name__)
-
-_linkml_dumper = JSONDumper()
 
 
 class RedisConnectionConfig:
@@ -43,7 +40,14 @@ class AbstractClient(ABC):
 
     @abstractmethod
     async def push_request(self, request: ERERequest) -> None:
-        """Push a request onto the request channel."""
+        """Push a request onto the request channel.
+
+        Args:
+            request: The ERE request to serialize and enqueue.
+
+        Raises:
+            ConnectionError: If the underlying transport cannot reach the channel.
+        """
 
     @abstractmethod
     async def pull_response(self) -> EREResponse:
@@ -55,8 +59,8 @@ class AbstractClient(ABC):
             The next EREResponse from the channel.
 
         Raises:
-            TimeoutError: If timeout > 0 and no response arrives in time.
-            RedisConnectionError: On connection failure.
+            TimeoutError: If a timeout is configured and no response arrives in time.
+            ConnectionError: On connection failure.
         """
 
     @abstractmethod
@@ -124,26 +128,37 @@ class RedisEREClient(AbstractClient):
             log.debug("Redis ERE client: pull_response() timeout not set, blocking indefinitely")
 
     async def push_request(self, request: ERERequest) -> None:
-        """Push a request onto the request channel identified by ERE_REQUEST_CHANNEL_ID."""
+        """Push a request onto the request channel identified by ERE_REQUEST_CHANNEL_ID.
+
+        Args:
+            request: The ERE request to serialize and enqueue.
+
+        Raises:
+            ConnectionError: If the Redis connection is refused or unavailable.
+        """
         log.debug(
             "Redis ERE client, pushing request id: %s to channel: %s",
             request.ere_request_id,
             self.request_channel_id,
         )
-        msg_json_str = _linkml_dumper.dumps(request)
-        await self._redis_client.lpush(self.request_channel_id, msg_json_str)
+        try:
+            msg_json_str = request.model_dump_json()
+            await self._redis_client.lpush(self.request_channel_id, msg_json_str)
+        except _RedisLibConnectionError as exc:
+            raise ConnectionError(str(exc)) from exc
         log.debug("Redis ERE client, request id: %s sent", request.ere_request_id)
 
     async def pull_response(self) -> EREResponse:
-        """Pull the next response from the response channel identified by
-        ERE_RESPONSE_CHANNEL_ID.
+        """Pull the next response from the response channel identified by ERE_RESPONSE_CHANNEL_ID.
+
+        Blocks until a message is available or the configured timeout expires.
 
         Returns:
             The next EREResponse from the channel.
 
         Raises:
             TimeoutError: If no response arrives within the configured timeout.
-            RedisConnectionError: On connection failure.
+            redis.exceptions.ConnectionError: On connection failure.
         """
         log.debug(
             "Redis ERE client, waiting for response on channel: %s",
@@ -151,7 +166,7 @@ class RedisEREClient(AbstractClient):
         )
         try:
             result = await self._redis_client.brpop(self.response_channel_id, timeout=self.timeout)
-        except RedisConnectionError as ex:
+        except _RedisLibConnectionError as ex:
             log.error("Redis ERE client, pull_response() failed due to connection issue: %s", ex)
             raise
         if result is None:
@@ -167,7 +182,8 @@ class RedisEREClient(AbstractClient):
         """Close the connection if owned by this client; no-op otherwise.
 
         Logs a warning if closing fails but does not raise, so callers
-        (including context manager exit) are never interrupted by cleanup errors.
+        (including context manager ``__aexit__``) are never interrupted by
+        cleanup errors.
         """
         if not self._owns_client:
             log.debug("Redis ERE client: connection not owned, skipping close")

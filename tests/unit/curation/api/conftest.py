@@ -1,13 +1,12 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from ers.config import Settings
 from ers.curation.entrypoints.api.app import create_app
 from ers.curation.entrypoints.api.auth import get_current_user
 from ers.curation.entrypoints.api.dependencies import (
@@ -32,6 +31,7 @@ from ers.users.services import AuthService, UserManagementService
 TEST_USER_CONTEXT = UserContext(
     id="test-user-id",
     email="test@example.com",
+    is_active=True,
     is_superuser=True,
     is_verified=True,
 )
@@ -40,11 +40,6 @@ TEST_USER_CONTEXT = UserContext(
 @asynccontextmanager
 async def _noop_lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
-
-
-@pytest.fixture
-def settings() -> Settings:
-    return Settings(app_name="Test ERS", debug=True)
 
 
 @pytest.fixture
@@ -84,7 +79,7 @@ def user_action_service() -> AsyncMock:
 
 @pytest.fixture
 def app(
-    settings: Settings,
+    monkeypatch,
     decision_curation_service: AsyncMock,
     canonical_entity_service: AsyncMock,
     entity_service: AsyncMock,
@@ -93,7 +88,11 @@ def app(
     user_action_service: AsyncMock,
     user_management_service: AsyncMock,
 ) -> FastAPI:
-    app = create_app(settings=settings)
+    # monkeypatch.setenv calls MUST come before create_app() — properties are
+    # evaluated at access time, so env vars must be set before FastAPI reads them.
+    monkeypatch.setenv("APP_NAME", "Test ERS")
+    monkeypatch.setenv("DEBUG", "true")
+    app = create_app()
     app.router.lifespan_context = _noop_lifespan
     app.dependency_overrides[get_decision_curation_service] = lambda: decision_curation_service
     app.dependency_overrides[get_canonical_entity_service] = lambda: canonical_entity_service

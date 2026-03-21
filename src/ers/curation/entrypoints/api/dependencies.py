@@ -3,8 +3,8 @@ from typing import Annotated
 from fastapi import Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
+from ers import config
 from ers.commons.adapters.mongo_collections_manager import MongoCollections
-from ers.config import Settings, get_settings
 from ers.curation.adapters import (
     DecisionCurationRepository,
     EntityMentionCurationRepository,
@@ -43,14 +43,12 @@ def get_password_hasher() -> PasswordHasher:
     return Argon2PasswordHasher()
 
 
-def get_token_service(
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> TokenService:
+def get_token_service() -> TokenService:
     return JWTTokenService(
-        secret_key=settings.jwt_secret_key,
-        algorithm=settings.jwt_algorithm,
-        access_expire_minutes=settings.access_token_expire_minutes,
-        refresh_expire_minutes=settings.refresh_token_expire_minutes,
+        secret_key=config.JWT_SECRET_KEY,
+        algorithm=config.JWT_ALGORITHM,
+        access_expire_minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES,
+        refresh_expire_minutes=config.REFRESH_TOKEN_EXPIRE_MINUTES,
     )
 
 

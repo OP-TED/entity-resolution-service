@@ -17,7 +17,6 @@ UC-W4 — Consult Resolution Statistics
 """
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
@@ -26,9 +25,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 # Scenario bindings
 # ---------------------------------------------------------------------------
 
-FEATURE_FILE = str(
-    Path(__file__).parent / "ucw4_consult_resolution_statistics.feature"
-)
+FEATURE_FILE = str(Path(__file__).parent / "ucw4_consult_resolution_statistics.feature")
 
 
 @scenario(
