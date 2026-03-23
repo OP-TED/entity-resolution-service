@@ -7,7 +7,8 @@ Uses starlette TestClient (sync) because pytest-bdd @scenario creates sync test
 functions — async steps/fixtures would return unawaited coroutines.
 """
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, create_autospec
 
@@ -16,6 +17,7 @@ from fastapi import FastAPI
 from pytest_bdd import given
 from starlette.testclient import TestClient
 
+from ers.commons.adapters.hasher import Argon2PasswordHasher
 from ers.curation.adapters import (
     DecisionCurationRepository,
     EntityMentionCurationRepository,
@@ -40,7 +42,6 @@ from ers.curation.services import (
     StatisticsService,
     UserActionService,
 )
-from ers.commons.adapters.hasher import Argon2PasswordHasher
 from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.data_transfer_objects import UserContext
 from ers.users.services import AuthService, UserManagementService
@@ -208,6 +209,11 @@ def user_management_service(
 # ---------------------------------------------------------------------------
 
 
+@asynccontextmanager
+async def _noop_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    yield
+
+
 @pytest.fixture
 def app(
     decision_curation_service: DecisionCurationService,
@@ -219,6 +225,7 @@ def app(
     user_management_service: UserManagementService,
 ) -> FastAPI:
     application = create_app()
+    application.router.lifespan_context = _noop_lifespan
     application.dependency_overrides[get_decision_curation_service] = lambda: (
         decision_curation_service
     )
