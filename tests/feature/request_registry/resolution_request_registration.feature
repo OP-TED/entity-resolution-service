@@ -21,12 +21,11 @@ Feature: Resolution Request Registration
       | source_system_b  | req_002    | organization | {"name": "Acme Corp", "registration_number": "BE0123456789"}           |
       | source_system_b  | req_004    | organization | {"name": "Société Générale 株式会社 — ©2024", "flag": "🇫🇷"}           |
 
-  Scenario: Register a resolution request with empty content
+  Scenario: Reject a resolution request with empty content
     Given an entity mention with source_id "source_system_a", request_id "req_003", entity_type "person", and empty content
     When the resolution request is registered
-    Then a resolution request record is returned
-    And the record content_hash is the SHA-256 digest of the empty string
-    And the record received_at timestamp is set to the current UTC time
+    Then a validation error is raised indicating content must not be empty
+    And no record is created in the repository
 
   Scenario: Idempotent replay of an identical request
     Given an entity mention with source_id "source_system_a", request_id "req_001", entity_type "person", and content '{"name": "Alice Dupont"}'

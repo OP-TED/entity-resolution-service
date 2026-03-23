@@ -33,6 +33,7 @@ class MongoUserRepository(BaseMongoRepository[User, str], UserRepository):
 
     _model_class = User
     _id_field = "id"
+    _collection_name = "users"
 
     async def find_by_email(self, email: str) -> User | None:
         doc = await self._collection.find_one({"email": email})

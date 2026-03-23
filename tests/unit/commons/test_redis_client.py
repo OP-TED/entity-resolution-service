@@ -2,29 +2,23 @@
 Tests for RedisEREClient (ers.commons.adapters.redis_client).
 
 Happy-path and round-trip tests use a short-lived Redis instance provided by
-testcontainers (RedisContainer), which is started once per module and shared
-across all tests in the file. Since testcontainers does not provide an async
-Redis connector, an aioredis.Redis client is constructed manually from the
-container's host and port.
+testcontainers (RedisContainer) via the shared ``redis_container`` and
+``redis_client`` fixtures in ``tests/conftest.py``.
 
 Failure-path tests (connection errors, close behaviour) use AsyncMock in place
 of aioredis.Redis to avoid needing a real connection.
 """
 import asyncio
 import logging
-from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import redis.asyncio as aioredis
-from linkml_runtime.dumpers import JSONDumper
 from redis.exceptions import ConnectionError as RedisConnectionError
-from testcontainers.redis import RedisContainer
 
+from ers import config
 from ers.commons.adapters.redis_client import (
-    ERE_REQUEST_CHANNEL_ID,
-    ERE_RESPONSE_CHANNEL_ID,
     RedisConnectionConfig,
     RedisEREClient,
 )
@@ -35,10 +29,6 @@ from erspec.models.ere import (
     EntityMentionResolutionRequest,
     EntityMentionResolutionResponse,
 )
-
-_dumper = JSONDumper()
-
-
 
 @pytest.fixture
 def dummy_request() -> EntityMentionResolutionRequest:
@@ -71,23 +61,6 @@ def dummy_response() -> EntityMentionResolutionResponse:
     )
 
 
-@pytest.fixture(scope="module")
-def redis_container():
-    with RedisContainer() as container:
-        yield container
-
-
-@pytest.fixture
-async def redis_client(redis_container) -> AsyncGenerator[aioredis.Redis, None]:
-    client = aioredis.Redis(
-        host=redis_container.get_container_host_ip(),
-        port=int(redis_container.get_exposed_port(6379)),
-    )
-    yield client
-    await client.flushdb()
-    await client.aclose()
-
-
 @pytest.fixture
 def redis_ere_client(redis_client: aioredis.Redis) -> RedisEREClient:
     return RedisEREClient(config_or_client=redis_client)
@@ -95,11 +68,13 @@ def redis_ere_client(redis_client: aioredis.Redis) -> RedisEREClient:
 
 @pytest.fixture
 async def mock_ere_service(redis_client: aioredis.Redis, dummy_response: EntityMentionResolutionResponse):
-    """Simulates the ERE: reads one request from channel ERE_REQUEST_CHANNEL_ID,
-    pushes a fixed response to channel ERE_RESPONSE_CHANNEL_ID."""
+    """Simulates the ERE: reads one request from the configured request channel,
+    pushes a fixed response to the configured response channel."""
+    _settings = config
+
     async def _serve():
-        await redis_client.brpop(ERE_REQUEST_CHANNEL_ID)
-        await redis_client.lpush(ERE_RESPONSE_CHANNEL_ID, _dumper.dumps(dummy_response))
+        await redis_client.brpop(_settings.ERE_REQUEST_CHANNEL)
+        await redis_client.lpush(_settings.ERE_RESPONSE_CHANNEL, dummy_response.model_dump_json())
 
     task = asyncio.create_task(_serve())
     yield
@@ -131,13 +106,13 @@ class TestPullResponse:
     async def test_raises_timeout_when_no_message(self, redis_client: aioredis.Redis):
         client = RedisEREClient(config_or_client=redis_client, timeout=0.1)
 
-        with pytest.raises(TimeoutError, match=ERE_RESPONSE_CHANNEL_ID):
+        with pytest.raises(TimeoutError, match=config.ERE_RESPONSE_CHANNEL):
             await client.pull_response()
 
     async def test_raises_on_connection_error(self, redis_ere_client: RedisEREClient):
         redis_ere_client._redis_client.brpop = AsyncMock(side_effect=RedisConnectionError("boom"))
 
-        with pytest.raises(RedisConnectionError):
+        with pytest.raises(ConnectionError):
             await redis_ere_client.pull_response()
 
 
@@ -156,7 +131,7 @@ class TestClose:
         mock_redis = AsyncMock(spec=aioredis.Redis)
 
         with patch("ers.commons.adapters.redis_client.aioredis.Redis", return_value=mock_redis):
-            client = RedisEREClient(config_or_client=RedisConnectionConfig())
+            client = RedisEREClient(config_or_client=RedisConnectionConfig.from_settings(config))
 
         await client.close()
 
@@ -167,7 +142,7 @@ class TestClose:
         mock_redis.aclose.side_effect = Exception("connection reset")
 
         with patch("ers.commons.adapters.redis_client.aioredis.Redis", return_value=mock_redis):
-            client = RedisEREClient(config_or_client=RedisConnectionConfig())
+            client = RedisEREClient(config_or_client=RedisConnectionConfig.from_settings(config))
 
         with caplog.at_level(logging.WARNING):
             await client.close()
@@ -181,7 +156,7 @@ class TestContextManager:
         mock_redis = AsyncMock(spec=aioredis.Redis)
 
         with patch("ers.commons.adapters.redis_client.aioredis.Redis", return_value=mock_redis):
-            async with RedisEREClient(config_or_client=RedisConnectionConfig()):
+            async with RedisEREClient(config_or_client=RedisConnectionConfig.from_settings(config)):
                 pass
 
         mock_redis.aclose.assert_called_once()
@@ -191,7 +166,7 @@ class TestContextManager:
 
         with patch("ers.commons.adapters.redis_client.aioredis.Redis", return_value=mock_redis):
             with pytest.raises(RuntimeError):
-                async with RedisEREClient(config_or_client=RedisConnectionConfig()):
+                async with RedisEREClient(config_or_client=RedisConnectionConfig.from_settings(config)):
                     raise RuntimeError("something went wrong")
 
         mock_redis.aclose.assert_called_once()

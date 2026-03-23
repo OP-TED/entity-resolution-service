@@ -17,7 +17,6 @@ from typing import Any
 from erspec.models.core import UserActionType
 from pymongo import AsyncMongoClient
 
-from ers.commons.adapters.mongo_collections_manager import MongoCollections
 from ers import config
 from ers.curation.adapters.decision_repository import MongoDecisionCurationRepository
 from ers.curation.adapters.entity_mention_repository import (
@@ -172,12 +171,11 @@ async def seed(
 ) -> None:
     client = AsyncMongoClient(config.MONGO_URI)
     db = client[config.MONGO_DATABASE_NAME]
-    collections = MongoCollections(db)
     await _drop_seed_collections(db)
 
-    mention_repo = MongoEntityMentionCurationRepository(collections.entity_mentions)
-    decision_repo = MongoDecisionCurationRepository(collections.decisions)
-    action_repo = MongoUserActionCurationRepository(collections.user_actions)
+    mention_repo = MongoEntityMentionCurationRepository(db)
+    decision_repo = MongoDecisionCurationRepository(db)
+    action_repo = MongoUserActionCurationRepository(db)
 
     mentions = await _create_mentions(mention_repo, num_mentions, num_requests)
     cluster_ids, cluster_refs_by_mention = _build_cluster_references(mentions, num_clusters)

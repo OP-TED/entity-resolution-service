@@ -134,6 +134,7 @@ def ere_delivers_malformed_outcome(ctx, malformation):
         - "the timestamp field is absent" → omit timestamp
         - "all triad fields are null" → set triad fields to None
         - "the message body is an empty JSON object" → empty dict
+        - "zero candidate alternatives are provided" → empty candidates list
     Then call service.integrate_outcome and capture the exception.
     """
     ctx["malformation"] = malformation

@@ -3,9 +3,9 @@
 ## Status
 - **Epic ID:** ERS-EPIC-03
 - **Component:** #3 — ERE Contract Client
-- **Phase:** Gherkin features complete, ready for implementation
+- **Phase:** Implementation complete — pending PR
 - **Spines:** B (Async Engine Interaction), D (Manual Curation — forwarding curator recommendations)
-- **Last updated:** 2026-03-16
+- **Last updated:** 2026-03-20
 - **Dependencies:** er-spec library (domain models), ERS-ERE contract specification (interface.adoc)
 - **Clarity Gate:** 9.7/10
 
@@ -232,12 +232,16 @@ All error types defined in a local `models/errors.py` module. Each inherits from
 - All Gherkin scenarios from Section 11 pass via pytest-bdd.
 
 ## Roadmap
-- [ ] Task 1: Define Error Models (models/errors.py)
-- [x] Task 2: Implement Redis Adapter (commons/adapters/redis_client.py) — Done
-- [ ] Task 3: Implement Publish Service (services/ere_publish_service.py)
-- [ ] Task 4: Unit Tests (errors + service)
-- [ ] Task 5: Integration Tests (service round-trip)
-- [ ] Task 6: Gherkin Features (wire step definitions)
+- [x] Task 0: Serialization migration — commons `redis_client.py` + `redis_messages.py` switched from LinkML to Pydantic `model_dump_json()` / `model_validate_json()` (2026-03-20)
+- [x] Task 1: Define Error Models — `domain/errors.py` with `EREContractError` base + 5 subclasses (incl. `DeserializationError`) (2026-03-21)
+- [x] Task 2: Implement Redis Adapter — `commons/adapters/redis_client.py` — `push_request` returns `int`; `pull_response` wraps redis `ConnectionError` as built-in; `ping()` added to `AbstractClient` + `RedisEREClient` (2026-03-21)
+- [x] Task 3: Implement Publish Service — `services/ere_publish_service.py` — pre-serialization check (`SerializationError`), zero-push check (`ChannelUnavailableError`), `_span` converted to `asynccontextmanager`, validation constants defined (2026-03-21)
+- [x] Task 4: Unit Tests — `test_errors.py` + `test_publish_service.py` (TC-012 → TC-018 + serialization + OTel) — Done (2026-03-21)
+- [x] Task 5: Integration Tests — `test_service_round_trip.py` with testcontainers Redis — Done (2026-03-20)
+- [x] Task 6: Gherkin Features — all scenarios active; serialization + health-check scenarios unskipped; `run_async` uses `asyncio.run()` (2026-03-21)
+
+**Deferred (tracked):**
+- `opentelemetry-api` not yet in `pyproject.toml` — service falls back to no-op span
 
 ## 8. Test Case Specifications
 
@@ -572,6 +576,24 @@ Task 5: Integration Tests (service round-trip)
 
 ### Next Action
 
+Start **Task 4: Unit Tests** for the service layer (TC-012 through TC-017 from Section 8):
+- `tests/unit/ere_contract_client/test_publish_service.py`
+- Target ≥ 90% coverage on `ere_publish_service.py`
+
+---
+
+### Task 3 + Task 6 Complete (2026-03-20)
+
+**EREPublishService implemented and BDD step definitions wired.**
+
+- `src/ers/ere_contract_client/services/ere_publish_service.py` — validates triad, enriches metadata (UUID4 ere_request_id, UTC timestamp), pushes via `AbstractClient`, wraps `TimeoutError` / `redis.exceptions.ConnectionError` as `RedisConnectionError`.
+- OTel span `ere_contract_client.publish` with try/except import fallback (OTel not yet in `pyproject.toml` — pending dependency addition).
+- Both BDD step files replaced: 17 scenarios pass, all serialization + health-check scenarios now active (2026-03-21 PR#25 review).
+- Key spec alignment: `TimeoutError` → `ChannelUnavailableError` per EPIC Section 6 error catalogue.
+- Key erspec constraint: `ere_request_id` is required at model construction; empty string used as "absent" sentinel; `model_construct()` used for `entity_mention=None` test case.
+
+**Open item:** Add `opentelemetry-api` to `pyproject.toml` dependencies to enable real OTel tracing (currently falls back to no-op).
+
 Start **Task 1: Error Models** immediately:
 1. Create `models/errors.py` with base `EREContractError` + 4 subclasses
    - `InvalidRequestError` — triad validation failures
@@ -580,6 +602,30 @@ Start **Task 1: Error Models** immediately:
    - `RedisConnectionError` — connection refused, timeout
 2. Add unit tests
 3. Target: ≥ 90% coverage
+
+---
+
+---
+
+### All Tasks Complete (2026-03-20)
+
+**353 unit + feature tests pass, 3 correctly skipped. Import-linter: 5/5 contracts kept.**
+
+#### Deviations from EPIC spec (documented)
+
+| EPIC spec | Actual implementation | Reason |
+|-----------|----------------------|--------|
+| `models/errors.py` | `domain/errors.py` | Project convention: innermost layer is `domain`, not `models` (per CLAUDE.md) |
+| `EREContractError` + 5 subclasses | `EREContractError` + 5 subclasses ✅ | `DeserializationError` added (2026-03-21 PR#25 review) |
+| `TimeoutError → ChannelUnavailableError` in service | `TimeoutError → ChannelUnavailableError` ✅ and `ConnectionError → RedisConnectionError` ✅ | Consistent with BDD feature file and EPIC Section 6 |
+| `redis.exceptions.ConnectionError` caught in service | Built-in `ConnectionError` caught in service | Adapter now wraps redis library error to built-in, keeping service free of redis imports (DIP) |
+
+#### Key structural changes vs original plan
+
+- **Shared Redis fixtures** moved to `tests/conftest.py` (were duplicated in unit + integration test files)
+- **Shared `run_async` helper** added to `tests/feature/ere_contract_client/conftest.py` (pytest-bdd steps cannot be async)
+- **`TESTS_ROOT_DIR` constant** added to `tests/conftest.py`; used by all new feature test files for `FEATURE_FILE` paths
+- **`ers.ere_contract_client` enrolled** in `.importlinter` `layers-domain-adapters-services` contract
 
 ---
 

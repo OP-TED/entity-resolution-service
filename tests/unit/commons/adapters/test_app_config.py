@@ -6,6 +6,7 @@ from ers import (
     CurationConfig,
     JWTConfig,
     MongoDBConfig,
+    ObservabilityConfig,
     RDFMentionParserConfig,
     config,
 )
@@ -61,7 +62,7 @@ class TestAdminConfig:
 class TestMongoDBConfig:
     def test_mongo_uri_default(self, monkeypatch):
         monkeypatch.delenv("MONGO_URI", raising=False)
-        assert MongoDBConfig().MONGO_URI == "mongodb://localhost:27017"
+        assert MongoDBConfig().MONGO_URI == "mongodb://username:password@localhost:27017"
 
     def test_mongo_database_name_from_env(self, monkeypatch):
         monkeypatch.setenv("MONGO_DATABASE_NAME", "mydb")
@@ -88,6 +89,16 @@ class TestRDFMentionParserConfig:
         assert RDFMentionParserConfig().ERS_PARSER_MAX_CONTENT_LENGTH == 2_097_152
 
 
+class TestObservabilityConfig:
+    def test_tracing_enabled_default_is_false(self, monkeypatch):
+        monkeypatch.delenv("TRACING_ENABLED", raising=False)
+        assert ObservabilityConfig().TRACING_ENABLED is False
+
+    def test_tracing_enabled_true_from_env(self, monkeypatch):
+        monkeypatch.setenv("TRACING_ENABLED", "true")
+        assert ObservabilityConfig().TRACING_ENABLED is True
+
+
 class TestAppConfigResolverSingleton:
     def test_config_singleton_has_all_keys(self):
         assert isinstance(config.APP_NAME, str)
@@ -100,3 +111,4 @@ class TestAppConfigResolverSingleton:
         assert isinstance(config.MONGO_URI, str)
         assert isinstance(config.CURATION_CONFIDENCE_THRESHOLD, float)
         assert isinstance(config.ERS_PARSER_MAX_CONTENT_LENGTH, int)
+        assert isinstance(config.TRACING_ENABLED, bool)

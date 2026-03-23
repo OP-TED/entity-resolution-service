@@ -2,7 +2,10 @@ import logging
 from string import Template
 from typing import Any
 
+from erspec.models.core import EntityMention
+
 from ers import config
+from ers.commons.adapters.tracing import trace_function
 from ers.rdf_mention_parser.adapter.rdf_mapping_config_reader import RDFConfigReader
 from ers.rdf_mention_parser.adapter.rdf_parser_adapter import RDFParserAdapter
 from ers.rdf_mention_parser.domain.exceptions import (
@@ -43,7 +46,7 @@ def build_sparql_query(config: RDFMappingConfig, entity_config: EntityTypeConfig
         prefixes="\n".join(
             f"PREFIX {prefix}: <{uri}>" for prefix, uri in config.namespaces.items()
         ),
-        variables=" ".join(f"?{name}" for name in entity_config.fields),
+        variables="?entity " + " ".join(f"?{name}" for name in entity_config.fields),
         rdf_type=entity_config.rdf_type,
         optionals="\n".join(
             f"  OPTIONAL {{ ?entity {path} ?{name} . }}"
@@ -58,35 +61,33 @@ class MentionParserService:
     Orchestrates: content-length guard → entity type resolution → RDF parsing
     → entity type validation → SPARQL extraction → empty-result guard → result dict.
 
-    All errors are fatal; no partial results are returned.
+    Errors are fatal (raised, never swallowed). Individual fields may be ``None``
+    when absent in the RDF — only a completely empty extraction is rejected.
     """
 
     def __init__(self, config: RDFMappingConfig, adapter: RDFParserAdapter) -> None:
         self._config = config
         self._adapter = adapter
 
-    def parse(self, content: str, content_type: str, entity_type: str) -> dict[str, Any]:
+    def parse(self, entity_mention: EntityMention) -> dict[str, Any]:
         """Parse an RDF mention and return its JSON representation.
 
         Args:
-            content: Raw RDF string.
-            content_type: MIME type (``text/turtle`` or ``application/rdf+xml``).
-            entity_type: Full URI of the entity type, e.g.
-                         ``http://www.w3.org/ns/org#Organization``.
+            entity_mention: The entity mention to parse. Provides content,
+                            content_type, and entity_type identifier.
 
         Returns:
             Dict mapping configured field names to extracted string values.
             Fields absent in the RDF are mapped to ``None``.
 
         Raises:
-            ContentTooLargeError: Content exceeds MAX_CONTENT_LENGTH bytes.
-            UnsupportedEntityTypeError: entity_type not found in config.
-            UnsupportedContentTypeError: content_type not in supported set.
-            MalformedRDFError: Content cannot be parsed as the declared format.
-            EntityTypeMismatchError: Graph contains no entity of the declared type.
-            MultipleEntitiesFoundError: Graph contains more than one entity of the declared type.
-            EmptyExtractionError: All configured fields resolve to None.
+            ContentTooLargeError, UnsupportedEntityTypeError, UnsupportedContentTypeError,
+            MalformedRDFError, EntityTypeMismatchError, MultipleEntitiesFoundError,
+            EmptyExtractionError: see class docstring.
         """
+        content = entity_mention.content
+        content_type = entity_mention.content_type
+        entity_type = str(entity_mention.identifiedBy.entity_type)
         content_bytes = content.encode("utf-8")
         max_bytes = config.ERS_PARSER_MAX_CONTENT_LENGTH
         if len(content_bytes) > max_bytes:
@@ -113,24 +114,40 @@ class MentionParserService:
         query = build_sparql_query(self._config, entity_config)
         rows = self._adapter.execute_sparql(graph, query)
 
-        if len(rows) > 1:
-            logger.warning(
-                "Multiple entities found: entity_type=%s count=%d", entity_type, len(rows)
-            )
-            raise MultipleEntitiesFoundError(entity_type, len(rows))
-
-        if not rows or all(v is None for v in rows[0].values()):
+        if not rows:
             logger.warning("Empty extraction: entity_type=%s", entity_type)
             raise EmptyExtractionError(entity_type)
 
-        result = rows[0]
+        # Count distinct entities — multi-valued OPTIONAL properties can produce
+        # multiple rows for the same ?entity (cartesian product).
+        distinct_entities = {row["entity"] for row in rows if row.get("entity")}
+        if len(distinct_entities) > 1:
+            logger.warning(
+                "Multiple entities found: entity_type=%s count=%d",
+                entity_type,
+                len(distinct_entities),
+            )
+            raise MultipleEntitiesFoundError(entity_type, len(distinct_entities))
+
+        # Merge all rows for the single entity — pick first non-None value per field.
+        field_names = [name for name in entity_config.fields]
+        merged: dict[str, str | None] = {name: None for name in field_names}
+        for row in rows:
+            for name in field_names:
+                if merged[name] is None and row.get(name) is not None:
+                    merged[name] = row[name]
+
+        if all(v is None for v in merged.values()):
+            logger.warning("Empty extraction: entity_type=%s", entity_type)
+            raise EmptyExtractionError(entity_type)
+
         logger.info(
             "Parsed entity_type=%s content_type=%s fields_extracted=%d",
             entity_type,
             content_type,
-            sum(1 for v in result.values() if v is not None),
+            sum(1 for v in merged.values() if v is not None),
         )
-        return result
+        return merged
 
 
 # ---------------------------------------------------------------------------
@@ -151,20 +168,15 @@ def load_config() -> RDFMappingConfig:
     return RDFConfigReader.from_file(config.RDF_MENTION_CONFIG_FILE)
 
 
+@trace_function(span_name="mention_parser.parse")
 def parse_entity_mention(
-    content: str,
-    content_type: str,
-    entity_type: str,
+    entity_mention: EntityMention,
     config: RDFMappingConfig,
 ) -> dict[str, Any]:
     """Parse a raw RDF entity mention into a JSON representation.
 
-    Wires up the adapter and service, then delegates to MentionParserService.
-
     Args:
-        content: Raw RDF string.
-        content_type: MIME type (``text/turtle`` or ``application/rdf+xml``).
-        entity_type: Full URI of the entity type.
+        entity_mention: The entity mention to parse.
         config: Validated RDF mapping configuration.
 
     Returns:
@@ -176,4 +188,4 @@ def parse_entity_mention(
         EmptyExtractionError: see MentionParserService.parse.
     """
     service = MentionParserService(config, RDFParserAdapter())
-    return service.parse(content, content_type, entity_type)
+    return service.parse(entity_mention)

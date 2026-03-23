@@ -1,9 +1,9 @@
-from ers.users.adapters.hasher import Argon2PasswordHasher, PasswordHasher
+from ers.commons.adapters.hasher import Argon2PasswordHasher, ContentHasher
 from ers.users.adapters.user_repository import MongoUserRepository, UserRepository
 
 __all__ = [
     "UserRepository",
-    "PasswordHasher",
+    "ContentHasher",
     "MongoUserRepository",
     "Argon2PasswordHasher",
 ]

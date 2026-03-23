@@ -3,7 +3,6 @@ import json
 import pytest
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.adapters.mongo_collections_manager import MongoCollections
 from ers.curation.adapters.entity_mention_repository import (
     MongoEntityMentionCurationRepository,
 )
@@ -14,7 +13,7 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 def repo(mongo_db: AsyncDatabase) -> MongoEntityMentionCurationRepository:
-    return MongoEntityMentionCurationRepository(MongoCollections(mongo_db).entity_mentions)
+    return MongoEntityMentionCurationRepository(mongo_db)
 
 
 class TestSaveAndFindById:

@@ -5,7 +5,6 @@ from typing import Any, TypeVar
 from erspec.models.core import (
     ClusterReference,
     EntityMentionIdentifier,
-    EntityType,
     UserActionType,
 )
 from pydantic import Field, Json
@@ -42,7 +41,7 @@ class DecisionFilters(FrozenDTO):
 class StatisticsFilters(FrozenDTO):
     """Filtering criteria for statistics queries."""
 
-    entity_type: EntityType | None = None
+    entity_type: str | None = None
     timeframe_start: datetime | None = None
     timeframe_end: datetime | None = None
 

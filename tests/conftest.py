@@ -1,9 +1,37 @@
 from pathlib import Path
 
 import pytest
+import redis.asyncio as aioredis
+from testcontainers.redis import RedisContainer
 
 # Path constants — single source of truth for test directory structure
-TEST_DATA_DIR = Path(__file__).parent / "test_data"
+TESTS_ROOT_DIR = Path(__file__).parent
+TEST_DATA_DIR = TESTS_ROOT_DIR / "test_data"
+
+
+@pytest.fixture(scope="module")
+def redis_container():
+    """Start a Redis container once per test module. Skips if Docker is unavailable."""
+    try:
+        with RedisContainer() as container:
+            yield container
+    except Exception:
+        pytest.skip("Docker not available")
+
+
+@pytest.fixture
+async def redis_client(redis_container) -> aioredis.Redis:
+    """Provide a live aioredis.Redis client connected to the test container.
+
+    Flushes the database and closes the client after each test.
+    """
+    client = aioredis.Redis(
+        host=redis_container.get_container_host_ip(),
+        port=int(redis_container.get_exposed_port(6379)),
+    )
+    yield client
+    await client.flushdb()
+    await client.aclose()
 
 
 def pytest_collection_modifyitems(items: list) -> None:
@@ -40,17 +68,16 @@ def pytest_collection_modifyitems(items: list) -> None:
 
 
 def load_text_file(relative_path: str) -> str:
-    """
-    Load RDF content from test_data directory.
+    """Load text content from the test_data directory.
 
     Args:
         relative_path: Path relative to test_data/, e.g., "organizations/group1/661238-2023.ttl"
 
     Returns:
-        str: Full RDF/Turtle content
+        Full file content as a UTF-8 string.
 
     Raises:
-        FileNotFoundError: If file does not exist
+        FileNotFoundError: If the file does not exist.
     """
     file_path = TEST_DATA_DIR / relative_path
     if not file_path.exists():
@@ -135,5 +162,5 @@ def proc_group2_file2() -> str:
 
 @pytest.fixture(scope="session")
 def sample_rdf_mapping() -> str:
-    """path to sample_rdf_mapping"""
+    """Load the sample RDF mapping YAML used by parser tests."""
     return load_text_file("sample_rdf_mapping.yaml")

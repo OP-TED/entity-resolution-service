@@ -286,7 +286,7 @@ class RequestRegistryService:
     ) -> LookupState | None:
         """Retrieve the current lookup watermark for a source."""
 
-    async def advance_lookup_watermark(
+    async def advance_snapshot(
         self,
         source_id: str,
         snapshot_time: datetime,
@@ -294,7 +294,7 @@ class RequestRegistryService:
         """Advance the lookup state watermark for a source.
         Called only after a bulk refresh response is successfully produced.
         Sets last_snapshot to snapshot_time, updated_at to current UTC.
-        Raises: WatermarkRegressionError if snapshot_time <= current last_snapshot."""
+        Raises: SnapshotRegressionError if snapshot_time <= current last_snapshot."""
 ```
 
 ### 6.2 Service Exceptions
@@ -302,7 +302,7 @@ class RequestRegistryService:
 | Exception | Raised when |
 |-----------|------------|
 | `IdempotencyConflictError` | Same triad submitted with different content (different `content_hash`). |
-| `WatermarkRegressionError` | Attempting to set `last_snapshot` to a time earlier than or equal to the current value. |
+| `SnapshotRegressionError` | Attempting to set `last_snapshot` to a time earlier than or equal to the current value. |
 
 ### 6.3 Idempotency Algorithm (Mermaid)
 
@@ -356,8 +356,8 @@ flowchart TD
 | TC-005 | Service: `register_resolution_request` (new) | New `EntityMention` with unique triad | `ResolutionRequestRecord` stored and returned | First record for a source_id |
 | TC-006 | Service: `register_resolution_request` (replay) | Same `EntityMention` submitted twice (identical content) | Returns existing record without creating duplicate | Rapid concurrent replays |
 | TC-007 | Service: `register_resolution_request` (conflict) | Same triad, different content | Raises `IdempotencyConflictError` | Content differs only in whitespace (still different hash) |
-| TC-008 | Service: `advance_lookup_watermark` (happy) | `source_id` with existing state, `snapshot_time` > current | Updated `LookupState` returned | First watermark for a new source_id |
-| TC-009 | Service: `advance_lookup_watermark` (regression) | `snapshot_time` <= current `last_snapshot` | Raises `WatermarkRegressionError` | Equal timestamps (not just less-than) |
+| TC-008 | Service: `advance_snapshot` (happy) | `source_id` with existing state, `snapshot_time` > current | Updated `LookupState` returned | First watermark for a new source_id |
+| TC-009 | Service: `advance_snapshot` (regression) | `snapshot_time` <= current `last_snapshot` | Raises `SnapshotRegressionError` | Equal timestamps (not just less-than) |
 | TC-010 | Service: `register_lookup_request` | Valid `source_id` and `LookupRequestType.BULK` | `LookupRequestRecord` stored | Multiple lookups from same source in rapid succession |
 | TC-011 | Repository: `store_resolution_request` (duplicate) | Record with existing triad | Raises `DuplicateTriadError` | MongoDB duplicate key error is correctly wrapped |
 | TC-012 | Repository: `find_by_triad` (not found) | Non-existent triad | Returns `None` | All three triad fields present but no match |
@@ -384,7 +384,7 @@ flowchart TD
 | Duplicate triad (MongoDB) | `DuplicateKeyError` from pymongo | Adapter wraps as `DuplicateTriadError` | Service catches and runs idempotency check (may be concurrent insert race) | DEBUG |
 | MongoDB connection failure | `ConnectionFailure` from pymongo | Adapter wraps as `RepositoryConnectionError` | None — propagate to caller | ERROR |
 | MongoDB operation timeout | `ServerSelectionTimeoutError` or `ExecutionTimeout` | Adapter wraps as `RepositoryOperationError` | None — propagate to caller | ERROR |
-| Watermark regression | `snapshot_time <= current last_snapshot` | Raise `WatermarkRegressionError` | None — caller must handle | WARN |
+| Watermark regression | `snapshot_time <= current last_snapshot` | Raise `SnapshotRegressionError` | None — caller must handle | WARN |
 | Invalid EntityMention (missing triad fields) | Pydantic validation on `EntityMentionIdentifier` | Pydantic `ValidationError` raised at model construction | None — caller must validate before calling service | Not logged at this layer |
 | Empty content string | `entity_mention.content` is empty string | Accept and hash normally (empty string has a valid SHA-256) | None | INFO (flag unusual input) |
 
@@ -424,10 +424,9 @@ flowchart TD
 
 ## Roadmap
 
-- [ ] Task 1: Define domain models (`models/`)
-- [ ] Task 2: Define repository interface and exceptions (`adapters/`)
-- [ ] Task 3: Implement MongoDB repository (`adapters/`)
-- [ ] Task 4: Implement service layer with idempotency and observability (`services/`)
+- [x] Task 1.1: Define domain models (`domain/`) — [outcomes](task11-domain-models.md)
+- [x] Task 1.2: Repository, Service, and Exceptions — [outcomes](task12-repository-service-exceptions.md)
+- [x] Task 1.3: Wire BDD feature files with real service calls — completed 2026-03-20
 - [ ] Task 5: Write integration tests (`tests/`)
 
 ---
@@ -447,9 +446,9 @@ flowchart TD
 
 | Scenario | Description |
 |----------|------------|
-| Advance watermark for new source | Given no existing LookupState for a source_id, when advance_lookup_watermark is called, then a new LookupState is created with the given snapshot_time. |
-| Advance watermark for existing source | Given an existing LookupState with last_snapshot T1, when advance_lookup_watermark is called with T2 > T1, then last_snapshot is updated to T2. |
-| Reject watermark regression | Given an existing LookupState with last_snapshot T1, when advance_lookup_watermark is called with T2 <= T1, then a WatermarkRegressionError is raised and last_snapshot remains T1. |
+| Advance watermark for new source | Given no existing LookupState for a source_id, when advance_snapshot is called, then a new LookupState is created with the given snapshot_time. |
+| Advance watermark for existing source | Given an existing LookupState with last_snapshot T1, when advance_snapshot is called with T2 > T1, then last_snapshot is updated to T2. |
+| Reject watermark regression | Given an existing LookupState with last_snapshot T1, when advance_snapshot is called with T2 <= T1, then a SnapshotRegressionError is raised and last_snapshot remains T1. |
 
 ### Feature: Lookup Request Registration
 
@@ -529,6 +528,24 @@ These constraints are inherited from the ERS Architecture and must be respected 
 ---
 
 # Part 2 — Implementation Log
+
+### 2026-03-20 — Task 1.2: Repository, Service, and Exceptions
+
+- **Outcome:** Five exceptions (`IdempotencyConflictError`, `SnapshotRegressionError`, `DuplicateTriadError`, `RepositoryConnectionError`, `RepositoryOperationError`) created under `services/exceptions.py`. Two repository ABCs (`ResolutionRequestRepository`, `LookupStateRepository`) and two Mongo implementations (`MongoResolutionRequestRepository`, `MongoLookupStateRepository`) created under `adapters/records_repository.py`. `RequestRegistryService` created under `services/request_registry_service.py`. `MongoCollections` extended with `RESOLUTION_REQUESTS` and `LOOKUP_STATES`. `ensure_indexes()` extended with two new indexes. 33 new unit tests (16 adapter, 11 service, 6 pre-existing domain); full suite 298/298 pass.
+- **Decisions:** `MongoResolutionRequestRepository` does not extend `BaseMongoRepository` — the `_id` is computed from the triad, not mapped from a model field. `MongoLookupStateRepository` does extend `BaseMongoRepository` with `_id_field = "source_id"`. `_from_document` operates on a local copy to avoid mutating the original dict. `RequestRegistryService` removed from `services/__init__.py` to break a circular import (`adapters → services.exceptions → services.__init__ → request_registry_service → adapters`); callers import it directly from the module.
+- **Deviations:** `RequestRegistryService` not re-exported from `services/__init__.py` (spec said it should be). Breaking the circular import required this. The exception types and adapters ABCs are still correctly exported from their respective `__init__.py` files. The `updated_at` guard in `advance_snapshot` uses `max(now, snapshot_time)` to satisfy the `LookupState` invariant that `updated_at >= last_snapshot` when `snapshot_time` is in the future.
+
+### 2026-03-20 — Task 1.3: BDD feature file wiring
+
+- **Outcome:** All TODO stubs in `tests/feature/request_registry/test_resolution_request_registration.py` and `tests/feature/request_registry/test_bulk_lookup_and_snapshot_management.py` replaced with real service calls and assertions. `RequestRegistryService` instantiated with `create_autospec` repositories + real `SHA256ContentHasher`. All BDD scenarios pass.
+- **Decisions:** `LookupRequestRecord` and `LookupRequestType` re-added to domain records (originally dropped in task 1.1 design) after determining the BDD bulk scenarios require registering SINGLE/BULK lookup audit events. The append-only `LookupRequestRepository` ABC and `register_lookup_request` service method added accordingly.
+- **Deviations:** None relative to the Gherkin scenarios.
+
+### 2026-03-19 — Task 1.1: Domain models and SHA256ContentHasher
+
+- **Outcome:** All 5 domain types (`LookupRequestType`, `JSONRepresentation`, `ResolutionRequestRecord`, `LookupRequestRecord`, `LookupState`) created as frozen Pydantic models under `src/ers/request_registry/domain/records.py`. `SHA256ContentHasher` added to `src/ers/commons/adapters/hasher.py`. 35 new unit tests; full suite 276/276 pass.
+- **Decisions:** Used `StrEnum` for `LookupRequestType` (consistent with `ResolutionOutcome`). All erspec imports use `EntityMention.identifiedBy` (camelCase per erspec contract). No modifications to existing code — purely additive.
+- **Deviations:** None.
 
 ### 2026-03-16 — Gherkin features and step scaffolding
 - **Outcome:** 2 feature files created under `tests/features/request_registry/` (resolution_request_registration.feature, bulk_lookup_and_snapshot_management.feature). Step definitions scaffolded under `tests/steps/request_registry/` with TODO placeholders.

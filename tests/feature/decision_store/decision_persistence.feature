@@ -37,7 +37,7 @@ Feature: Decision Store Persistence Operations
     Given a correlation triad ("SYSTEM_C", "req-020", "Organization")
     And the Decision Store does not contain a decision for that triad
     When a provisional singleton decision is stored with a SHA256-derived cluster identifier
-    Then the current placement is the provisional singleton cluster with confidence 1.0 and similarity 1.0
+    Then the current placement is the provisional singleton cluster with confidence 0.0 and similarity 0.0
     And the provisional singleton cluster is the only candidate alternative
 
   Scenario Outline: Retrieve a resolution decision by its correlation triad
@@ -53,10 +53,10 @@ Feature: Decision Store Persistence Operations
 
   Scenario Outline: Query decisions by outcome timestamp interval
     Given the Decision Store contains decisions with outcome timestamps:
-      | triad       | outcome_timestamp          |
-      | SYSTEM_E/r1 | 2026-03-10T10:00:00.000Z   |
-      | SYSTEM_E/r2 | 2026-03-12T14:00:00.000Z   |
-      | SYSTEM_E/r3 | 2026-03-15T09:00:00.000Z   |
+      | triad                                  | outcome_timestamp          |
+      | ("SYSTEM_E", "r1", "Organization")     | 2026-03-10T10:00:00.000Z   |
+      | ("SYSTEM_E", "r2", "Organization")     | 2026-03-12T14:00:00.000Z   |
+      | ("SYSTEM_E", "r3", "Organization")     | 2026-03-15T09:00:00.000Z   |
     When decisions are queried with start "<start>" and end "<end>"
     Then <expected_count> decisions are returned
 
@@ -69,10 +69,10 @@ Feature: Decision Store Persistence Operations
 
   Scenario Outline: Query decisions by confidence score interval
     Given the Decision Store contains decisions with confidence scores:
-      | triad       | confidence |
-      | SYSTEM_F/r1 | 0.45       |
-      | SYSTEM_F/r2 | 0.78       |
-      | SYSTEM_F/r3 | 0.92       |
+      | triad                                  | confidence |
+      | ("SYSTEM_F", "r1", "Organization")     | 0.45       |
+      | ("SYSTEM_F", "r2", "Organization")     | 0.78       |
+      | ("SYSTEM_F", "r3", "Organization")     | 0.92       |
     When decisions are queried with min confidence "<min_conf>" and max confidence "<max_conf>"
     Then <expected_count> decisions are returned
 

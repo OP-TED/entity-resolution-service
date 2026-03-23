@@ -4,7 +4,6 @@ from fastapi import Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ers import config
-from ers.commons.adapters.mongo_collections_manager import MongoCollections
 from ers.curation.adapters import (
     DecisionCurationRepository,
     EntityMentionCurationRepository,
@@ -23,7 +22,7 @@ from ers.curation.services import (
     UserActionService,
 )
 from ers.users.adapters import MongoUserRepository, UserRepository
-from ers.users.adapters.hasher import Argon2PasswordHasher, PasswordHasher
+from ers.commons.adapters.hasher import Argon2PasswordHasher, ContentHasher
 from ers.users.services import AuthService, UserManagementService
 from ers.users.services.token_service import JWTTokenService, TokenService
 
@@ -32,14 +31,10 @@ def _get_database(request: Request) -> AsyncDatabase:
     return request.app.state.mongo_db
 
 
-def _get_collections(request: Request) -> MongoCollections:
-    return MongoCollections(_get_database(request))
-
-
 # Infrastructure providers
 
 
-def get_password_hasher() -> PasswordHasher:
+def get_password_hasher() -> ContentHasher:
     return Argon2PasswordHasher()
 
 
@@ -56,21 +51,21 @@ def get_token_service() -> TokenService:
 
 
 async def get_decision_repository(
-    collections: Annotated[MongoCollections, Depends(_get_collections)],
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> DecisionCurationRepository:
-    return MongoDecisionCurationRepository(collections.decisions)
+    return MongoDecisionCurationRepository(db)
 
 
 async def get_entity_mention_repository(
-    collections: Annotated[MongoCollections, Depends(_get_collections)],
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> EntityMentionCurationRepository:
-    return MongoEntityMentionCurationRepository(collections.entity_mentions)
+    return MongoEntityMentionCurationRepository(db)
 
 
 async def get_user_action_repository(
-    collections: Annotated[MongoCollections, Depends(_get_collections)],
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> UserActionCurationRepository:
-    return MongoUserActionCurationRepository(collections.user_actions)
+    return MongoUserActionCurationRepository(db)
 
 
 async def get_statistics_repository(
@@ -80,9 +75,9 @@ async def get_statistics_repository(
 
 
 async def get_user_repository(
-    collections: Annotated[MongoCollections, Depends(_get_collections)],
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> UserRepository:
-    return MongoUserRepository(collections.users)
+    return MongoUserRepository(db)
 
 
 # Service providers
@@ -134,7 +129,7 @@ async def get_statistics_service(
 
 async def get_auth_service(
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
-    hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
+    hasher: Annotated[ContentHasher, Depends(get_password_hasher)],
     token_svc: Annotated[TokenService, Depends(get_token_service)],
 ) -> AuthService:
     return AuthService(
@@ -146,6 +141,6 @@ async def get_auth_service(
 
 async def get_user_management_service(
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
-    hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
+    hasher: Annotated[ContentHasher, Depends(get_password_hasher)],
 ) -> UserManagementService:
     return UserManagementService(user_repository=user_repo, password_hasher=hasher)
