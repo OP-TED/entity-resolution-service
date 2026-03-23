@@ -189,12 +189,11 @@ All error types defined in `domain/errors.py`. Each inherits from a base `Decisi
 **Description:**
 - **No local domain model** — `erspec.Decision` is used directly throughout this component. Do not define `ResolutionDecisionRecord` or any equivalent class.
 - Create `domain/errors.py` with base `DecisionStoreError` (inherits `ApplicationError` from `ers.commons.services.exceptions`) and subclasses: `StaleOutcomeError`, `DecisionNotFoundError`, `InvalidCursorError`, `RepositoryConnectionError`, `RepositoryOperationError`.
-- Create `domain/config.py` with `DecisionStoreConfig` using the `@env_property` decorator from `ers.commons.adapters.config_resolver` (not Pydantic `env_prefix`). Method names become the environment variable keys (verify exact casing by reading `config_resolver.py`).
+- ~~Create `domain/config.py` with `DecisionStoreConfig`~~ — **Decision Store config params are defined directly in `src/ers/__init__.py` as `DecisionStoreConfig` mixin, folded into `ERSConfigResolver` alongside all other ERS config.** No standalone `domain/config.py`. Access via `from ers import config`. Env vars: `DECISION_STORE_MAX_CANDIDATES`, `DECISION_STORE_DEFAULT_PAGE_SIZE`, `DECISION_STORE_MAX_PAGE_SIZE`. Database name reuses `config.MONGO_DATABASE_NAME`.
 
 **Acceptance Criteria:**
 - All models instantiate with valid data; frozen where appropriate.
-- `DecisionStoreConfig()` produces valid defaults.
-- Invalid `max_candidates` (0, -1), invalid `default_page_size` (0, > max_page_size) rejected by validation.
+- `config.DECISION_STORE_MAX_CANDIDATES` / `DECISION_STORE_DEFAULT_PAGE_SIZE` / `DECISION_STORE_MAX_PAGE_SIZE` resolve from env with correct defaults (5, 250, 1000).
 - Environment variables override defaults.
 - All error classes instantiable with message string; inherit from `DecisionStoreError`.
 
@@ -258,7 +257,7 @@ solution that respects the tier boundary.
   - `@trace_function(span_name="decision_store.query_paginated")` async def query_decisions_paginated(service, cursor, page_size) -> CursorPage[Decision]
 - Register OTel span attribute extractors in `adapters/span_extractors.py` using `register_span_extractor` from `ers.commons.adapters.tracing`. Import at app startup only (not at module level in other packages).
 - Structured logging at WARN (stale outcome, candidate truncation).
-- `DecisionStoreConfig` is instantiated using `@env_property` (not Pydantic constructor — see Task 1).
+- Config is accessed via `from ers import config` — use `config.DECISION_STORE_MAX_CANDIDATES` etc. (no standalone `DecisionStoreConfig` — see Task 1).
 
 **Acceptance Criteria:**
 - `store_decision` truncates candidates to `max_candidates`.
@@ -294,7 +293,7 @@ solution that respects the tier boundary.
 
 ## Roadmap
 - [x] Task 0: EPIC corrections + implementation log (2026-03-23)
-- [ ] Task 1: Define Domain Errors and Configuration (domain/)
+- [x] Task 1: Define Domain Errors and Configuration (domain/) (2026-03-23)
 - [ ] Task 2: Lift cursor helpers to MongoDecisionRepository (commons refactor)
 - [ ] Task 3: Implement MongoDB Adapter (adapters/)
 - [ ] Task 4: Implement Service Layer (services/)
@@ -481,6 +480,23 @@ At `tests/feature/decision_store/`:
 ---
 
 ## Implementation Log
+
+### 2026-03-23 — Task 1 complete: Domain Errors + Configuration
+
+**Files created:**
+- `src/ers/resolution_decision_store/domain/__init__.py`
+- `src/ers/resolution_decision_store/domain/errors.py` — `DecisionStoreError` hierarchy (5 subclasses)
+- `src/ers/__init__.py` — `DecisionStoreConfig` mixin added, folded into `ERSConfigResolver`
+- `tests/unit/resolution_decision_store/__init__.py`
+- `tests/unit/resolution_decision_store/domain/__init__.py`
+- `tests/unit/resolution_decision_store/domain/test_errors.py`
+- `tests/unit/test_config.py` — Decision Store config tests (isomorphic to `ers/__init__.py`)
+
+**Deviation from original spec:**
+- No standalone `domain/config.py`. Decision Store config params merged into `ERSConfigResolver` in `src/ers/__init__.py` alongside all other ERS config. Access via `from ers import config`.
+- `config.MONGO_DATABASE_NAME` reused — no separate `DECISION_STORE_DATABASE_NAME`.
+
+---
 
 ### 2026-03-23 — Implementation started
 

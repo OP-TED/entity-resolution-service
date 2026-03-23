@@ -121,6 +121,20 @@ class RedisConfig:
         return config_value
 
 
+class DecisionStoreConfig:
+    @env_property(default_value="5")
+    def DECISION_STORE_MAX_CANDIDATES(self, config_value: str) -> int:
+        return int(config_value)
+
+    @env_property(default_value="250")
+    def DECISION_STORE_DEFAULT_PAGE_SIZE(self, config_value: str) -> int:
+        return int(config_value)
+
+    @env_property(default_value="1000")
+    def DECISION_STORE_MAX_PAGE_SIZE(self, config_value: str) -> int:
+        return int(config_value)
+
+
 class ObservabilityConfig:
     @env_property(default_value="false")
     def TRACING_ENABLED(self, config_value: str) -> bool:
@@ -141,6 +155,7 @@ class ERSConfigResolver(
     RDFMentionParserConfig,
     ERSRestApiConfig,
     EREConfig,
+    DecisionStoreConfig,
     ObservabilityConfig,
 ):
     """Aggregates all ERS configuration.
