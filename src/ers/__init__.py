@@ -60,7 +60,7 @@ class CurationConfig:
 
 
 class MongoDBConfig:
-    @env_property(default_value="mongodb://localhost:27017")
+    @env_property(default_value="mongodb://username:password@localhost:27017")
     def MONGO_URI(self, config_value: str) -> str:
         return config_value
 
@@ -79,6 +79,57 @@ class RDFMentionParserConfig:
         return config_value
 
 
+class ERSRestApiConfig:
+    @env_property(default_value="ERS REST API")
+    def ERS_API_NAME(self, config_value: str) -> str:
+        return config_value
+
+    @env_property(default_value="/api/v1")
+    def ERS_API_PREFIX(self, config_value: str) -> str:
+        return config_value
+
+    @env_property(default_value="8001")
+    def ERS_API_PORT(self, config_value: str) -> int:
+        return int(config_value)
+
+
+class EREConfig:
+    @env_property(default_value="1000")
+    def REFRESH_BULK_MAX_LIMIT(self, config_value: str) -> int:
+        return int(config_value)
+
+
+class RedisConfig:
+    @env_property(default_value="localhost")
+    def REDIS_HOST(self, config_value: str) -> str:
+        return config_value
+
+    @env_property(default_value="6379")
+    def REDIS_PORT(self, config_value: str) -> int:
+        return int(config_value)
+
+    @env_property(default_value="0")
+    def REDIS_DB(self, config_value: str) -> int:
+        return int(config_value)
+
+    @env_property(default_value="ere_requests")
+    def ERE_REQUEST_CHANNEL(self, config_value: str) -> str:
+        return config_value
+
+    @env_property(default_value="ere_responses")
+    def ERE_RESPONSE_CHANNEL(self, config_value: str) -> str:
+        return config_value
+
+
+class ObservabilityConfig:
+    @env_property(default_value="false")
+    def TRACING_ENABLED(self, config_value: str) -> bool:
+        return config_value.lower() == "true"
+
+    @env_property(default_value="entity-resolution-service")
+    def OTEL_SERVICE_NAME(self, config_value: str) -> str:
+        return config_value
+
 
 class ERSConfigResolver(
     AppConfig,
@@ -86,7 +137,11 @@ class ERSConfigResolver(
     AdminConfig,
     CurationConfig,
     MongoDBConfig,
+    RedisConfig,
     RDFMentionParserConfig,
+    ERSRestApiConfig,
+    EREConfig,
+    ObservabilityConfig,
 ):
     """Aggregates all ERS configuration.
 

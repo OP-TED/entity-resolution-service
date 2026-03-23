@@ -24,7 +24,7 @@ description: >
   </example>
 model: opus
 color: yellow
-tools: [Read, Grep, Glob, Bash]
+tools: [Read, Grep, Glob, Bash, mcp__gitnexus__context, mcp__gitnexus__cypher, mcp__gitnexus__detect_changes, mcp__gitnexus__impact, mcp__gitnexus__list_repos, mcp__gitnexus__query, mcp__ide__getDiagnostics, ListMcpResourcesTool, ReadMcpResourceTool]
 disallowedTools: [Write, Edit, NotebookEdit]
 ---
 

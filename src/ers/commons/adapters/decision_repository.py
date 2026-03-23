@@ -20,3 +20,4 @@ class MongoDecisionRepository(
 ):
     _model_class = Decision
     _id_field = "id"
+    _collection_name = "decisions"

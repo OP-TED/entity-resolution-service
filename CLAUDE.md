@@ -35,13 +35,19 @@ These rules apply to ALL agents in this project.
   in subject/intention).
 - PRs are triggered upon completing an EPIC. Exceptionally, large Epics may have
   intermediate PRs grouping stories that deliver business value.
-- **PR base targeting:** When opening a PR for a branch that builds on a previous
-  feature branch (not yet merged to `develop`), target the PR at the previous
-  feature branch — not at `develop`. This keeps each PR's diff scoped to its own
-  changes only. Use `gh pr edit <number> --base <previous-branch>` to fix after
-  creation if needed. When the earlier PR merges, GitHub automatically re-targets
-  the dependent PR to `develop`. Always use **merge commits** (not squash/rebase)
-  to preserve the shared history that makes this work.
+- **Before creating any PR, always ask the developer:** should this be a
+  **stacked PR** (targeting a previous feature branch) or a **direct PR**
+  (targeting `develop`/`main`)? Never assume one or the other.
+- **Stacked PRs (non-cumulative diffs):** Each feature branch is based on the
+  previous feature branch, not on `develop`. This keeps each PR's diff scoped to
+  its own changes only.
+  - When creating a PR for a branch built on a previous feature branch, pass
+    `--base <previous-branch>` to `/commit-push-pr` (e.g.
+    `/commit-push-pr --base feature/ERS1-142-task3`).
+  - When the earlier PR merges, GitHub automatically re-targets the dependent PR
+    to `develop`.
+  - Always use **merge commits** — squash/rebase destroys the shared history that
+    makes auto-retargeting work correctly.
 
 ### Working Methodology
 
@@ -55,12 +61,41 @@ These rules apply to ALL agents in this project.
 - Follow the Cosmic Python layered architecture: `entrypoints -> services -> domain`,
   `adapters -> domain`. Domain must not import from higher layers.
   **Note:** The innermost layer is called `domain` (not `models`) in this project.
+- Always use Context7 when you need up-to-date library/API documentation or other
+  documentation context before generating code or configuration, rather than
+  waiting for the developer to request it explicitly.
 
 ### Code Documentation & Docstrings
 - All docstrings must follow **Google Python style** (see `.claude/references/google_python_docstring_style.md`).
 - Key rules: one-line summary first, then optional description, then `Args`, `Returns`, `Raises` sections.
 - Write for behaviour, not implementation; focus on inputs, outputs, and exceptions.
 - Keep docstrings concise; avoid redundancy with self-documenting code.
+
+### Observability (Tracing)
+
+- Tracing infrastructure lives in `src/ers/commons/adapters/tracing.py`.
+- **`@trace_function` belongs on module-level public functions, not class methods.**
+  The public function is the API boundary — trace there. Class methods are implementation details.
+  ```python
+  # Correct — trace the public API function (auto span name: "mention_parser_service.parse_entity_mention")
+  @trace_function
+  def parse_entity_mention(entity_mention: EntityMention, config: ...) -> dict:
+      ...
+
+  # Or with an explicit shorter name:
+  @trace_function(span_name="mention_parser.parse")
+  def parse_entity_mention(entity_mention: EntityMention, config: ...) -> dict:
+      ...
+  ```
+- All three forms are equivalent: `@trace_function`, `@trace_function()`, `@trace_function(span_name="...")`.
+  Default span name is `<module_file>.<qualname>` (e.g. `mention_parser_service.parse_entity_mention`).
+- Span attribute extraction is automatic via the extractor registry — register extractors
+  in `<module>/adapters/span_extractors.py`, imported at startup (not at module level).
+- `set_request_id()` / `get_request_id()` carry the **ERS business UUID**, not the OTel trace ID.
+  Set once per incoming request in HTTP middleware or service entry points.
+- To add a real exporter: `add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))`.
+- To wire FastAPI: see `configure_fastapi_telemetry()` docstring — activate when
+  `opentelemetry-instrumentation-fastapi` is added as a dependency.
 
 ### Interaction
 
@@ -171,7 +206,7 @@ make clean-docs       # Remove build artifacts
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **entity-resolution-service** (1443 symbols, 2524 relationships, 42 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **entity-resolution-service** (2591 symbols, 4952 relationships, 67 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

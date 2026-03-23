@@ -1,8 +1,6 @@
 from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.adapters.mongo_collections_manager import MongoCollections
-
 
 class MongoClientManager:
     """Manages the lifecycle of an AsyncMongoClient."""
@@ -30,20 +28,25 @@ class MongoClientManager:
 
     async def ensure_indexes(self) -> None:
         """Create required indexes on the database collections."""
-        collections = MongoCollections(self.get_database())
+        db = self.get_database()
 
-        await collections.entity_mentions.create_index(
+        await db["entity_mentions"].create_index(
             [("content", "text"), ("parsed_representation", "text")],
             name="entity_mentions_text",
         )
 
-        await collections.decisions.create_index(
+        await db["decisions"].create_index(
             "about_entity_mention",
             name="decisions_about_entity_mention",
         )
 
-        await collections.users.create_index(
+        await db["users"].create_index(
             "email",
             unique=True,
             name="users_email_unique",
+        )
+
+        await db["resolution_requests"].create_index(
+            [("identifiedBy.source_id", 1), ("received_at", 1)],
+            name="resolution_requests_source_received_at",
         )

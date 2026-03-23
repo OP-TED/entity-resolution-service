@@ -1,7 +1,7 @@
-"""Unit tests for EREPublishService."""
+"""Unit tests for EREPublishService and the publish_request public API function."""
 import uuid
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -9,9 +9,17 @@ from ers.commons.adapters.redis_client import AbstractClient
 from ers.ere_contract_client.domain.errors import (
     ChannelUnavailableError,
     InvalidRequestError,
+    MissingEntityMentionError,
+    MissingEntityTypeError,
+    MissingRequestIdError,
+    MissingSourceIdError,
     RedisConnectionError,
+    SerializationError,
 )
-from ers.ere_contract_client.services.ere_publish_service import EREPublishService
+from ers.ere_contract_client.services.ere_publish_service import (
+    EREPublishService,
+    publish_request,
+)
 from erspec.models.core import EntityMentionIdentifier
 from erspec.models.ere import EntityMention, EntityMentionResolutionRequest
 
@@ -59,9 +67,10 @@ def make_request(
 
 @pytest.fixture
 def mock_adapter() -> AbstractClient:
-    """Return a mock AbstractClient with push_request as AsyncMock."""
+    """Return a mock AbstractClient with push_request as AsyncMock returning 1."""
     adapter = MagicMock(spec=AbstractClient)
-    adapter.push_request = AsyncMock(return_value=None)
+    adapter.push_request = AsyncMock(return_value=1)
+    adapter.request_channel_id = "ere_requests"
     return adapter
 
 
@@ -87,9 +96,16 @@ class TestPublishRequestValidTriad:
 
 
 class TestPublishRequestMissingTriad:
-    @pytest.mark.parametrize("missing", ["source_id", "request_id", "entity_type"])
-    async def test_raises_on_missing_triad_field(self, service, mock_adapter, missing):
-        """TC-013: incomplete triad → InvalidRequestError, adapter not called.
+    @pytest.mark.parametrize(
+        "missing,expected_exc",
+        [
+            ("source_id", MissingSourceIdError),
+            ("request_id", MissingRequestIdError),
+            ("entity_type", MissingEntityTypeError),
+        ],
+    )
+    async def test_raises_on_missing_triad_field(self, service, mock_adapter, missing, expected_exc):
+        """TC-013: incomplete triad → specific InvalidRequestError subclass, adapter not called.
 
         Uses model_construct to bypass Pydantic validation so that falsy string
         values reach the service's _validate_triad check rather than being
@@ -107,14 +123,15 @@ class TestPublishRequestMissingTriad:
             entity_mention=mention,
             ere_request_id="",
         )
-        with pytest.raises(InvalidRequestError):
+        with pytest.raises(expected_exc) as exc_info:
             await service.publish_request(request)
+        assert exc_info.value.identifier is identifier
         mock_adapter.push_request.assert_not_called()
 
     async def test_raises_when_entity_mention_absent(self, service, mock_adapter):
-        """TC-013: absent entity_mention → InvalidRequestError."""
+        """TC-013: absent entity_mention → MissingEntityMentionError."""
         request = make_request(entity_mention=None)
-        with pytest.raises(InvalidRequestError):
+        with pytest.raises(MissingEntityMentionError):
             await service.publish_request(request)
         mock_adapter.push_request.assert_not_called()
 
@@ -164,60 +181,58 @@ class TestPublishRequestAdapterErrors:
         with pytest.raises(RedisConnectionError):
             await service.publish_request(make_request())
 
+    async def test_zero_push_raises_channel_unavailable(self, service, mock_adapter):
+        """TC-018: adapter returns 0 (channel accepted nothing) → ChannelUnavailableError."""
+        mock_adapter.push_request = AsyncMock(return_value=0)
+        with pytest.raises(ChannelUnavailableError):
+            await service.publish_request(make_request())
 
-class TestPublishRequestOTel:
-    """OTel tests patch _otel_available=True and tracer so _span() enters the real branch."""
 
-    async def test_span_created_with_correct_attributes(self, service):
-        """Successful publish creates OTel span with required attributes."""
-        request = make_request(
-            source_id="SRC", request_id="REQ", entity_type="ORG", ere_request_id="req-1"
+class TestPublishRequestSerializationError:
+    async def test_serialization_failure_raises_serialization_error(self, service):
+        """Pre-serialization failure → SerializationError before adapter is called."""
+        identifier = make_request().entity_mention.identifiedBy
+        # Inject a non-serializable value via model_construct to bypass Pydantic validation
+        from erspec.models.core import EntityMentionIdentifier
+        from erspec.models.ere import EntityMention
+
+        bad_identifier = EntityMentionIdentifier.model_construct(
+            source_id=object(),  # not JSON-serializable
+            request_id="req",
+            entity_type="ORG",
         )
-        mock_span = MagicMock()
-        mock_tracer = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
+        bad_mention = EntityMention.model_construct(
+            identifiedBy=bad_identifier,
+            content="c",
+            content_type="text/plain",
         )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
-
-        with (
-            patch(
-                "ers.ere_contract_client.services.ere_publish_service._otel_available", True
-            ),
-            patch(
-                "ers.ere_contract_client.services.ere_publish_service.tracer", mock_tracer
-            ),
-        ):
-            await service.publish_request(request)
-
-        mock_tracer.start_as_current_span.assert_called_once_with(
-            "ere_contract_client.publish"
+        from erspec.models.ere import EntityMentionResolutionRequest
+        bad_request = EntityMentionResolutionRequest.model_construct(
+            entity_mention=bad_mention,
+            ere_request_id="pre-check",
         )
-        mock_span.set_attribute.assert_any_call("source_id", "SRC")
-        mock_span.set_attribute.assert_any_call("request_id", "REQ")
-        mock_span.set_attribute.assert_any_call("entity_type", "ORG")
-        mock_span.set_attribute.assert_any_call("ere_request_id", "req-1")
+        with pytest.raises(SerializationError):
+            await service.publish_request(bad_request)
 
-    async def test_span_records_exception_on_failure(self, service, mock_adapter):
-        """OTel span records exception when adapter raises."""
-        mock_adapter.push_request = AsyncMock(side_effect=TimeoutError("timeout"))
-        mock_span = MagicMock()
-        mock_tracer = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(
-            return_value=mock_span
-        )
-        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
 
-        with (
-            patch(
-                "ers.ere_contract_client.services.ere_publish_service._otel_available", True
-            ),
-            patch(
-                "ers.ere_contract_client.services.ere_publish_service.tracer", mock_tracer
-            ),
-        ):
-            with pytest.raises(ChannelUnavailableError):
-                await service.publish_request(make_request())
+class TestPublishRequestPublicApi:
+    """Tests for the module-level publish_request public API function."""
 
-        args, _ = mock_span.record_exception.call_args
-        assert isinstance(args[0], TimeoutError)
+    async def test_delegates_to_service_and_returns_ere_request_id(self, mock_adapter):
+        """publish_request() wires adapter into EREPublishService and returns ere_request_id."""
+        request = make_request(ere_request_id="pub-1")
+        result = await publish_request(request, mock_adapter)
+        assert result == "pub-1"
+        mock_adapter.push_request.assert_called_once_with(request)
+
+    async def test_propagates_invalid_request_error(self, mock_adapter):
+        """publish_request() propagates InvalidRequestError from the service."""
+        request = make_request(entity_mention=None)
+        with pytest.raises(InvalidRequestError):
+            await publish_request(request, mock_adapter)
+
+    async def test_propagates_channel_unavailable_error(self, mock_adapter):
+        """publish_request() propagates ChannelUnavailableError from the service."""
+        mock_adapter.push_request = AsyncMock(return_value=0)
+        with pytest.raises(ChannelUnavailableError):
+            await publish_request(make_request(), mock_adapter)

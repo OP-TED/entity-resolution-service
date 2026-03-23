@@ -6,12 +6,24 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 
+def _caller_method_name() -> str:
+    """Return the name of the method two frames up the call stack.
+
+    Used by ``config_resolve`` so that the decorated property name
+    (e.g. ``MONGO_URI``) becomes the environment-variable key
+    without requiring callers to pass it explicitly.
+    ``stack()[0]`` is this function, ``[1]`` is ``config_resolve``,
+    ``[2]`` is the original caller whose name we want.
+    """
+    return inspect.stack()[2][3]
+
+
 class ConfigResolverABC(ABC):
     """Abstract base for configuration resolution strategies."""
 
     def config_resolve(self, default_value: str | None = None) -> str | None:
         """Resolve config using the caller method name as the key."""
-        config_name = inspect.stack()[1][3]
+        config_name = _caller_method_name()
         return self.concrete_config_resolve(config_name, default_value)
 
     @abstractmethod

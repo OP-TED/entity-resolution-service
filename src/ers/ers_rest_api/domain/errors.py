@@ -1,0 +1,21 @@
+"""Error envelope and error codes for the ERS REST API."""
+
+from enum import StrEnum
+
+from ers.commons.domain.data_transfer_objects import FrozenDTO
+
+
+class ErrorCode(StrEnum):
+    """Machine-readable error codes returned in error responses."""
+
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
+    MENTION_NOT_FOUND = "MENTION_NOT_FOUND"
+    SERVICE_ERROR = "SERVICE_ERROR"
+
+
+class ErrorResponse(FrozenDTO):
+    """Standard error response body returned by all ERS REST API endpoints."""
+
+    error_code: ErrorCode
+    detail: str

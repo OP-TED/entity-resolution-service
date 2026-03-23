@@ -176,9 +176,26 @@ Design: OPTIONAL per field (partial data OK); no LIMIT (multi-entity guard is in
 
 ### 6.4 OpenTelemetry Observability
 
-Service level only (constraint #9):
-- **Span:** `mention_parser.parse` | **Attributes:** entity_type, content_type, content_length, fields_extracted_count
-- **Log on error:** error type + metadata (never raw content) | **Log on success:** entity_type + field count
+Service level only (constraint #9). Implemented via `ers.commons.adapters.tracing`.
+Full design: `docs/superpowers/specs/2026-03-21-observability-design.md`.
+
+**Signature refactor:** `MentionParserService.parse()` must be refactored from
+`(content, content_type, entity_type)` to accept `EntityMention` directly. This
+enables the registered `EntityMention` extractor in `commons/adapters/span_extractors.py`
+to provide span attributes automatically — no lambda at the call site.
+
+```python
+@trace_function(span_name="mention_parser.parse")
+def parse(self, entity_mention: EntityMention) -> dict[str, Any]:
+    ...
+```
+
+Span attributes provided by the `EntityMention` extractor:
+`entity_mention.source_id`, `entity_mention.request_id`,
+`entity_mention.entity_type`, `entity_mention.content_length`
+
+- Logging (`logger.warning`, `logger.info`) already in place — no changes needed
+- Never capture `entity_mention.content` (raw RDF) in spans — PII/size risk
 
 ## 7. Anti-Patterns (DO NOT)
 

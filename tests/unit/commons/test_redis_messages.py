@@ -1,12 +1,14 @@
 """Unit tests for ers.commons.adapters.redis_messages.
 
-Tests cover the two public helpers — get_request_from_message() and
-get_response_from_message() — using Pydantic model_dump_json() to produce
+Error-branch tests cover get_message_object() directly.
+Functional tests cover the public helpers get_request_from_message() and
+get_response_from_message() using Pydantic model_dump_json() to produce
 the raw bytes that a real Redis consumer would receive.
 """
 
-import pytest
+import json
 
+import pytest
 from erspec.models.ere import (
     ClusterReference,
     EntityMention,
@@ -17,9 +19,21 @@ from erspec.models.ere import (
 )
 
 from ers.commons.adapters.redis_messages import (
+    SUPPORTED_REQUEST_CLASSES,
+    SUPPORTED_RESPONSE_CLASSES,
+    get_message_object,
     get_request_from_message,
     get_response_from_message,
 )
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _to_bytes(data: dict) -> bytes:
+    return json.dumps(data).encode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +80,37 @@ def sample_error_response() -> EREErrorResponse:
         error_title="Something went wrong",
         error_detail="Detailed description of the failure.",
     )
+
+
+# ---------------------------------------------------------------------------
+# get_message_object error branches
+# ---------------------------------------------------------------------------
+
+
+class TestGetMessageObjectErrors:
+    def test_raises_when_type_field_is_missing(self):
+        raw = _to_bytes({"ere_request_id": "x", "content": "y"})
+
+        with pytest.raises(ValueError, match="'type' field"):
+            get_message_object(raw, SUPPORTED_REQUEST_CLASSES)
+
+    def test_raises_when_type_field_is_empty_string(self):
+        raw = _to_bytes({"type": ""})
+
+        with pytest.raises(ValueError, match="'type' field"):
+            get_message_object(raw, SUPPORTED_REQUEST_CLASSES)
+
+    def test_raises_when_type_is_unsupported(self):
+        raw = _to_bytes({"type": "FullRebuildRequest"})
+
+        with pytest.raises(ValueError, match='Unsupported message type: "FullRebuildRequest"'):
+            get_message_object(raw, SUPPORTED_REQUEST_CLASSES)
+
+    def test_raises_for_unsupported_type_in_response_classes(self):
+        raw = _to_bytes({"type": "UnknownResponseType"})
+
+        with pytest.raises(ValueError, match='Unsupported message type: "UnknownResponseType"'):
+            get_message_object(raw, SUPPORTED_RESPONSE_CLASSES)
 
 
 # ---------------------------------------------------------------------------

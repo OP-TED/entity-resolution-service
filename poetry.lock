@@ -731,8 +731,8 @@ pydantic = ">=2.10.6,<3.0.0"
 [package.source]
 type = "git"
 url = "https://github.com/meaningfy-ws/entity-resolution-spec.git"
-reference = "0.3.0-rc.1"
-resolved_reference = "67702bf64f5afdfab15cb378afffb4a394516c07"
+reference = "develop"
+resolved_reference = "1448fa0a3b532923f4bc2092ad875b494db5b0d4"
 
 [[package]]
 name = "et-xmlfile"

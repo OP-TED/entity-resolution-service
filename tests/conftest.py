@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 import redis.asyncio as aioredis
-from erspec.models.core import ClusterReference, Decision
 from testcontainers.redis import RedisContainer
 
 # Path constants — single source of truth for test directory structure
@@ -69,17 +68,16 @@ def pytest_collection_modifyitems(items: list) -> None:
 
 
 def load_text_file(relative_path: str) -> str:
-    """
-    Load RDF content from test_data directory.
+    """Load text content from the test_data directory.
 
     Args:
         relative_path: Path relative to test_data/, e.g., "organizations/group1/661238-2023.ttl"
 
     Returns:
-        str: Full RDF/Turtle content
+        Full file content as a UTF-8 string.
 
     Raises:
-        FileNotFoundError: If file does not exist
+        FileNotFoundError: If the file does not exist.
     """
     file_path = TEST_DATA_DIR / relative_path
     if not file_path.exists():
@@ -164,5 +162,5 @@ def proc_group2_file2() -> str:
 
 @pytest.fixture(scope="session")
 def sample_rdf_mapping() -> str:
-    """path to sample_rdf_mapping"""
+    """Load the sample RDF mapping YAML used by parser tests."""
     return load_text_file("sample_rdf_mapping.yaml")

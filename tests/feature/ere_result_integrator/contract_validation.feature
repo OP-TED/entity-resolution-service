@@ -19,6 +19,7 @@ Feature: Validate ERE Outcome Messages Before Persisting
       | the timestamp field is absent            |
       | all triad fields are null                |
       | the message body is an empty JSON object |
+      | zero candidate alternatives are provided |
 
   Scenario Outline: Reject an outcome whose correlation triad is not in the Request Registry
     When the ERE delivers an outcome for a triad that is unknown because "<reason>"

@@ -34,7 +34,7 @@ description: >
   </example>
 model: opus
 color: cyan
-tools: [Read, Write, Grep, Glob, AskUserQuestion]
+tools: [Read, Write, Grep, Glob, AskUserQuestion, mcp__gitnexus__query, mcp__gitnexus__context, mcp__plugin_context7_context7__query-docs, mcp__plugin_context7_context7__resolve-library-id, ListMcpResourcesTool, ReadMcpResourceTool]
 skills:
   - stream-coding
   - clarity-gate

@@ -1,6 +1,7 @@
 """Utilities for parsing raw message bytes into domain model instances."""
 
 import json
+from typing import Mapping
 
 from erspec.models.ere import (
     EntityMentionResolutionRequest,
@@ -33,14 +34,14 @@ SUPPORTED_RESPONSE_CLASSES = {
 
 def get_message_object(
     raw_msg: bytes,
-    supported_classes: dict[str, type[EREMessage]],
+    supported_classes: Mapping[str, type[EREMessage]],
     encoding: str = "utf-8",
 ) -> EREMessage:
     """Parse raw message bytes into a request or response domain model instance.
 
     Args:
         raw_msg: Serialized JSON message (bytes).
-        supported_classes: Dict mapping 'type' field values to message classes.
+        supported_classes: mapping 'type' field values to message classes.
         encoding: Character encoding (default: utf-8).
 
     Returns:
