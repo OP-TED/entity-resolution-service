@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 from pytest_bdd import given, parsers, scenario, then, when
 from starlette.testclient import TestClient
 
-from ers.commons.domain.data_transfer_objects import PaginatedResult
+from ers.commons.domain.data_transfer_objects import CursorPage
 from tests.unit.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
@@ -113,11 +113,9 @@ def decision_with_full_context(
     )
     mention = EntityMentionFactory.build(identifiedBy=identifier)
 
-    decision_repository.find_with_filters.return_value = PaginatedResult(
-        count=1,
-        previous=None,
-        next=None,
+    decision_repository.find_with_filters.return_value = CursorPage(
         results=[decision],
+        next_cursor=None,
     )
     decision_repository.find_by_id.return_value = decision
     decision_repository.find_mention_ids_by_cluster.return_value = [identifier]

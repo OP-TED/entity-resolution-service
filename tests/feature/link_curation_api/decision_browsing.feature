@@ -82,14 +82,14 @@ Feature: Decision browsing and filtering
 
   # --- Pagination ---
 
-  Scenario: Navigate through paginated decisions
+  Scenario: Navigate through decisions with cursor pagination
     Given 50 decisions exist in the store
-    When the curator requests page 1 with 20 items per page
+    When the curator requests decisions with a limit of 20
     Then 20 decision summaries are returned
-    And the total count is 50
-    And the next page indicator points to page 2
+    And a next cursor is provided for further results
 
-  Scenario: Request beyond last page
+  Scenario: All results fit within the requested limit
     Given 5 decisions exist in the store
-    When the curator requests page 2 with 20 items per page
-    Then an empty result set is returned
+    When the curator requests decisions with a limit of 20
+    Then 5 decision summaries are returned
+    And no next cursor is provided

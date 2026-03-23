@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
-from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
+from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters import (
     DecisionCurationRepository,
@@ -64,20 +64,18 @@ class TestListDecisions:
         entity_mention = EntityMentionFactory.build(
             identifiedBy=decision.about_entity_mention,
         )
-        decision_repository.find_with_filters.return_value = PaginatedResult(
-            count=1,
-            previous=None,
-            next=None,
+        decision_repository.find_with_filters.return_value = CursorPage(
             results=[decision],
+            next_cursor=None,
         )
         entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
 
         result = await service.list_decisions(
             filters=DecisionFilters(),
-            pagination=PaginationParams(),
+            cursor_params=CursorParams(),
         )
 
-        assert result.count == 1
+        assert len(result.results) == 1
         summary = result.results[0]
         assert isinstance(summary, DecisionSummary)
         assert summary.id == decision.id
@@ -92,21 +90,19 @@ class TestListDecisions:
         decision_repository: MagicMock,
         entity_mention_repository: MagicMock,
     ) -> None:
-        decision_repository.find_with_filters.return_value = PaginatedResult(
-            count=0,
-            previous=None,
-            next=None,
+        decision_repository.find_with_filters.return_value = CursorPage(
             results=[],
+            next_cursor=None,
         )
         entity_mention_repository.find_by_identifiers.return_value = []
 
         result = await service.list_decisions(
             filters=DecisionFilters(),
-            pagination=PaginationParams(),
+            cursor_params=CursorParams(),
         )
 
-        assert result.count == 0
         assert result.results == []
+        assert result.next_cursor is None
 
     async def test_list_decisions_with_search_delegates_to_entity_search(
         self,
@@ -119,24 +115,24 @@ class TestListDecisions:
         mention = EntityMentionFactory.build(identifiedBy=identifiers[0])
 
         entity_mention_repository.search_identifiers.return_value = identifiers
-        decision_repository.find_with_filters.return_value = PaginatedResult(
-            count=1,
+        decision_repository.find_with_filters.return_value = CursorPage(
             results=[decision],
+            next_cursor=None,
         )
         entity_mention_repository.find_by_identifiers.return_value = [mention]
 
         result = await service.list_decisions(
             filters=DecisionFilters(search="example"),
-            pagination=PaginationParams(),
+            cursor_params=CursorParams(),
         )
 
         entity_mention_repository.search_identifiers.assert_called_once_with("example")
         decision_repository.find_with_filters.assert_called_once_with(
             filters=DecisionFilters(search="example"),
-            pagination=PaginationParams(),
+            cursor_params=CursorParams(),
             mention_identifiers=identifiers,
         )
-        assert result.count == 1
+        assert len(result.results) == 1
 
     async def test_list_decisions_with_search_no_matches_returns_empty(
         self,
@@ -148,11 +144,11 @@ class TestListDecisions:
 
         result = await service.list_decisions(
             filters=DecisionFilters(search="nonexistent"),
-            pagination=PaginationParams(),
+            cursor_params=CursorParams(),
         )
 
-        assert result.count == 0
         assert result.results == []
+        assert result.next_cursor is None
         decision_repository.find_with_filters.assert_not_called()
 
     async def test_list_decisions_without_search_skips_entity_search(
@@ -161,21 +157,21 @@ class TestListDecisions:
         decision_repository: MagicMock,
         entity_mention_repository: MagicMock,
     ) -> None:
-        decision_repository.find_with_filters.return_value = PaginatedResult(
-            count=0,
+        decision_repository.find_with_filters.return_value = CursorPage(
             results=[],
+            next_cursor=None,
         )
         entity_mention_repository.find_by_identifiers.return_value = []
 
         await service.list_decisions(
             filters=DecisionFilters(),
-            pagination=PaginationParams(),
+            cursor_params=CursorParams(),
         )
 
         entity_mention_repository.search_identifiers.assert_not_called()
         decision_repository.find_with_filters.assert_called_once_with(
             filters=DecisionFilters(),
-            pagination=PaginationParams(),
+            cursor_params=CursorParams(),
             mention_identifiers=None,
         )
 

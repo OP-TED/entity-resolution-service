@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
 
-from ers.commons.domain.data_transfer_objects import PaginatedResult
+from ers.commons.domain.data_transfer_objects import CursorPage, PaginatedResult
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.domain.data_transfer_objects import (
     BulkActionResponse,
@@ -39,65 +39,64 @@ class TestListDecisions:
             current_placement=ClusterReferenceFactory.build(),
             created_at=datetime.now(UTC),
         )
-        decision_curation_service.list_decisions.return_value = PaginatedResult(
-            count=1, previous=None, next=None, results=[summary]
+        decision_curation_service.list_decisions.return_value = CursorPage(
+            results=[summary], next_cursor=None
         )
 
         response = await client.get(BASE_URL)
 
         assert response.status_code == 200
         data = response.json()
-        assert data["count"] == 1
         assert len(data["results"]) == 1
         assert data["results"][0]["id"] == "decision-1"
+        assert data["next_cursor"] is None
 
     async def test_returns_empty_list(
         self,
         client: AsyncClient,
         decision_curation_service: AsyncMock,
     ) -> None:
-        decision_curation_service.list_decisions.return_value = PaginatedResult(
-            count=0, previous=None, next=None, results=[]
+        decision_curation_service.list_decisions.return_value = CursorPage(
+            results=[], next_cursor=None
         )
 
         response = await client.get(BASE_URL)
 
         assert response.status_code == 200
-        assert response.json()["count"] == 0
         assert response.json()["results"] == []
+        assert response.json()["next_cursor"] is None
 
     async def test_passes_query_params_to_service(
         self,
         client: AsyncClient,
         decision_curation_service: AsyncMock,
     ) -> None:
-        decision_curation_service.list_decisions.return_value = PaginatedResult(
-            count=0, previous=None, next=None, results=[]
+        decision_curation_service.list_decisions.return_value = CursorPage(
+            results=[], next_cursor=None
         )
 
         await client.get(
             BASE_URL,
             params={
                 "confidence_min": 0.5,
-                "page": 2,
-                "per_page": 10,
+                "limit": 10,
             },
         )
 
         call_args = decision_curation_service.list_decisions.call_args
         filters = call_args.kwargs["filters"]
-        pagination = call_args.kwargs["pagination"]
+        cursor_params = call_args.kwargs["cursor_params"]
         assert filters.confidence_min == 0.5
-        assert pagination.page == 2
-        assert pagination.per_page == 10
+        assert cursor_params.limit == 10
+        assert cursor_params.cursor is None
 
     async def test_passes_ordering_to_service(
         self,
         client: AsyncClient,
         decision_curation_service: AsyncMock,
     ) -> None:
-        decision_curation_service.list_decisions.return_value = PaginatedResult(
-            count=0, previous=None, next=None, results=[]
+        decision_curation_service.list_decisions.return_value = CursorPage(
+            results=[], next_cursor=None
         )
 
         await client.get(BASE_URL, params={"ordering": "-confidence_score"})

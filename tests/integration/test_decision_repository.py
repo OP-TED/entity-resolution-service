@@ -4,7 +4,7 @@ import pytest
 from erspec.models.core import Decision
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.domain.data_transfer_objects import PaginationParams
+from ers.commons.domain.data_transfer_objects import CursorParams
 from ers.curation.adapters.decision_repository import MongoDecisionCurationRepository
 from ers.curation.domain.data_transfer_objects import (
     DecisionFilters,
@@ -93,46 +93,45 @@ class TestFindWithFilters:
 
     async def test_no_filters_returns_all(self, repo: MongoDecisionCurationRepository) -> None:
         await self._seed(repo)
-        result = await repo.find_with_filters(DecisionFilters(), PaginationParams())
-        assert result.count == 3
+        result = await repo.find_with_filters(DecisionFilters(), CursorParams())
+        assert len(result.results) == 3
 
     async def test_filter_by_entity_type(self, repo: MongoDecisionCurationRepository) -> None:
         await self._seed(repo)
         result = await repo.find_with_filters(
-            DecisionFilters(entity_type="ORGANISATION"), PaginationParams()
+            DecisionFilters(entity_type="ORGANISATION"), CursorParams()
         )
-        assert result.count == 2
+        assert len(result.results) == 2
         assert all(r.about_entity_mention.entity_type == "ORGANISATION" for r in result.results)
 
     async def test_filter_by_confidence_range(self, repo: MongoDecisionCurationRepository) -> None:
         await self._seed(repo)
         result = await repo.find_with_filters(
             DecisionFilters(confidence_min=0.70, confidence_max=0.99),
-            PaginationParams(),
+            CursorParams(),
         )
         assert all(0.70 <= r.current_placement.confidence_score <= 0.99 for r in result.results)
 
-    async def test_pagination(self, repo: MongoDecisionCurationRepository) -> None:
+    async def test_cursor_pagination(self, repo: MongoDecisionCurationRepository) -> None:
         await self._seed(repo)
-        page1 = await repo.find_with_filters(
-            DecisionFilters(), PaginationParams(page=1, per_page=2)
-        )
+        page1 = await repo.find_with_filters(DecisionFilters(), CursorParams(limit=2))
         assert len(page1.results) == 2
-        assert page1.next == 2
-        assert page1.previous is None
+        assert page1.next_cursor is not None
 
         page2 = await repo.find_with_filters(
-            DecisionFilters(), PaginationParams(page=2, per_page=2)
+            DecisionFilters(), CursorParams(cursor=page1.next_cursor, limit=2)
         )
         assert len(page2.results) == 1
-        assert page2.next is None
-        assert page2.previous == 1
+        assert page2.next_cursor is None
+
+        all_ids = {d.id for d in page1.results} | {d.id for d in page2.results}
+        assert len(all_ids) == 3
 
     async def test_ordering_by_confidence_asc(self, repo: MongoDecisionCurationRepository) -> None:
         await self._seed(repo)
         result = await repo.find_with_filters(
             DecisionFilters(ordering=DecisionOrdering.CONFIDENCE_ASC),
-            PaginationParams(),
+            CursorParams(),
         )
         scores = [r.current_placement.confidence_score for r in result.results]
         assert scores == sorted(scores)
@@ -145,11 +144,11 @@ class TestFindWithFilters:
 
         result = await repo.find_with_filters(
             DecisionFilters(),
-            PaginationParams(),
+            CursorParams(),
             mention_identifiers=[target],
         )
 
-        assert result.count == 1
+        assert len(result.results) == 1
         assert result.results[0].id == decisions[0].id
 
     async def test_filter_by_mention_identifiers_empty_list_returns_none(
@@ -159,9 +158,8 @@ class TestFindWithFilters:
 
         result = await repo.find_with_filters(
             DecisionFilters(),
-            PaginationParams(),
+            CursorParams(),
             mention_identifiers=[],
         )
 
-        assert result.count == 0
         assert result.results == []

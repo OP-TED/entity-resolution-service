@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from datetime import datetime
 from typing import Any
 
 from erspec.models.core import Decision, EntityMentionIdentifier
@@ -7,7 +8,8 @@ from ers.commons.adapters.decision_repository import (
     DecisionRepository,
     MongoDecisionRepository,
 )
-from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
+from ers.commons.domain.cursor import decode_cursor, encode_cursor
+from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.curation.domain.data_transfer_objects import (
     DecisionFilters,
     DecisionOrdering,
@@ -21,14 +23,14 @@ class DecisionCurationRepository(DecisionRepository):
     async def find_with_filters(
         self,
         filters: DecisionFilters,
-        pagination: PaginationParams,
+        cursor_params: CursorParams,
         mention_identifiers: list[EntityMentionIdentifier] | None = None,
-    ) -> PaginatedResult[Decision]:
-        """Find decisions matching filters with pagination.
+    ) -> CursorPage[Decision]:
+        """Find decisions matching filters with cursor-based pagination.
 
         Args:
             filters: Filter criteria for decision retrieval.
-            pagination: Pagination parameters (page, per page).
+            cursor_params: Cursor-based pagination parameters (cursor, limit).
             mention_identifiers: When provided, restricts results to decisions
                 whose ``about_entity_mention`` is in this list (used for
                 full-text search pre-filtering).
@@ -57,6 +59,17 @@ class MongoDecisionCurationRepository(
 ):
     """MongoDB repository for decision projections with curation-specific queries."""
 
+    _SORT_FIELD_MAP: dict[DecisionOrdering, tuple[str, bool]] = {
+        DecisionOrdering.CONFIDENCE_ASC: ("current_placement.confidence_score", True),
+        DecisionOrdering.CONFIDENCE_DESC: ("current_placement.confidence_score", False),
+        DecisionOrdering.CREATED_AT_ASC: ("created_at", True),
+        DecisionOrdering.CREATED_AT_DESC: ("created_at", False),
+        DecisionOrdering.UPDATED_AT_ASC: ("updated_at", True),
+        DecisionOrdering.UPDATED_AT_DESC: ("updated_at", False),
+    }
+
+    _DATETIME_SORT_FIELDS: set[str] = {"created_at", "updated_at"}
+
     def _build_query(self, filters: DecisionFilters) -> dict[str, Any]:
         query: dict[str, Any] = {}
 
@@ -84,29 +97,67 @@ class MongoDecisionCurationRepository(
 
         return query
 
-    def _build_sort(self, ordering: DecisionOrdering | None) -> list[tuple[str, int]]:
+    def _get_sort_info(self, ordering: DecisionOrdering | None) -> tuple[str, bool]:
+        """Return (mongo_field_name, is_ascending) for the given ordering."""
         if ordering is None:
-            return [("created_at", -1)]
+            return "created_at", False
+        return self._SORT_FIELD_MAP[ordering]
 
-        field_map: dict[DecisionOrdering, tuple[str, int]] = {
-            DecisionOrdering.CONFIDENCE_ASC: ("current_placement.confidence_score", 1),
-            DecisionOrdering.CONFIDENCE_DESC: (
-                "current_placement.confidence_score",
-                -1,
-            ),
-            DecisionOrdering.CREATED_AT_ASC: ("created_at", 1),
-            DecisionOrdering.CREATED_AT_DESC: ("created_at", -1),
-            DecisionOrdering.UPDATED_AT_ASC: ("updated_at", 1),
-            DecisionOrdering.UPDATED_AT_DESC: ("updated_at", -1),
+    def _build_sort(self, ordering: DecisionOrdering | None) -> list[tuple[str, int]]:
+        field, ascending = self._get_sort_info(ordering)
+        direction = 1 if ascending else -1
+        return [(field, direction), ("_id", direction)]
+
+    def _build_cursor_condition(
+        self,
+        sort_field: str,
+        sort_value: Any,
+        last_id: str,
+        ascending: bool,
+    ) -> dict[str, Any]:
+        """Build MongoDB filter for cursor-based seek."""
+        id_op = "$gt" if ascending else "$lt"
+        val_op = "$gt" if ascending else "$lt"
+
+        if sort_value is None:
+            if ascending:
+                return {
+                    "$or": [
+                        {sort_field: None, "_id": {id_op: last_id}},
+                        {sort_field: {"$ne": None}},
+                    ]
+                }
+            return {sort_field: None, "_id": {id_op: last_id}}
+
+        return {
+            "$or": [
+                {sort_field: {val_op: sort_value}},
+                {sort_field: sort_value, "_id": {id_op: last_id}},
+            ]
         }
-        return [field_map[ordering]]
+
+    def _extract_sort_value(self, decision: Decision, sort_field: str) -> float | datetime | None:
+        if sort_field == "current_placement.confidence_score":
+            return decision.current_placement.confidence_score
+        if sort_field == "created_at":
+            return decision.created_at
+        if sort_field == "updated_at":
+            return decision.updated_at
+        return None
+
+    def _parse_cursor_sort_value(self, value: Any, sort_field: str) -> Any:
+        if value is None:
+            return None
+        if sort_field in self._DATETIME_SORT_FIELDS:
+            return datetime.fromisoformat(value)
+        return value
 
     async def find_with_filters(
         self,
         filters: DecisionFilters,
-        pagination: PaginationParams,
+        cursor_params: CursorParams,
         mention_identifiers: list[EntityMentionIdentifier] | None = None,
-    ) -> PaginatedResult[Decision]:
+    ) -> CursorPage[Decision]:
         query = self._build_query(filters)
 
         if mention_identifiers is not None:
@@ -120,21 +171,28 @@ class MongoDecisionCurationRepository(
             ]
             query["about_entity_mention"] = {"$in": id_docs}
 
+        sort_field, ascending = self._get_sort_info(filters.ordering)
         sort = self._build_sort(filters.ordering)
-        skip = (pagination.page - 1) * pagination.per_page
 
-        count = await self._collection.count_documents(query)
-        cursor = self._collection.find(query).sort(sort).skip(skip).limit(pagination.per_page)
+        if cursor_params.cursor is not None:
+            raw_value, last_id = decode_cursor(cursor_params.cursor)
+            sort_value = self._parse_cursor_sort_value(raw_value, sort_field)
+            cursor_condition = self._build_cursor_condition(
+                sort_field, sort_value, last_id, ascending
+            )
+            query = {"$and": [query, cursor_condition]}
+
+        fetch_limit = cursor_params.limit + 1
+        cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
         results = [self._from_document(doc) async for doc in cursor]
 
-        total_pages = (count + pagination.per_page - 1) // pagination.per_page if count > 0 else 0
+        next_cursor = None
+        if len(results) > cursor_params.limit:
+            results = results[: cursor_params.limit]
+            last = results[-1]
+            next_cursor = encode_cursor(self._extract_sort_value(last, sort_field), last.id)
 
-        return PaginatedResult(
-            count=count,
-            previous=pagination.page - 1 if pagination.page > 1 else None,
-            next=pagination.page + 1 if pagination.page < total_pages else None,
-            results=results,
-        )
+        return CursorPage(results=results, next_cursor=next_cursor)
 
     async def find_mention_ids_by_cluster(
         self,

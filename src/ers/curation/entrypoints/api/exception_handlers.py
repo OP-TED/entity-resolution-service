@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from ers.commons.domain.exceptions import DomainError
+from ers.commons.domain.exceptions import DomainError, InvalidCursorError
 from ers.commons.services.exceptions import ApplicationError, NotFoundError
 from ers.curation.domain.exceptions import (
     AlreadyCuratedError,
@@ -60,6 +60,16 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=409,
+            content={"detail": exc.message},
+        )
+
+    @app.exception_handler(InvalidCursorError)
+    async def invalid_cursor_handler(
+        request: Request,
+        exc: InvalidCursorError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=400,
             content={"detail": exc.message},
         )
 

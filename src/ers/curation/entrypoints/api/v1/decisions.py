@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from ers.commons.domain.data_transfer_objects import PaginatedResult
+from ers.commons.domain.data_transfer_objects import CursorPage, PaginatedResult
 from ers.curation.domain.data_transfer_objects import (
     AssignRequest,
     BulkActionRequest,
@@ -16,6 +16,7 @@ from ers.curation.entrypoints.api.dependencies import (
     get_decision_curation_service,
 )
 from ers.curation.entrypoints.api.v1.schemas import (
+    CursorPagination,
     DecisionFiltersDep,
     ErrorResponse,
     Pagination,
@@ -28,15 +29,15 @@ from ers.curation.services import (
 router = APIRouter(prefix="/curation/decisions", tags=["Decisions"])
 
 
-@router.get("", response_model=PaginatedResult[DecisionSummary])
+@router.get("", response_model=CursorPage[DecisionSummary])
 async def list_decisions(
     filters: DecisionFiltersDep,
-    pagination: Pagination,
+    cursor_params: CursorPagination,
     user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
-) -> PaginatedResult[DecisionSummary]:
-    """Retrieve paginated list of decisions with optional filtering."""
-    return await service.list_decisions(filters=filters, pagination=pagination)
+) -> CursorPage[DecisionSummary]:
+    """Retrieve cursor-paginated list of decisions with optional filtering."""
+    return await service.list_decisions(filters=filters, cursor_params=cursor_params)
 
 
 @router.get(

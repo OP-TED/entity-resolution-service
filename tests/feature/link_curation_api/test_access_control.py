@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from pytest_bdd import given, scenario, then, when
 from starlette.testclient import TestClient
 
-from ers.commons.domain.data_transfer_objects import PaginatedResult
+from ers.commons.domain.data_transfer_objects import CursorPage, PaginatedResult
 from tests.feature.link_curation_api.conftest import (
     ADMIN_USER,
     UNVERIFIED_USER,
@@ -153,9 +153,9 @@ def verified_client(
         RegistryStatistics,
     )
 
-    decision_repository.find_with_filters.return_value = PaginatedResult(
-        count=0,
+    decision_repository.find_with_filters.return_value = CursorPage(
         results=[],
+        next_cursor=None,
     )
     statistics_repository.get_curation_statistics.return_value = CurationStatistics(
         total_decisions=0,

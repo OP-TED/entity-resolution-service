@@ -8,6 +8,7 @@ from ers import config
 from ers.commons.domain.data_transfer_objects import (
     DEFAULT_PER_PAGE,
     MAX_PER_PAGE,
+    CursorParams,
     PaginationParams,
 )
 from ers.curation.domain.data_transfer_objects import (
@@ -25,25 +26,30 @@ class ErrorResponse(BaseModel):
 
 # Query parameter dependencies
 def get_pagination(
-    page: int = Query(1, ge=1, description="Page number"),
-    per_page: int = Query(DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE, description="Items per page"),
+    page: Annotated[int, Query(ge=1, description="Page number")] = 1,
+    per_page: Annotated[
+        int, Query(ge=1, le=MAX_PER_PAGE, description="Items per page")
+    ] = DEFAULT_PER_PAGE,
 ) -> PaginationParams:
     return PaginationParams(page=page, per_page=per_page)
 
 
 def get_decision_filters(
-    entity_type: str | None = Query(None, description="Filter by entity type"),
-    confidence_min: float | None = Query(None, ge=0, le=1, description="Minimum confidence"),
-    confidence_max: float | None = Query(
-        config.CURATION_CONFIDENCE_THRESHOLD,  # evaluated once at import time
-        ge=0,
-        le=1,
-        description="Maximum confidence",
-    ),
-    similarity_min: float | None = Query(None, ge=0, le=1, description="Minimum similarity"),
-    similarity_max: float | None = Query(None, ge=0, le=1, description="Maximum similarity"),
-    search: str | None = Query(None, description="Search text"),
-    ordering: DecisionOrdering | None = Query(None, description="Ordering field"),
+    entity_type: Annotated[str | None, Query(description="Filter by entity type")] = None,
+    confidence_min: Annotated[
+        float | None, Query(ge=0, le=1, description="Minimum confidence")
+    ] = None,
+    confidence_max: Annotated[
+        float | None, Query(ge=0, le=1, description="Maximum confidence")
+    ] = config.CURATION_CONFIDENCE_THRESHOLD,
+    similarity_min: Annotated[
+        float | None, Query(ge=0, le=1, description="Minimum similarity")
+    ] = None,
+    similarity_max: Annotated[
+        float | None, Query(ge=0, le=1, description="Maximum similarity")
+    ] = None,
+    search: Annotated[str | None, Query(description="Search text")] = None,
+    ordering: Annotated[DecisionOrdering | None, Query(description="Ordering field")] = None,
 ) -> DecisionFilters:
     return DecisionFilters(
         entity_type=entity_type,
@@ -57,9 +63,9 @@ def get_decision_filters(
 
 
 def get_statistics_filters(
-    entity_type: str | None = Query(None, description="Filter by entity type"),
-    timeframe_start: datetime | None = Query(None, description="Start of timeframe"),
-    timeframe_end: datetime | None = Query(None, description="End of timeframe"),
+    entity_type: Annotated[str | None, Query(description="Filter by entity type")] = None,
+    timeframe_start: Annotated[datetime | None, Query(description="Start of timeframe")] = None,
+    timeframe_end: Annotated[datetime | None, Query(description="End of timeframe")] = None,
 ) -> StatisticsFilters:
     return StatisticsFilters(
         entity_type=entity_type,
@@ -71,3 +77,17 @@ def get_statistics_filters(
 Pagination = Annotated[PaginationParams, Depends(get_pagination)]
 DecisionFiltersDep = Annotated[DecisionFilters, Depends(get_decision_filters)]
 StatisticsFiltersDep = Annotated[StatisticsFilters, Depends(get_statistics_filters)]
+
+
+def get_cursor_params(
+    cursor: Annotated[
+        str | None, Query(description="Pagination cursor from previous response")
+    ] = None,
+    limit: Annotated[
+        int, Query(ge=1, le=MAX_PER_PAGE, description="Items per page")
+    ] = DEFAULT_PER_PAGE,
+) -> CursorParams:
+    return CursorParams(cursor=cursor, limit=limit)
+
+
+CursorPagination = Annotated[CursorParams, Depends(get_cursor_params)]

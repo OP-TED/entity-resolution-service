@@ -5,7 +5,6 @@ ordering, and pagination through the FastAPI test client.
 Repository mocks let real DecisionCurationService logic run end-to-end.
 """
 
-import math
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
@@ -13,7 +12,7 @@ from unittest.mock import AsyncMock
 from pytest_bdd import given, parsers, scenario, then, when
 from starlette.testclient import TestClient
 
-from ers.commons.domain.data_transfer_objects import PaginatedResult
+from ers.commons.domain.data_transfer_objects import CursorPage
 from tests.unit.factories import (
     DecisionFactory,
     EntityMentionFactory,
@@ -76,13 +75,13 @@ def test_search_no_results():
     pass
 
 
-@scenario(FEATURE, "Navigate through paginated decisions")
+@scenario(FEATURE, "Navigate through decisions with cursor pagination")
 def test_paginate():
     pass
 
 
-@scenario(FEATURE, "Request beyond last page")
-def test_beyond_last_page():
+@scenario(FEATURE, "All results fit within the requested limit")
+def test_all_results_fit():
     pass
 
 
@@ -116,9 +115,9 @@ def _setup_decisions(
     decisions = [d for d, _ in pairs]
     mentions = [m for _, m in pairs]
 
-    decision_repository.find_with_filters.return_value = PaginatedResult(
-        count=count,
+    decision_repository.find_with_filters.return_value = CursorPage(
         results=decisions,
+        next_cursor=None,
     )
     entity_mention_repository.find_by_identifiers.return_value = mentions
     return decisions, mentions
@@ -193,9 +192,9 @@ def decisions_with_names(
     mention = EntityMentionFactory.build(identifiedBy=identifier)
 
     entity_mention_repository.search_identifiers.return_value = [identifier]
-    decision_repository.find_with_filters.return_value = PaginatedResult(
-        count=1,
+    decision_repository.find_with_filters.return_value = CursorPage(
         results=[decision],
+        next_cursor=None,
     )
     entity_mention_repository.find_by_identifiers.return_value = [mention]
 
@@ -217,21 +216,17 @@ def n_decisions_in_store(
     all_decisions = [d for d, _ in pairs]
     all_mentions = [m for _, m in pairs]
 
-    def _paginated_response(*_args: Any, **kwargs: Any) -> PaginatedResult:
-        pagination = kwargs.get("pagination")
-        page = pagination.page if pagination else 1
-        per_page = pagination.per_page if pagination else 20
-        total_pages = max(1, math.ceil(count / per_page))
-        start = (page - 1) * per_page
-        page_items = all_decisions[start : start + per_page]
-        return PaginatedResult(
-            count=count,
+    def _cursor_response(*_args: Any, **kwargs: Any) -> CursorPage:
+        cursor_params = kwargs.get("cursor_params")
+        limit = cursor_params.limit if cursor_params else 20
+        page_items = all_decisions[:limit]
+        has_more = count > limit
+        return CursorPage(
             results=page_items,
-            next=page + 1 if page < total_pages else None,
-            previous=page - 1 if page > 1 else None,
+            next_cursor="mock-cursor" if has_more else None,
         )
 
-    decision_repository.find_with_filters.side_effect = _paginated_response
+    decision_repository.find_with_filters.side_effect = _cursor_response
     entity_mention_repository.find_by_identifiers.return_value = all_mentions
 
 
@@ -325,13 +320,13 @@ def search_decisions(client: TestClient, query: str) -> Any:
 
 
 @when(
-    parsers.parse("the curator requests page {page:d} with {per_page:d} items per page"),
+    parsers.parse("the curator requests decisions with a limit of {limit:d}"),
     target_fixture="response",
 )
-def request_page(client: TestClient, page: int, per_page: int) -> Any:
+def request_with_limit(client: TestClient, limit: int) -> Any:
     return client.get(
         DECISIONS_URL,
-        params={"page": page, "per_page": per_page},
+        params={"limit": limit},
     )
 
 
@@ -344,8 +339,8 @@ def request_page(client: TestClient, page: int, per_page: int) -> Any:
 def paginated_list_returned(response: Any) -> None:
     assert response.status_code == 200
     data = response.json()
-    assert "count" in data
     assert "results" in data
+    assert "next_cursor" in data
 
 
 @then(
@@ -439,14 +434,14 @@ def n_summaries_returned(response: Any, count: int) -> None:
     assert len(response.json()["results"]) == count
 
 
-@then(parsers.parse("the total count is {count:d}"))
-def total_count_is(response: Any, count: int) -> None:
-    assert response.json()["count"] == count
+@then("a next cursor is provided for further results")
+def next_cursor_provided(response: Any) -> None:
+    assert response.json()["next_cursor"] is not None
 
 
-@then(parsers.parse("the next page indicator points to page {page:d}"))
-def next_page_to(response: Any, page: int) -> None:
-    assert response.json()["next"] == page
+@then("no next cursor is provided")
+def no_next_cursor(response: Any) -> None:
+    assert response.json()["next_cursor"] is None
 
 
 # --- Combined filters ---
@@ -454,8 +449,7 @@ def next_page_to(response: Any, page: int) -> None:
 
 @given(
     parsers.parse(
-        'decisions exist for entity types "{type_a}" and "{type_b}" '
-        "with varying confidence scores"
+        'decisions exist for entity types "{type_a}" and "{type_b}" with varying confidence scores'
     ),
 )
 def decisions_for_types_with_confidence(

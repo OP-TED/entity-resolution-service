@@ -4,7 +4,7 @@ from typing import Any
 
 from erspec.models.core import Decision, EntityMention
 
-from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
+from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters.decision_repository import DecisionCurationRepository
 from ers.curation.adapters.entity_mention_repository import (
@@ -46,38 +46,36 @@ class DecisionCurationService:
     async def list_decisions(
         self,
         filters: DecisionFilters,
-        pagination: PaginationParams,
-    ) -> PaginatedResult[DecisionSummary]:
-        """List decisions with filtering, pagination, and embedded entity data."""
+        cursor_params: CursorParams,
+    ) -> CursorPage[DecisionSummary]:
+        """List decisions with filtering, cursor pagination, and embedded entity data."""
         mention_identifiers = None
         if filters.search is not None:
             mention_identifiers = await self._entity_mention_repository.search_identifiers(
                 filters.search,
             )
             if not mention_identifiers:
-                return PaginatedResult(count=0, results=[])
+                return CursorPage(results=[])
 
-        paginated = await self._decision_repository.find_with_filters(
+        page = await self._decision_repository.find_with_filters(
             filters=filters,
-            pagination=pagination,
+            cursor_params=cursor_params,
             mention_identifiers=mention_identifiers,
         )
 
-        identifiers = [d.about_entity_mention for d in paginated.results]
+        identifiers = [d.about_entity_mention for d in page.results]
         entity_mentions = await self._entity_mention_repository.find_by_identifiers(
             identifiers,
         )
         mention_map = self._index_by_identifier(entity_mentions)
 
         decision_summaries = [
-            self._to_decision_summary(decision, mention_map) for decision in paginated.results
+            self._to_decision_summary(decision, mention_map) for decision in page.results
         ]
 
-        return PaginatedResult(
-            count=paginated.count,
-            previous=paginated.previous,
-            next=paginated.next,
+        return CursorPage(
             results=decision_summaries,
+            next_cursor=page.next_cursor,
         )
 
     async def get_decision(self, decision_id: str) -> Decision:

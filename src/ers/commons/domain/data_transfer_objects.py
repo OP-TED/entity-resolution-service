@@ -1,10 +1,7 @@
-from datetime import datetime
 from enum import StrEnum
-from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-T = TypeVar("T")
 MAX_PER_PAGE = 50
 DEFAULT_PER_PAGE = 20
 
@@ -40,13 +37,27 @@ class PaginationParams(FrozenDTO):
     per_page: int = Field(default=DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE)
 
 
-class PaginatedResult(FrozenDTO, Generic[T]):
+class PaginatedResult[T](FrozenDTO):
     """Paginated query result."""
 
     count: int
     previous: int | None = None
     next: int | None = None
     results: list[T]
+
+
+class CursorParams(FrozenDTO):
+    """Cursor-based pagination parameters."""
+
+    cursor: str | None = None
+    limit: int = Field(default=DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE)
+
+
+class CursorPage[T](FrozenDTO):
+    """Cursor-paginated query result."""
+
+    results: list[T]
+    next_cursor: str | None = None
 
 
 class ResolutionOutcome(StrEnum):
