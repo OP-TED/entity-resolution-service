@@ -47,7 +47,7 @@ class MongoClientManager:
         )
 
         await db["resolution_requests"].create_index(
-            [("identifier.source_id", 1), ("received_at", 1)],
+            [("identifiedBy.source_id", 1), ("received_at", 1)],
             name="resolution_requests_source_received_at",
         )
 
