@@ -68,8 +68,6 @@ class MongoDecisionCurationRepository(
         DecisionOrdering.UPDATED_AT_DESC: ("updated_at", False),
     }
 
-    _DATETIME_SORT_FIELDS: set[str] = {"created_at", "updated_at"}
-
     def _build_query(self, filters: DecisionFilters) -> dict[str, Any]:
         query: dict[str, Any] = {}
 
@@ -108,34 +106,6 @@ class MongoDecisionCurationRepository(
         direction = 1 if ascending else -1
         return [(field, direction), ("_id", direction)]
 
-    def _build_cursor_condition(
-        self,
-        sort_field: str,
-        sort_value: Any,
-        last_id: str,
-        ascending: bool,
-    ) -> dict[str, Any]:
-        """Build MongoDB filter for cursor-based seek."""
-        id_op = "$gt" if ascending else "$lt"
-        val_op = "$gt" if ascending else "$lt"
-
-        if sort_value is None:
-            if ascending:
-                return {
-                    "$or": [
-                        {sort_field: None, "_id": {id_op: last_id}},
-                        {sort_field: {"$ne": None}},
-                    ]
-                }
-            return {sort_field: None, "_id": {id_op: last_id}}
-
-        return {
-            "$or": [
-                {sort_field: {val_op: sort_value}},
-                {sort_field: sort_value, "_id": {id_op: last_id}},
-            ]
-        }
-
     def _extract_sort_value(self, decision: Decision, sort_field: str) -> float | datetime | None:
         if sort_field == "current_placement.confidence_score":
             return decision.current_placement.confidence_score
@@ -144,13 +114,6 @@ class MongoDecisionCurationRepository(
         if sort_field == "updated_at":
             return decision.updated_at
         return None
-
-    def _parse_cursor_sort_value(self, value: Any, sort_field: str) -> Any:
-        if value is None:
-            return None
-        if sort_field in self._DATETIME_SORT_FIELDS:
-            return datetime.fromisoformat(value)
-        return value
 
     async def find_with_filters(
         self,
