@@ -5,7 +5,7 @@
 - **Component:** #4 — Resolution Decision Store
 - **Phase:** Gherkin features complete, ready for implementation
 - **Spines:** B (Async Engine Interaction — outcome recording), C (Bulk Sync — delta exposure queries)
-- **Last updated:** 2026-03-16
+- **Last updated:** 2026-03-23
 - **Dependencies:** er-spec library (domain models), ERS-EPIC-01 (Request Registry — triad existence)
 - **Clarity Gate:** 9.8/10
 
@@ -46,8 +46,8 @@ Two upstream writers exist: the Resolution Coordinator (EPIC-06) writes provisio
 ## 3. Scope
 
 ### In Scope
-- Pydantic models for `ResolutionDecisionRecord`, `PaginationCursor`, `DecisionPage`, and configuration
-- MongoDB repository (adapter) for atomic upsert with staleness condition, triad-based retrieval, and cursor-based paginated queries
+- `domain/errors.py` — `DecisionStoreError` hierarchy and `DecisionStoreConfig` (using `env_property`)
+- MongoDB repository (adapter) extending `MongoDecisionRepository` from `ers.commons.adapters.decision_repository`, adding atomic upsert with staleness condition, triad-based retrieval, and cursor-based paginated queries — stored in the **`decisions` collection** (same collection as the curation module)
 - SHA256 provisional cluster ID derivation function (adapter layer utility)
 - Thin service layer: `store_decision`, `get_decision_by_triad`, `query_decisions_paginated`
 - OpenTelemetry instrumentation at service layer only
@@ -64,78 +64,60 @@ Two upstream writers exist: the Resolution Coordinator (EPIC-06) writes provisio
 
 ### Assumptions
 1. er-spec models (`EntityMentionIdentifier`, `ClusterReference`) are Pydantic v2 models.
-2. MongoDB >= 6.0 is the persistence backend, accessed via `motor` (async).
+2. MongoDB >= 6.0 is the persistence backend, accessed via `pymongo.asynchronous` through `MongoClientManager` and `BaseMongoRepository` from `ers.commons.adapters`. Do not use `motor` directly.
 3. The triad identifying a decision MUST already exist in the Request Registry (EPIC-01). The Decision Store does not enforce this — upstream callers (EPIC-05, EPIC-06) guarantee it.
 4. `updated_at` is always a UTC `datetime` and serves as the sole monotonic staleness marker.
 5. Candidate lists arrive pre-ordered from ERE; the store truncates to the configurable max but does not re-sort.
 
 ## 4. Domain Models
 
-### 4.1 Models from er-spec (used, not defined here)
+### 4.1 Models from er-spec (used directly — not redefined here)
 
 | Model | Module | Key Fields |
 |-------|--------|-----------|
+| `Decision` | `erspec.models.core` | `id` (triad_hash), `about_entity_mention` (EntityMentionIdentifier), `current_placement` (ClusterReference), `candidates` (list[ClusterReference]), `created_at`, `updated_at` |
 | `EntityMentionIdentifier` | `erspec.models.core` | `source_id`, `request_id`, `entity_type` |
 | `ClusterReference` | `erspec.models.core` | `cluster_id`, `confidence_score`, `similarity_score` |
 
-### 4.2 Models defined in this EPIC
+**No local `ResolutionDecisionRecord` class is defined.** `erspec.Decision` is the domain model for this component. It covers all required fields:
+- `id` — set to `triad_hash` (SHA256 of triad) on first write; serves as MongoDB `_id`
+- `about_entity_mention` — the identifying triad
+- `current_placement` — primary cluster assignment
+- `candidates` — top-N alternatives (truncated to `max_candidates` on write)
+- `created_at` — set once on first insert, never overwritten
+- `updated_at` — staleness marker; strictly monotonic
 
-#### ResolutionDecisionRecord
-
-```python
-class ResolutionDecisionRecord(BaseModel):
-    """Latest clustering outcome for a single Entity Mention."""
-    identifier: EntityMentionIdentifier          # triad — unique key
-    current: ClusterReference                    # primary cluster assignment
-    candidates: list[ClusterReference] = []      # top-N alternatives (includes current)
-    created_at: datetime                         # UTC — first decision creation time
-    updated_at: datetime                         # UTC — last outcome integration time (staleness marker)
-```
-
-- `identifier` is the unique key (compound index on triad fields).
-- `current` is always present — every decision has a placement.
-- `candidates` contains at most `max_candidates` entries (configurable, default 5). Truncated on write if the incoming list exceeds the cap.
-- `created_at` is set once when the first decision for this triad is stored; never updated thereafter.
-- `updated_at` is the staleness marker. Strictly monotonic: new outcome accepted only if `new_updated_at > stored_updated_at`.
-
-#### PaginationCursor
-
-```python
-class PaginationCursor(BaseModel):
-    """Opaque cursor for paginated decision queries. Internal structure hidden from callers."""
-    last_updated_at: datetime    # updated_at of last item on previous page
-    last_triad_hash: str         # deterministic hash of last triad for tie-breaking
-```
-
-- Serialized to an opaque base64-encoded string for external use.
-- Callers never inspect or construct cursors; they receive them from query results and pass them back.
-
-#### DecisionPage
-
-```python
-class DecisionPage(BaseModel):
-    """A page of decision query results with optional continuation cursor."""
-    items: list[ResolutionDecisionRecord]
-    next_cursor: str | None = None    # opaque base64 token; None = no more pages
-    page_size: int
-```
+**Pagination:** Use `CursorPage[Decision]` from `ers.commons.domain.data_transfer_objects` (no local `DecisionPage` class needed).
 
 #### DecisionStoreConfig
 
 ```python
-class DecisionStoreConfig(BaseModel):
-    """Configuration for the Decision Store component."""
-    mongodb_uri: str = "mongodb://localhost:27017"
-    database_name: str = "ers"
-    collection_name: str = "resolution_decisions"
-    max_candidates: int = 5              # top-N candidate cap
-    default_page_size: int = 250         # cursor pagination default
-    max_page_size: int = 1000            # hard upper limit
+class DecisionStoreConfig:
+    """Configuration for the Decision Store component.
+
+    Uses @env_property decorator from ers.commons.adapters.config_resolver.
+    Method names are the environment variable keys (verify exact casing in config_resolver.py).
+    Example env vars: ERS_DECISION_STORE_MAX_CANDIDATES=10
+    """
+    @env_property(default_value="mongodb://localhost:27017")
+    def mongodb_uri(self, value: str) -> str: return value
+
+    @env_property(default_value="ers")
+    def database_name(self, value: str) -> str: return value
+
+    @env_property(default_value="5")
+    def max_candidates(self, value: str) -> int: return int(value)    # top-N candidate cap
+
+    @env_property(default_value="250")
+    def default_page_size(self, value: str) -> int: return int(value) # cursor pagination default
+
+    @env_property(default_value="1000")
+    def max_page_size(self, value: str) -> int: return int(value)     # hard upper limit
 ```
 
 - `max_candidates` must be >= 1.
 - `default_page_size` must be >= 1 and <= `max_page_size`.
-- All values overridable via environment variables (prefix `ERS_DECISION_STORE_`).
+- All values overridable via environment variables.
 
 ## 5. Behavioural Specification
 
@@ -146,38 +128,38 @@ flowchart TD
     A[Receive new outcome: triad + ClusterReference + candidates + updated_at] --> B[Truncate candidates to max_candidates]
     B --> C["findOneAndReplace with filter: triad match AND updated_at < new_updated_at"]
     C --> D{Document replaced?}
-    D -- Yes --> E[Return updated ResolutionDecisionRecord]
-    D -- No match on triad --> F[Insert new ResolutionDecisionRecord with created_at = now]
-    F --> G[Return new ResolutionDecisionRecord]
+    D -- Yes --> E[Return updated Decision]
+    D -- No match on triad --> F[Insert new Decision with created_at = now]
+    F --> G[Return new Decision]
     D -- "Match but staleness rejected (stored >= new)" --> H[Raise StaleOutcomeError]
 ```
 
-1. The service receives: `identifier` (EntityMentionIdentifier), `current` (ClusterReference), `candidates` (list[ClusterReference]), `updated_at` (datetime).
+1. The service receives: `about_entity_mention` (EntityMentionIdentifier), `current_placement` (ClusterReference), `candidates` (list[ClusterReference]), `updated_at` (datetime).
 2. The service truncates `candidates` to `max_candidates` entries (preserving order).
 3. The service delegates to the adapter's `upsert_decision` method.
-4. The adapter executes `findOneAndReplace` with a compound filter:
-   - `identifier` fields match the triad, AND
-   - `updated_at < new_updated_at` (staleness condition)
+4. The adapter executes `find_one_and_update` with `$set` + `$setOnInsert`:
+   - Filter: `about_entity_mention` fields match the triad AND `updated_at < new_updated_at` (staleness condition)
    - With `upsert=True` for first-time inserts.
-5. If the document is replaced or inserted: return the `ResolutionDecisionRecord`.
+   - `$setOnInsert` sets `created_at` and `id` (= `triad_hash`) on first insert only.
+5. If the document is replaced or inserted: return the `Decision`.
 6. If no replacement occurred (stored `updated_at >= new_updated_at`): raise `StaleOutcomeError`.
-7. On first insert, `created_at` is set to `updated_at` value. On subsequent replacements, `created_at` is preserved from the existing document.
+7. On first insert, `created_at` is set to `updated_at` value. On subsequent replacements, `created_at` is preserved.
 
 ### 5.2 Get Decision by Triad
 
 1. The service receives an `EntityMentionIdentifier`.
-2. The adapter queries by the compound triad fields.
-3. Returns `ResolutionDecisionRecord | None`.
+2. The adapter queries by the compound `about_entity_mention` fields.
+3. Returns `Decision | None`.
 
 ### 5.3 Query Decisions Paginated
 
 1. The service receives: optional `cursor` (opaque string), optional `page_size` (int, capped at `max_page_size`).
 2. If no cursor: query from the beginning, ordered by `(updated_at ASC, triad_hash ASC)`.
-3. If cursor provided: decode the `PaginationCursor`, query for records where `(updated_at, triad_hash) > (cursor.last_updated_at, cursor.last_triad_hash)`.
+3. If cursor provided: decode using `decode_cursor` from `ers.commons.domain.cursor`; query for records where `(updated_at, _id) > (cursor.last_updated_at, cursor.last_id)`.
 4. Fetch `page_size + 1` records to detect whether a next page exists.
-5. If `page_size + 1` records returned: build `next_cursor` from the last included record, return `page_size` records.
+5. If `page_size + 1` records returned: build `next_cursor` using `encode_cursor(last.updated_at, last.id)`, return `page_size` records.
 6. If fewer records returned: set `next_cursor = None`.
-7. Return `DecisionPage`.
+7. Return `CursorPage[Decision]`.
 
 ### 5.4 Provisional Cluster ID Derivation
 
@@ -197,17 +179,17 @@ flowchart TD
 | `RepositoryOperationError` | adapter | MongoDB operation timeout or unexpected error | Wrap in domain error; propagate to caller | ERROR |
 | `CandidateCardinalityWarning` | service | Incoming candidates list exceeds `max_candidates` | Truncate silently; log for observability | INFO |
 
-All error types defined in a local `models/errors.py` module. Each inherits from a base `DecisionStoreError`.
+All error types defined in `domain/errors.py`. Each inherits from a base `DecisionStoreError`.
 
 ## 7. Task Breakdown and Roadmap
 
-### Task 1: Define Domain Models, Errors, and Configuration
-**Layer:** `models/`
+### Task 1: Define Domain Errors and Configuration
+**Layer:** `domain/`
 **Dependencies:** er-spec library installed
 **Description:**
-- Create `models/decision.py` with `ResolutionDecisionRecord`, `PaginationCursor`, `DecisionPage`.
-- Create `models/errors.py` with base `DecisionStoreError` and subclasses: `StaleOutcomeError`, `DecisionNotFoundError`, `InvalidCursorError`, `RepositoryConnectionError`, `RepositoryOperationError`.
-- Create `models/config.py` with `DecisionStoreConfig` including Pydantic field validators and env var loading (`env_prefix = "ERS_DECISION_STORE_"`).
+- **No local domain model** — `erspec.Decision` is used directly throughout this component. Do not define `ResolutionDecisionRecord` or any equivalent class.
+- Create `domain/errors.py` with base `DecisionStoreError` (inherits `ApplicationError` from `ers.commons.services.exceptions`) and subclasses: `StaleOutcomeError`, `DecisionNotFoundError`, `InvalidCursorError`, `RepositoryConnectionError`, `RepositoryOperationError`.
+- Create `domain/config.py` with `DecisionStoreConfig` using the `@env_property` decorator from `ers.commons.adapters.config_resolver` (not Pydantic `env_prefix`). Method names become the environment variable keys (verify exact casing by reading `config_resolver.py`).
 
 **Acceptance Criteria:**
 - All models instantiate with valid data; frozen where appropriate.
@@ -216,15 +198,43 @@ All error types defined in a local `models/errors.py` module. Each inherits from
 - Environment variables override defaults.
 - All error classes instantiable with message string; inherit from `DecisionStoreError`.
 
-### Task 2: Implement MongoDB Adapter
-**Layer:** `adapters/`
-**Dependencies:** Task 1 (models, errors, config)
+### Task 2: Lift Cursor Helpers to MongoDecisionRepository (commons)
+**Layer:** `ers.commons.adapters`
+**Dependencies:** None (pure refactor, no new domain code)
 **Description:**
-- Create `adapters/decision_store_repository.py` with `MongoDecisionStoreRepository`.
-- Constructor accepts `DecisionStoreConfig` or pre-built `motor.AsyncIOMotorCollection`.
-- Methods: `upsert_decision`, `find_by_triad`, `query_paginated`, `ensure_indexes`.
-- Create `adapters/provisional_id.py` with `derive_provisional_cluster_id(identifier) -> str`.
-- Map all `pymongo`/`motor` exceptions to domain error types.
+`_build_cursor_condition` and `_parse_cursor_sort_value` in `MongoDecisionCurationRepository`
+are generic MongoDB cursor-seek utilities with no dependency on curation-specific types. The new
+`MongoDecisionStoreRepository` (Tier 1) needs the same helpers, but importing from `ers.curation`
+(Tier 3) is forbidden by import-linter. Lifting them to the commons base class is the only DRY
+solution that respects the tier boundary.
+- Add `_build_cursor_condition`, `_parse_cursor_sort_value`, `_DATETIME_FIELDS` to `MongoDecisionRepository` in `ers.commons.adapters.decision_repository`.
+- Remove those methods from `MongoDecisionCurationRepository` in `ers.curation.adapters.decision_repository` — it will inherit them unchanged.
+- Update any reference to `self._DATETIME_SORT_FIELDS` → `self._DATETIME_FIELDS` in the curation repo.
+
+**Acceptance Criteria:**
+- All existing curation unit tests pass without modification.
+- `MongoDecisionCurationRepository._build_cursor_condition` is accessible (via inheritance) and behaviour is identical.
+
+### Task 3: Implement MongoDB Adapter
+**Layer:** `adapters/`
+**Dependencies:** Tasks 1 + 2
+**Description:**
+- Create `adapters/decision_repository.py` with `MongoDecisionStoreRepository`.
+  - Extends `MongoDecisionRepository` from `ers.commons.adapters.decision_repository` (which already uses `erspec.Decision`, `_collection_name = "decisions"`, `_id_field = "id"`). This is a **parallel sibling** to `MongoDecisionCurationRepository` — both extend the same base, both operate on the `decisions` collection.
+  - Inherits `_build_cursor_condition`, `_parse_cursor_sort_value`, `_DATETIME_FIELDS` from base (added in Task 2). Do NOT re-implement these.
+  - Adds methods beyond the base class: `upsert_decision`, `find_by_triad`, `query_paginated`, `ensure_indexes`.
+  - `upsert_decision` uses `find_one_and_update` with `$set` + `$setOnInsert`:
+    - Filter: `{"_id": triad_hash, "updated_at": {"$lt": new_updated_at}}` with `upsert=True`.
+    - `$setOnInsert`: sets `id = triad_hash` and `created_at` on first insert only.
+    - `$set`: updates `current_placement`, `candidates`, `updated_at`.
+    - Returns `AFTER` document. If result is `None`, detect staleness by checking if the triad exists.
+  - `find_by_triad`: calls `find_by_id(triad_hash)` — since `Decision.id = triad_hash`, this is a direct `_id` lookup.
+  - `query_paginated`: cursor pagination ordered by `(updated_at ASC, _id ASC)`. Calls `self._parse_cursor_sort_value` and `self._build_cursor_condition` from base. Uses `encode_cursor(decision.updated_at, decision.id)` / `decode_cursor`. Returns `CursorPage[Decision]`.
+  - `ensure_indexes`: compound index on `(updated_at, _id)` for pagination performance.
+- Create `adapters/provisional_id.py` with `derive_provisional_cluster_id(identifier: EntityMentionIdentifier) -> str`.
+  - Implements `SHA256(concat(source_id, request_id, entity_type))` by reusing `SHA256ContentHasher` from `ers.commons.adapters.hasher`. Do NOT re-implement SHA256.
+  - Dual purpose: provisional cluster ID and the `Decision.id` value set on first insert.
+- Map all `pymongo` exceptions to domain error types (`ConnectionFailure` → `RepositoryConnectionError`, `OperationFailure` → `RepositoryOperationError`/`StaleOutcomeError`).
 
 **Acceptance Criteria:**
 - `upsert_decision` atomically replaces only when `new_updated_at > stored_updated_at`.
@@ -235,15 +245,20 @@ All error types defined in a local `models/errors.py` module. Each inherits from
 - `derive_provisional_cluster_id` produces deterministic SHA256 hex digest.
 - MongoDB exceptions never leak (always wrapped in domain errors).
 
-### Task 3: Implement Service Layer
+### Task 4: Implement Service Layer
 **Layer:** `services/`
-**Dependencies:** Tasks 1 + 2
+**Dependencies:** Tasks 1 + 3
 **Description:**
 - Create `services/decision_store_service.py` with `DecisionStoreService`.
 - Constructor: `__init__(self, repository: MongoDecisionStoreRepository, config: DecisionStoreConfig)`.
-- Methods: `store_decision`, `get_decision_by_triad`, `query_decisions_paginated`.
-- OpenTelemetry span: `decision_store.<operation>` with attributes: `source_id`, `request_id`, `entity_type`, `cluster_id`, `page_size`.
-- Structured logging at INFO (success) and WARN (stale outcome, truncation).
+- Class methods (not traced): `store_decision`, `get_decision_by_triad`, `query_decisions_paginated`.
+- Also expose **module-level public API functions** decorated with `@trace_function` from `ers.commons.adapters.tracing`. These are the API boundary — tracing belongs here, not on class methods. Pattern identical to `ers.request_registry.services.request_registry_service`.
+  - `@trace_function(span_name="decision_store.store_decision")` async def store_decision(identifier, current, candidates, updated_at, service) -> Decision
+  - `@trace_function(span_name="decision_store.get_decision_by_triad")` async def get_decision_by_triad(identifier, service) -> Decision | None
+  - `@trace_function(span_name="decision_store.query_paginated")` async def query_decisions_paginated(service, cursor, page_size) -> CursorPage[Decision]
+- Register OTel span attribute extractors in `adapters/span_extractors.py` using `register_span_extractor` from `ers.commons.adapters.tracing`. Import at app startup only (not at module level in other packages).
+- Structured logging at WARN (stale outcome, candidate truncation).
+- `DecisionStoreConfig` is instantiated using `@env_property` (not Pydantic constructor — see Task 1).
 
 **Acceptance Criteria:**
 - `store_decision` truncates candidates to `max_candidates`.
@@ -252,38 +267,40 @@ All error types defined in a local `models/errors.py` module. Each inherits from
 - `query_decisions_paginated` caps `page_size` at `max_page_size`.
 - OTel spans created with correct attributes.
 
-### Task 4: Unit Tests
+### Task 5: Unit Tests
 **Layer:** `tests/`
-**Dependencies:** Tasks 1-3
+**Dependencies:** Tasks 1-4
 **Description:**
-- Unit tests for all models, adapter (mock motor), service (mock repository), and provisional ID derivation.
+- Unit tests for all domain models, adapter (mock `AsyncDatabase`/collection via `MagicMock`/`AsyncMock`), service (mock repository via `create_autospec(MongoDecisionStoreRepository)`), and provisional ID derivation.
 - Minimum 90% coverage on all modules.
 
 **Acceptance Criteria:** All test cases from Section 8 pass. Coverage >= 90%.
 
-### Task 5: Integration Tests
+### Task 6: Integration Tests
 **Layer:** `tests/`
-**Dependencies:** Tasks 1-3
+**Dependencies:** Tasks 1-4
 **Description:**
 - Integration tests using real MongoDB (testcontainers or docker-compose).
 - Full lifecycle: store, retrieve, replace with staleness, paginated query, concurrent upsert.
 
 **Acceptance Criteria:** All integration test cases from Section 8 pass. Tests skippable if MongoDB unavailable (pytest mark).
 
-### Task 6: Gherkin Features
-**Layer:** `tests/features/`
-**Dependencies:** Tasks 1-3
+### Task 7: Gherkin Features
+**Layer:** `tests/feature/`
+**Dependencies:** Tasks 1-4
 **Description:** Feature files for store, staleness rejection, pagination, and provisional ID scenarios. Step definitions calling the service.
 
 **Acceptance Criteria:** All Gherkin scenarios from Section 13 pass via pytest-bdd.
 
 ## Roadmap
-- [ ] Task 1: Define Domain Models, Errors, and Configuration (models)
-- [ ] Task 2: Implement MongoDB Adapter (adapters)
-- [ ] Task 3: Implement Service Layer (services)
-- [ ] Task 4: Unit Tests (tests)
-- [ ] Task 5: Integration Tests (tests)
-- [ ] Task 6: Gherkin Features (tests/features)
+- [x] Task 0: EPIC corrections + implementation log (2026-03-23)
+- [ ] Task 1: Define Domain Errors and Configuration (domain/)
+- [ ] Task 2: Lift cursor helpers to MongoDecisionRepository (commons refactor)
+- [ ] Task 3: Implement MongoDB Adapter (adapters/)
+- [ ] Task 4: Implement Service Layer (services/)
+- [ ] Task 5: Unit Tests (tests/unit/)
+- [ ] Task 6: Integration Tests (tests/integration/)
+- [ ] Task 7: Gherkin Features (tests/feature/)
 
 ## 8. Test Case Specifications
 
@@ -291,27 +308,25 @@ All error types defined in a local `models/errors.py` module. Each inherits from
 
 | Test ID | Component | Input | Expected Output | Edge Cases |
 |---------|-----------|-------|-----------------|------------|
-| TC-001 | ResolutionDecisionRecord | Valid triad + ClusterReference + timestamps | Model instantiates correctly | Missing `current` raises ValidationError |
-| TC-002 | DecisionStoreConfig | Default constructor | Valid config (max_candidates=5, page_size=250) | N/A |
-| TC-003 | DecisionStoreConfig | max_candidates=0 | ValidationError | max_candidates=-1 |
-| TC-004 | DecisionStoreConfig | default_page_size > max_page_size | ValidationError | default_page_size=0 |
-| TC-005 | DecisionStoreConfig | env vars set | Config picks up env values | Partial env override |
-| TC-006 | Error hierarchy | Instantiate each error | All inherit from DecisionStoreError | str(error) includes message |
-| TC-007 | PaginationCursor | Valid datetime + triad_hash | Serializes to base64 | Empty triad_hash raises ValidationError |
-| TC-008 | Adapter: upsert (new) | Non-existent triad + mock | findOneAndReplace with upsert=True; created_at set | N/A |
-| TC-009 | Adapter: upsert (replace) | updated_at > stored + mock | Succeeds; created_at preserved | Timestamps differ by 1ms |
-| TC-010 | Adapter: upsert (stale) | updated_at <= stored + mock | Raises StaleOutcomeError | Equal timestamps |
-| TC-011 | Adapter: find_by_triad (found) | Existing triad + mock | Returns ResolutionDecisionRecord | N/A |
-| TC-012 | Adapter: find_by_triad (not found) | Non-existent triad | Returns None | All fields present but no match |
-| TC-013 | Adapter: query_paginated (first) | No cursor, page_size=2, 5 records | Returns 2 items + next_cursor | page_size=0 raises error |
-| TC-014 | Adapter: query_paginated (last) | Cursor near end, 1 remaining | Returns 1 item + next_cursor=None | Exactly page_size remaining |
-| TC-015 | Adapter: query_paginated (empty) | No records | Returns 0 items + next_cursor=None | N/A |
-| TC-016 | derive_provisional_cluster_id | Known triad ("A","B","C") | Deterministic SHA256 hex of "ABC" | Unicode in triad fields |
-| TC-017 | Service: store (truncation) | 8 candidates, max=5 | Truncated to 5 | Exactly 5 (no-op); 0 candidates |
-| TC-018 | Service: store (stale) | Adapter raises StaleOutcomeError | Propagated unchanged | N/A |
-| TC-019 | Service: query (bad cursor) | Malformed base64 | Raises InvalidCursorError | Empty string; valid b64 bad JSON |
-| TC-020 | Service: query (cap) | page_size=5000, max=1000 | Capped to 1000 | page_size=None uses default |
-| TC-021 | Service observability | Valid store call | OTel span with source_id, cluster_id | Error: span records exception |
+| TC-001 | DecisionStoreConfig | Default constructor | Valid config (max_candidates=5, page_size=250) | N/A |
+| TC-002 | DecisionStoreConfig | max_candidates=0 | ValidationError | max_candidates=-1 |
+| TC-003 | DecisionStoreConfig | default_page_size > max_page_size | ValidationError | default_page_size=0 |
+| TC-004 | DecisionStoreConfig | env vars set | Config picks up env values | Partial env override |
+| TC-005 | Error hierarchy | Instantiate each error | All inherit from DecisionStoreError | str(error) includes message |
+| TC-006 | Adapter: upsert (new) | Non-existent triad + mock | find_one_and_update with upsert=True; created_at set | N/A |
+| TC-007 | Adapter: upsert (replace) | updated_at > stored + mock | Succeeds; created_at preserved | Timestamps differ by 1ms |
+| TC-008 | Adapter: upsert (stale) | updated_at <= stored + mock | Raises StaleOutcomeError | Equal timestamps |
+| TC-009 | Adapter: find_by_triad (found) | Existing triad + mock | Returns Decision | N/A |
+| TC-010 | Adapter: find_by_triad (not found) | Non-existent triad | Returns None | All fields present but no match |
+| TC-011 | Adapter: query_paginated (first) | No cursor, page_size=2, 5 records | Returns 2 items + next_cursor | page_size=0 raises error |
+| TC-012 | Adapter: query_paginated (last) | Cursor near end, 1 remaining | Returns 1 item + next_cursor=None | Exactly page_size remaining |
+| TC-013 | Adapter: query_paginated (empty) | No records | Returns 0 items + next_cursor=None | N/A |
+| TC-014 | derive_provisional_cluster_id | Known triad ("A","B","C") | Deterministic SHA256 hex of "ABC" | Unicode in triad fields |
+| TC-015 | Service: store (truncation) | 8 candidates, max=5 | Truncated to 5 | Exactly 5 (no-op); 0 candidates |
+| TC-016 | Service: store (stale) | Adapter raises StaleOutcomeError | Propagated unchanged | N/A |
+| TC-017 | Service: query (bad cursor) | Malformed base64 | Raises InvalidCursorError | Empty string; valid b64 bad JSON |
+| TC-018 | Service: query (cap) | page_size=5000, max=1000 | Capped to 1000 | page_size=None uses default |
+| TC-019 | Service observability | Valid store call | OTel span with source_id, cluster_id | Error: span records exception |
 
 ### Integration Tests
 
@@ -355,8 +370,11 @@ All error types defined in a local `models/errors.py` module. Each inherits from
 | Dependency | Type | Provides | Status |
 |-----------|------|----------|--------|
 | **er-spec** | Library | `EntityMentionIdentifier`, `ClusterReference` | Available |
-| **motor** | Package (>= 3.0) | Async MongoDB driver | Available |
-| **pymongo** | Package (>= 4.0, transitive) | MongoDB operations and exceptions | Available |
+| **pymongo** | Package (>= 4.6, includes `pymongo.asynchronous`) | Async MongoDB driver + operations + exceptions | Available |
+| `ers.commons.adapters.repository` | Internal | `BaseMongoRepository[T,ID]`, `AsyncReadRepository`, `AsyncWriteRepository` | Available |
+| `ers.commons.adapters.mongo_client` | Internal | `MongoClientManager` — lifecycle + index management | Available |
+| `ers.commons.adapters.hasher` | Internal | `SHA256ContentHasher` — SHA256 hex digest | Available |
+| `ers.commons.domain.cursor` | Internal | `encode_cursor`, `decode_cursor`, `InvalidCursorError` | Available |
 | **Pydantic** | Package (>= 2.0) | Model definitions, config validation | Available |
 | **OpenTelemetry** | Package | Tracing spans | Available |
 | MongoDB | Infrastructure (>= 6.0) | Persistence backend | Available |
@@ -375,20 +393,22 @@ All error types defined in a local `models/errors.py` module. Each inherits from
 ### Example 1: First decision (provisional singleton)
 ```json
 {
-  "identifier": {"source_id": "TEDSWS", "request_id": "324fs3r345vx", "entity_type": "http://www.w3.org/ns/org#Organization"},
-  "current": {"cluster_id": "a3f5c8d9e1b2...", "confidence_score": 1.0, "similarity_score": 1.0},
+  "id": "a3f5c8d9e1b2...",
+  "about_entity_mention": {"source_id": "TEDSWS", "request_id": "324fs3r345vx", "entity_type": "http://www.w3.org/ns/org#Organization"},
+  "current_placement": {"cluster_id": "a3f5c8d9e1b2...", "confidence_score": 1.0, "similarity_score": 1.0},
   "candidates": [{"cluster_id": "a3f5c8d9e1b2...", "confidence_score": 1.0, "similarity_score": 1.0}],
   "created_at": "2026-01-14T12:34:56Z",
   "updated_at": "2026-01-14T12:34:56Z"
 }
 ```
-Note: `cluster_id` = `SHA256(concat("TEDSWS", "324fs3r345vx", "http://www.w3.org/ns/org#Organization"))`. Singleton candidates.
+Note: `id` = `SHA256(concat("TEDSWS", "324fs3r345vx", "http://www.w3.org/ns/org#Organization"))`. Singleton candidates.
 
 ### Example 2: ERE replaces provisional
 ```json
 {
-  "identifier": {"source_id": "TEDSWS", "request_id": "324fs3r345vx", "entity_type": "http://www.w3.org/ns/org#Organization"},
-  "current": {"cluster_id": "ere-cluster-7a2b", "confidence_score": 0.92, "similarity_score": 0.88},
+  "id": "a3f5c8d9e1b2...",
+  "about_entity_mention": {"source_id": "TEDSWS", "request_id": "324fs3r345vx", "entity_type": "http://www.w3.org/ns/org#Organization"},
+  "current_placement": {"cluster_id": "ere-cluster-7a2b", "confidence_score": 0.92, "similarity_score": 0.88},
   "candidates": [
     {"cluster_id": "ere-cluster-7a2b", "confidence_score": 0.92, "similarity_score": 0.88},
     {"cluster_id": "ere-cluster-4c5d", "confidence_score": 0.85, "similarity_score": 0.79},
@@ -406,7 +426,7 @@ Note: `created_at` preserved. `updated_at` advanced. 3 candidates from ERE.
 
 ## 13. Gherkin Feature Outline
 
-At `tests/features/decision_store/`:
+At `tests/feature/decision_store/`:
 
 ### Feature: Store Resolution Decision
 
@@ -423,7 +443,7 @@ At `tests/features/decision_store/`:
 
 | Scenario | Description |
 |----------|-------------|
-| Retrieve existing decision by triad | Returns full ResolutionDecisionRecord |
+| Retrieve existing decision by triad | Returns Decision |
 | Retrieve non-existent triad | Returns None |
 
 ### Feature: Paginated Decision Query
@@ -457,6 +477,23 @@ At `tests/features/decision_store/`:
 # Part 2 — Implementation Log
 
 <!-- Written and updated by the implementer during Phase 3. -->
+
+---
+
+## Implementation Log
+
+### 2026-03-23 — Implementation started
+
+**Task corrections applied (pre-implementation):**
+- Layer renamed from `models/` → `domain/` (project convention).
+- `motor` dependency removed. Using `pymongo.asynchronous` via `MongoClientManager` + `BaseMongoRepository` from commons.
+- `DecisionStoreConfig` uses `@env_property` decorator (not Pydantic `env_prefix`).
+- `ResolutionDecisionRecord` eliminated — `erspec.Decision` is used directly (identical fields, different names).
+- `MongoDecisionStoreRepository` extends `MongoDecisionRepository` from `ers.commons.adapters.decision_repository` — parallel sibling to `MongoDecisionCurationRepository`, both on the `decisions` collection.
+- OTel tracing via `@trace_function` on module-level public functions (not class methods).
+- Unit test mocking: `create_autospec(MongoDecisionStoreRepository)` (not motor mocks).
+- `PaginationCursor`/`DecisionPage` replaced by `CursorPage[Decision]` from commons (reuse existing).
+- `derive_provisional_cluster_id()` reuses `SHA256ContentHasher` from commons.
 
 ---
 
