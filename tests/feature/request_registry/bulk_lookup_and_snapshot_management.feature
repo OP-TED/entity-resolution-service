@@ -1,6 +1,6 @@
 Feature: Snapshot State Management
   As a process that coordinates delta exposure for source systems,
-  I want to advance the snapshot watermark per source,
+  I want to advance the snapshot marker per source,
   So that each source's last successful bulk refresh point is tracked reliably
   and backward time movement is detected and rejected.
 
@@ -33,7 +33,7 @@ Feature: Snapshot State Management
 
   Scenario: Retrieve the current lookup state for a known source
     Given a source system identified by "source_system_a"
-    And the snapshot watermark for "source_system_a" has been advanced to "2024-06-01T12:00:00+00:00"
+    And the snapshot for "source_system_a" has been advanced to "2024-06-01T12:00:00+00:00"
     When the current lookup state is retrieved for "source_system_a"
     Then the lookup state is returned with last_snapshot "2024-06-01T12:00:00+00:00"
 

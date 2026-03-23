@@ -27,9 +27,9 @@ class IdempotencyConflictError(ApplicationError):
 
 
 class SnapshotRegressionError(ApplicationError):
-    """Raised when advance_snapshot is called with a time at or before the current watermark.
+    """Raised when advance_snapshot is called with a time at or before the current snapshot marker.
 
-    The snapshot watermark must advance monotonically.
+    The snapshot marker must advance monotonically.
     """
 
     def __init__(self, source_id: str, current: datetime, attempted: datetime) -> None:

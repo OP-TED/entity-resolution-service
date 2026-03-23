@@ -1,8 +1,8 @@
 # Epic: ERS-EPIC-01 — Request Registry
 
 ## Status
-- Phase: Gherkin features complete, ready for implementation
-- Last updated: 2026-03-16
+- Phase: Implementation complete (Tasks 1.1, 1.2, 1.3, 14). Integration tests pending.
+- Last updated: 2026-03-21
 
 ## Metadata
 | Field | Value |
@@ -24,9 +24,9 @@ Its purpose is threefold:
 
 1. **Immutable intake record** — Store every accepted Entity Mention and its correlation triad `(sourceId, requestId, entityType)` as an append-only, immutable record. Once accepted, a mention is never modified, merged, versioned, or deleted.
 2. **Idempotency enforcement** — Use the triad as the sole uniqueness constraint. Replay of an identical triad returns the existing record. Reuse of a triad with different payload content is rejected as an idempotency conflict.
-3. **Lookup state tracking** — Maintain per-sourceId watermark records (`LookupState`) that track when the last bulk lookup was requested from each source, enabling delta exposure semantics for UC-W3 (refreshBulk).
+3. **Snapshot state tracking** — Maintain per-sourceId snapshot marker records (`LookupRequestRecord`) that track when the last bulk lookup was successfully produced, enabling delta exposure semantics for UC-W3 (refreshBulk).
 
-**Implementation Implication:** This component is the first to be built. Every other ERS component depends on the Request Registry for intake validation, triad-based correlation, and lookup state management.
+**Implementation Implication:** This component is the first to be built. Every other ERS component depends on the Request Registry for intake validation, triad-based correlation, and snapshot state management.
 
 ---
 
@@ -34,13 +34,13 @@ Its purpose is threefold:
 
 ### In scope
 
-- Pydantic models for: `ResolutionRequestRecord`, `LookupRequestRecord`, `LookupState`, `JSONRepresentation`
-- MongoDB repository (adapter) for persisting and querying these models
-- Service layer for storing, retrieving, and querying request records and lookup state
+- Pydantic models for: `ResolutionRequestRecord`, `LookupRequestRecord`
+- MongoDB repository (adapters) for persisting and querying these models
+- Service layer for storing, retrieving request records and snapshot state management
 - Idempotency enforcement at the service level (triad uniqueness check)
-- Import and reuse of `er-spec` domain models (`EntityMentionIdentifier`, `EntityMention`, `CanonicalEntityIdentifier`, `ClusterReference`)
-- Registration of lookup requests (per sourceId tracking)
-- OpenTelemetry instrumentation at the service layer
+- RDF parsing of entity mention content at registration time — result stored in `parsed_representation`
+- Import and reuse of `er-spec` domain models (`EntityMentionIdentifier`, `EntityMention`, `LookupState`)
+- OpenTelemetry instrumentation via module-level public functions
 
 ### Out of scope
 
@@ -48,9 +48,9 @@ Its purpose is threefold:
 - Resolution logic, provisional identifier issuance (EPIC-06)
 - Decision Store persistence (EPIC-02 or dedicated Decision Store EPIC)
 - REST API / entrypoints (separate EPIC)
-- JSON parsing of entity mention content (EPIC-02: content parsing)
 - User Action Log (Curation EPIC)
 - Authentication / authorisation
+- OTel metrics (counters, histograms) — traces only
 
 ---
 
@@ -59,13 +59,12 @@ Its purpose is threefold:
 | Term | Definition |
 |------|-----------|
 | **Triad** | The composite key `(source_id, request_id, entity_type)` from `EntityMentionIdentifier`. Sole correlation and uniqueness key for Entity Mentions in ERS. |
-| **Resolution Request Record** | An ERS-local record wrapping an `EntityMention` (from er-spec) with intake metadata (timestamps, status). Immutable once stored. |
-| **Lookup Request Record** | A record capturing that a lookup was requested for a specific `sourceId`, with timestamp. Used for audit and state tracking. |
-| **LookupState** | Per-sourceId watermark tracking when the last bulk lookup was successfully produced. Maps to `lastSnapshot` / `lastNotificationDate` in the architecture. |
-| **JSONRepresentation** | A thin Pydantic wrapper around `dict[str, Any]` representing a parsed form of entity mention content. Defined here as a model; parsing logic belongs to EPIC-02. |
+| **Resolution Request Record** | An ERS-local record extending `EntityMention` with intake metadata (`content_hash`, `received_at`, `parsed_representation`). Immutable once stored. |
+| **Lookup Request Record** | Per-sourceId snapshot marker tracking when the last bulk lookup was successfully produced. Advances monotonically. |
+| **Snapshot marker** | The `last_snapshot` timestamp in `LookupRequestRecord`. Marks the last point in time for which bulk results were produced for a source. Must advance strictly forward. |
 | **Idempotency conflict** | Reuse of an existing triad with different payload content. Rejected with an explicit error. |
 | **Idempotent replay** | Reuse of an existing triad with identical payload content. Returns the existing record without side effects. |
-| **er-spec** | External shared library providing domain models (`EntityMention`, `EntityMentionIdentifier`, etc.) used across ERS and ERE. |
+| **er-spec** | External shared library providing domain models (`EntityMention`, `EntityMentionIdentifier`, `LookupState`, etc.) used across ERS and ERE. |
 
 ---
 
@@ -78,73 +77,43 @@ These models are imported, not redefined. The er-spec library is the single sour
 | Model | Key fields | Notes |
 |-------|-----------|-------|
 | `EntityMentionIdentifier` | `source_id: str`, `request_id: str`, `entity_type: str` | The triad. Immutable value object. |
-| `EntityMention` | `identifier: EntityMentionIdentifier`, `content: str`, `content_type: str` | Immutable intake artefact. |
-| `CanonicalEntityIdentifier` | `identifier: str` | Canonical cluster ID produced by ERE. Not used directly in this EPIC but referenced. |
-| `ClusterReference` | `cluster_id: str`, `confidence_score: float`, `similarity_score: float` | Not used directly in this EPIC. |
+| `EntityMention` | `identifiedBy: EntityMentionIdentifier`, `content: str`, `content_type: str`, `parsed_representation: Optional[str]`, `context: Optional[str]` | Immutable intake artefact. `parsed_representation` carries the JSON-serialised RDF parse result. |
+| `LookupState` | `source_id: str`, `last_snapshot: datetime` | Base model for snapshot state. Extended by `LookupRequestRecord`. |
 
 ### 4.2 Models defined in this EPIC
-
-#### JSONRepresentation
-
-```python
-class JSONRepresentation(BaseModel):
-    """Thin wrapper for a parsed JSON form of entity mention content.
-    Parsing logic is NOT in this EPIC — only the model definition."""
-    data: dict[str, Any]
-```
-
-- Immutable (frozen Pydantic model).
-- `data` contains arbitrary key-value pairs produced by a parser (EPIC-02).
-- No validation of internal structure in this EPIC.
 
 #### ResolutionRequestRecord
 
 ```python
-class ResolutionRequestRecord(BaseModel):
+class ResolutionRequestRecord(FrozenDTO, EntityMention):
     """Immutable intake record for a single entity mention resolution request."""
-    identifier: EntityMentionIdentifier          # triad — unique key
-    entity_mention: EntityMention                 # full payload as submitted
-    json_representation: JSONRepresentation | None = None  # optional parsed form
-    received_at: datetime                         # UTC timestamp of acceptance
-    content_hash: str                             # SHA-256 of entity_mention.content
+    content_hash: str      # SHA-256 hex digest of content (64 chars)
+    received_at: datetime  # UTC timestamp of first acceptance (timezone-aware)
 ```
 
-- Immutable (frozen).
+- Extends `EntityMention` — all erspec fields are inlined (`identifiedBy`, `content`, `content_type`, `parsed_representation`, `context`).
+- `parsed_representation` is populated at registration time by the RDF parser; stored as a JSON string.
 - `content_hash` enables idempotency conflict detection: same triad + different hash = conflict.
-- `json_representation` is initially `None`; populated by EPIC-02 parsing.
 - `received_at` is set once at creation time, never updated.
+- Triad fields (`source_id`, `request_id`, `entity_type`) must all be non-empty (validated at model construction).
 
 #### LookupRequestRecord
 
 ```python
-class LookupRequestRecord(BaseModel):
-    """Record of a lookup request from a specific source."""
-    source_id: str                    # which source requested the lookup
-    requested_at: datetime            # UTC timestamp of the lookup request
-    request_type: LookupRequestType   # enum: SINGLE, BULK
+class LookupRequestRecord(FrozenDTO, LookupState):
+    """Per-source snapshot marker for bulk delta exposure.
+
+    Tracks the last point in time for which bulk results were successfully
+    produced for a source. Advances monotonically — regression is rejected
+    by the service layer.
+    """
+    updated_at: datetime  # wall-clock UTC time of last state update
 ```
 
-#### LookupRequestType
-
-```python
-class LookupRequestType(str, Enum):
-    SINGLE = "SINGLE"
-    BULK = "BULK"
-```
-
-#### LookupState
-
-```python
-class LookupState(BaseModel):
-    """Per-sourceId delta exposure watermark for bulk synchronisation."""
-    source_id: str             # unique key
-    last_snapshot: datetime    # last point in time for which bulk results were produced
-    updated_at: datetime       # when this record was last modified
-```
-
-- `last_snapshot` corresponds to `lastNotificationDate` in the architecture.
-- Advanced only when a bulk refresh response is successfully produced (not on request receipt).
-- `source_id` is the unique key for this collection.
+- Extends erspec `LookupState` (`source_id`, `last_snapshot`) with `updated_at`.
+- `last_snapshot` maps to `lastNotificationDate` in the architecture.
+- Advanced only after a bulk refresh response is successfully produced.
+- `updated_at >= last_snapshot` is enforced by a model validator.
 
 ---
 
@@ -154,77 +123,31 @@ class LookupState(BaseModel):
 
 | Collection | Document root model | Unique index | Additional indexes |
 |-----------|-------------------|-------------|-------------------|
-| `resolution_requests` | `ResolutionRequestRecord` | `(identifier.source_id, identifier.request_id, identifier.entity_type)` compound unique | `received_at` (ascending), `identifier.source_id` (ascending) |
-| `lookup_requests` | `LookupRequestRecord` | None (append-only log) | `(source_id, requested_at)` compound, `requested_at` (ascending) |
-| `lookup_states` | `LookupState` | `source_id` unique | None |
+| `resolution_requests` | `ResolutionRequestRecord` | `(identifiedBy.source_id, identifiedBy.request_id, identifiedBy.entity_type)` compound — computed as `_id` | `received_at` (ascending), `identifiedBy.source_id` (ascending) |
+| `lookup_states` | `LookupRequestRecord` | `source_id` unique (used as `_id`) | None |
 
-### 5.2 Repository Interface
+### 5.2 Repository classes
+
+Two separate concrete classes (no shared ABC — only one concrete implementation exists):
 
 ```python
-class RequestRegistryRepository(ABC):
-    """Abstract repository for Request Registry persistence."""
+class MongoResolutionRequestRepository(BaseMongoRepository[ResolutionRequestRecord, str]):
+    async def store(record: ResolutionRequestRecord) -> ResolutionRequestRecord
+    async def find_by_triad(identifier: EntityMentionIdentifier) -> ResolutionRequestRecord | None
+    async def find_by_source_id(source_id: str, limit: int, offset: int) -> list[ResolutionRequestRecord]
 
-    # --- Resolution Request Records ---
-
-    @abstractmethod
-    async def store_resolution_request(
-        self, record: ResolutionRequestRecord
-    ) -> ResolutionRequestRecord:
-        """Store a new resolution request record.
-        Raises DuplicateTriadError if the triad already exists."""
-
-    @abstractmethod
-    async def find_by_triad(
-        self, identifier: EntityMentionIdentifier
-    ) -> ResolutionRequestRecord | None:
-        """Retrieve a record by its triad. Returns None if not found."""
-
-    @abstractmethod
-    async def find_by_source_id(
-        self, source_id: str, limit: int = 100, offset: int = 0
-    ) -> list[ResolutionRequestRecord]:
-        """Retrieve records for a given source_id, paginated."""
-
-    @abstractmethod
-    async def exists_by_triad(
-        self, identifier: EntityMentionIdentifier
-    ) -> bool:
-        """Check if a record with this triad already exists."""
-
-    # --- Lookup Request Records ---
-
-    @abstractmethod
-    async def store_lookup_request(
-        self, record: LookupRequestRecord
-    ) -> LookupRequestRecord:
-        """Append a lookup request record."""
-
-    @abstractmethod
-    async def find_lookup_requests_by_source(
-        self, source_id: str, since: datetime | None = None
-    ) -> list[LookupRequestRecord]:
-        """Retrieve lookup requests for a source, optionally filtered by time."""
-
-    # --- Lookup State ---
-
-    @abstractmethod
-    async def get_lookup_state(
-        self, source_id: str
-    ) -> LookupState | None:
-        """Retrieve the current lookup state for a source_id."""
-
-    @abstractmethod
-    async def upsert_lookup_state(
-        self, state: LookupState
-    ) -> LookupState:
-        """Create or update the lookup state for a source_id."""
+class MongoLookupStateRepository(BaseMongoRepository[LookupRequestRecord, str]):
+    async def get(source_id: str) -> LookupRequestRecord | None
+    async def upsert(state: LookupRequestRecord) -> LookupRequestRecord
 ```
+
+Note: `MongoResolutionRequestRepository` does not use `BaseMongoRepository._id_field` — the `_id` is computed from the triad as `source_id::request_id::entity_type`.
 
 ### 5.3 Custom Exceptions (adapter layer)
 
 | Exception | Raised when |
 |-----------|------------|
-| `DuplicateTriadError` | Attempting to store a `ResolutionRequestRecord` with a triad that already exists in the collection. Wraps MongoDB duplicate key error. |
+| `DuplicateTriadError` | Attempting to store a `ResolutionRequestRecord` with a triad that already exists. Wraps MongoDB duplicate key error. |
 | `RepositoryConnectionError` | MongoDB connection failure. |
 | `RepositoryOperationError` | Generic persistence operation failure (timeouts, write concern errors, etc.). |
 
@@ -232,99 +155,68 @@ class RequestRegistryRepository(ABC):
 
 ## 6. Service Specification
 
-### 6.1 Service Interface
+### 6.1 Service class
 
 ```python
 class RequestRegistryService:
-    """Application service for Request Registry operations."""
-
-    def __init__(self, repository: RequestRegistryRepository): ...
-
-    async def register_resolution_request(
+    def __init__(
         self,
-        entity_mention: EntityMention,
-    ) -> ResolutionRequestRecord:
-        """Register a new resolution request.
+        resolution_repo: MongoResolutionRequestRepository,
+        lookup_repo: MongoLookupStateRepository,
+        hasher: ContentHasher,
+        rdf_config: RDFMappingConfig,
+    ) -> None: ...
 
-        Algorithm:
-        1. Compute content_hash from entity_mention.content (SHA-256).
-        2. Check if triad already exists in repository.
-           a. If exists AND content_hash matches -> return existing record (idempotent replay).
-           b. If exists AND content_hash differs -> raise IdempotencyConflictError.
-           c. If not exists -> create ResolutionRequestRecord, store, return.
-        3. Set received_at to current UTC time.
-
-        Returns: ResolutionRequestRecord (new or existing).
-        Raises: IdempotencyConflictError, RepositoryOperationError.
-        """
-
-    async def get_resolution_request(
-        self,
-        identifier: EntityMentionIdentifier,
-    ) -> ResolutionRequestRecord | None:
-        """Retrieve a single resolution request by triad."""
-
-    async def list_resolution_requests_by_source(
-        self,
-        source_id: str,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[ResolutionRequestRecord]:
-        """List resolution requests for a source, paginated."""
-
-    async def register_lookup_request(
-        self,
-        source_id: str,
-        request_type: LookupRequestType,
-    ) -> LookupRequestRecord:
-        """Register that a lookup was requested from a source.
-        Always succeeds (append-only). Sets requested_at to current UTC."""
-
-    async def get_lookup_state(
-        self,
-        source_id: str,
-    ) -> LookupState | None:
-        """Retrieve the current lookup watermark for a source."""
-
-    async def advance_snapshot(
-        self,
-        source_id: str,
-        snapshot_time: datetime,
-    ) -> LookupState:
-        """Advance the lookup state watermark for a source.
-        Called only after a bulk refresh response is successfully produced.
-        Sets last_snapshot to snapshot_time, updated_at to current UTC.
-        Raises: SnapshotRegressionError if snapshot_time <= current last_snapshot."""
+    async def register_resolution_request(entity_mention: EntityMention) -> ResolutionRequestRecord
+    async def get_resolution_request(identifier: EntityMentionIdentifier) -> ResolutionRequestRecord | None
+    async def get_lookup_state(source_id: str) -> LookupRequestRecord | None
+    async def advance_snapshot(source_id: str, snapshot_time: datetime) -> LookupRequestRecord
 ```
 
-### 6.2 Service Exceptions
+### 6.2 Registration algorithm
+
+```
+1. Reject empty content → ValueError.
+2. Compute content_hash (SHA-256 of entity_mention.content).
+3. find_by_triad(identifier):
+   a. Exists + same hash → return existing (idempotent replay).
+   b. Exists + different hash → raise IdempotencyConflictError.
+   c. Not exists → parse RDF content → store record with parsed_representation → return.
+```
+
+RDF parsing exceptions (`ContentTooLargeError`, `UnsupportedEntityTypeError`, `MalformedRDFError`, etc.) propagate to the caller unchanged.
+
+### 6.3 Public API functions (module-level)
+
+Per project OTel convention, `@trace_function` is placed on module-level public functions, not class methods:
+
+```python
+@trace_function(span_name="request_registry.register_resolution")
+async def register_resolution_request(entity_mention, service) -> ResolutionRequestRecord
+
+@trace_function(span_name="request_registry.get_resolution")
+async def get_resolution_request(identifier, service) -> ResolutionRequestRecord | None
+
+@trace_function(span_name="request_registry.get_lookup_state")
+async def get_lookup_state(source_id, service) -> LookupRequestRecord | None
+
+@trace_function(span_name="request_registry.advance_snapshot")
+async def advance_snapshot(source_id, snapshot_time, service) -> LookupRequestRecord
+```
+
+### 6.4 Service Exceptions
 
 | Exception | Raised when |
 |-----------|------------|
 | `IdempotencyConflictError` | Same triad submitted with different content (different `content_hash`). |
 | `SnapshotRegressionError` | Attempting to set `last_snapshot` to a time earlier than or equal to the current value. |
 
-### 6.3 Idempotency Algorithm (Mermaid)
+### 6.5 Observability
 
-```mermaid
-flowchart TD
-    A[Receive EntityMention] --> B[Compute content_hash SHA-256]
-    B --> C{Triad exists in repository?}
-    C -- No --> D[Create ResolutionRequestRecord]
-    D --> E[Store in repository]
-    E --> F[Return new record]
-    C -- Yes --> G[Retrieve existing record]
-    G --> H{content_hash matches?}
-    H -- Yes --> I[Return existing record - idempotent replay]
-    H -- No --> J[Raise IdempotencyConflictError]
-```
-
-### 6.4 Observability
-
-- All service methods instrumented with OpenTelemetry spans.
-- Span attributes: `source_id`, `request_id`, `entity_type`, operation name.
-- Metrics: counter for `requests_registered`, `idempotent_replays`, `idempotency_conflicts`, `lookup_requests_registered`.
-- No logging or tracing inside models or adapters (observability lives at the service layer per architectural constraints).
+- OTel spans emitted via module-level public functions (not class methods).
+- Span attributes auto-extracted from `ResolutionRequestRecord` via extractor registry (`request_registry/adapters/span_extractors.py`).
+- Extractor imported in app factory (`create_app()`), not at module level.
+- Metrics (counters, histograms): out of scope for this EPIC.
 
 ---
 
@@ -332,14 +224,13 @@ flowchart TD
 
 | Don't | Do Instead | Why |
 |-------|-----------|-----|
-| Mutate a `ResolutionRequestRecord` after storage | Treat records as immutable; create new derived artefacts if needed | Immutability is a strict architectural invariant (Section 9.2). Mutation breaks replay, idempotency, and audit. |
-| Use a surrogate key (auto-increment ID, UUID) as the primary correlation key | Use the triad `(source_id, request_id, entity_type)` as the sole correlation and uniqueness key | The architecture mandates the triad as the only correlation key. Surrogates create shadow identity. |
-| Implement idempotency checks inside the adapter/repository | Implement idempotency logic (hash comparison, conflict detection) in the service layer; the adapter only enforces the unique index | SRP: the adapter handles persistence, the service handles business rules. |
-| Store business rules or validation logic inside Pydantic model validators | Keep validation in the service layer; models define structure and constraints only | Models must remain framework-free and testable without I/O. Complex validation is a service concern. |
-| Put OpenTelemetry spans or logging inside models or adapters | Instrument only the service layer methods | Observability belongs at the service layer per project architectural constraints. |
-| Advance the lookup watermark on request receipt | Advance `last_snapshot` only after a bulk refresh response is successfully produced | Premature advancement breaks delta exposure guarantees (Section 9.2, UC-W3). |
-| Compare entity mention content as raw strings for idempotency | Use SHA-256 content hash for comparison | Raw string comparison is fragile (encoding, whitespace). Hashing is deterministic and efficient. |
-| Import from `services` or `entrypoints` into `models` or `adapters` | Respect dependency direction: `entrypoints` -> `services` -> `models`, `adapters` -> `models` | Layered architecture invariant. Reversing dependencies creates circular imports and coupling. |
+| Mutate a `ResolutionRequestRecord` after storage | Treat records as immutable; create new derived artefacts if needed | Immutability is a strict architectural invariant (Section 9.2). |
+| Use a surrogate key as the primary correlation key | Use the triad `(source_id, request_id, entity_type)` as the sole key | Architecture mandates the triad. Surrogates create shadow identity. |
+| Implement idempotency checks inside the adapter/repository | Implement idempotency logic in the service layer; adapter only enforces the unique index | SRP. |
+| Put OpenTelemetry on class methods | Place `@trace_function` on module-level public functions (the API boundary) | Project OTel convention — class methods are implementation details. |
+| Advance the snapshot marker on request receipt | Advance `last_snapshot` only after a bulk refresh response is successfully produced | Premature advancement breaks delta exposure guarantees (Section 9.2, UC-W3). |
+| Compare entity mention content as raw strings for idempotency | Use SHA-256 content hash for comparison | Hashing is deterministic and encoding-safe. |
+| Import from `services` or `entrypoints` into `models` or `adapters` | Respect dependency direction: `entrypoints` -> `services` -> `models`, `adapters` -> `models` | Layered architecture invariant. |
 
 ---
 
@@ -347,87 +238,79 @@ flowchart TD
 
 ### Unit Tests
 
-| Test ID | Component | Input | Expected Output | Edge Cases |
-|---------|-----------|-------|-----------------|------------|
-| TC-001 | `ResolutionRequestRecord` model | Valid `EntityMention` with all triad fields | Frozen Pydantic model with correct `content_hash` | Empty `content` string, very long content (>1MB), unicode content |
-| TC-002 | `JSONRepresentation` model | `{"key": "value"}` dict | Frozen model with `data` field matching input | Empty dict `{}`, deeply nested dict, `None` values in dict |
-| TC-003 | `LookupState` model | Valid `source_id` and datetime values | Model with correct fields | `last_snapshot` at epoch, future timestamps |
-| TC-004 | `LookupRequestType` enum | `"SINGLE"`, `"BULK"` | Correct enum members | Invalid string value raises error |
-| TC-005 | Service: `register_resolution_request` (new) | New `EntityMention` with unique triad | `ResolutionRequestRecord` stored and returned | First record for a source_id |
-| TC-006 | Service: `register_resolution_request` (replay) | Same `EntityMention` submitted twice (identical content) | Returns existing record without creating duplicate | Rapid concurrent replays |
-| TC-007 | Service: `register_resolution_request` (conflict) | Same triad, different content | Raises `IdempotencyConflictError` | Content differs only in whitespace (still different hash) |
-| TC-008 | Service: `advance_snapshot` (happy) | `source_id` with existing state, `snapshot_time` > current | Updated `LookupState` returned | First watermark for a new source_id |
-| TC-009 | Service: `advance_snapshot` (regression) | `snapshot_time` <= current `last_snapshot` | Raises `SnapshotRegressionError` | Equal timestamps (not just less-than) |
-| TC-010 | Service: `register_lookup_request` | Valid `source_id` and `LookupRequestType.BULK` | `LookupRequestRecord` stored | Multiple lookups from same source in rapid succession |
-| TC-011 | Repository: `store_resolution_request` (duplicate) | Record with existing triad | Raises `DuplicateTriadError` | MongoDB duplicate key error is correctly wrapped |
-| TC-012 | Repository: `find_by_triad` (not found) | Non-existent triad | Returns `None` | All three triad fields present but no match |
-| TC-013 | Repository: `find_by_source_id` (pagination) | `source_id` with 150 records, `limit=100`, `offset=0` then `offset=100` | First page: 100 records, second page: 50 records | `offset` beyond total count returns empty list |
-| TC-014 | Content hash computation | Known content string | Deterministic SHA-256 hex digest | Empty string, binary-like content, identical content in different `EntityMention` instances |
+| Test ID | Component | Input | Expected Output |
+|---------|-----------|-------|-----------------|
+| TC-001 | `ResolutionRequestRecord` model | Valid `EntityMention` + `content_hash` + `received_at` | Frozen model; triad fields non-empty enforced |
+| TC-002 | `LookupRequestRecord` model | Valid `source_id`, `last_snapshot`, `updated_at` | Frozen model; `updated_at >= last_snapshot` enforced |
+| TC-003 | Service: `register_resolution_request` (new) | New `EntityMention` with unique triad | Record stored with SHA-256 hash, `parsed_representation` set, UTC `received_at` |
+| TC-004 | Service: `register_resolution_request` (replay) | Same `EntityMention` twice | Returns existing record; `store` not called |
+| TC-005 | Service: `register_resolution_request` (conflict) | Same triad, different content | Raises `IdempotencyConflictError`; `store` not called |
+| TC-006 | Service: `register_resolution_request` (empty) | `content=""` | Raises `ValueError` before any repo call |
+| TC-007 | Service: `advance_snapshot` (new source) | No existing state, `snapshot_time` T | New `LookupRequestRecord` with `last_snapshot=T` |
+| TC-008 | Service: `advance_snapshot` (existing source) | Existing `last_snapshot=T1`, advance to `T2 > T1` | `last_snapshot` updated to `T2` |
+| TC-009 | Service: `advance_snapshot` (regression) | `snapshot_time <= current last_snapshot` | Raises `SnapshotRegressionError`; `upsert` not called |
+| TC-010 | Repository: `store` (duplicate triad) | Record with existing triad | Raises `DuplicateTriadError` |
+| TC-011 | Repository: `find_by_triad` (not found) | Non-existent triad | Returns `None` |
+| TC-012 | Content hash computation | Known content string | Deterministic SHA-256 hex digest |
 
 ### Integration Tests
 
-| Test ID | Flow | Setup | Verification | Teardown |
-|---------|------|-------|--------------|----------|
-| IT-001 | Store and retrieve resolution request | Start MongoDB, create indexes | Store record, retrieve by triad, verify all fields match | Drop test collection |
-| IT-002 | Idempotency enforcement end-to-end | Store a record via service | Submit same triad+content (replay OK), submit same triad+different content (conflict error) | Drop test collection |
-| IT-003 | Lookup state lifecycle | Start MongoDB | Create state, advance watermark, verify `last_snapshot` updated, attempt regression (error) | Drop test collection |
-| IT-004 | Unique index enforcement | Create compound unique index on `resolution_requests` | Insert duplicate triad at MongoDB level, verify `DuplicateTriadError` raised | Drop test collection |
-| IT-005 | Concurrent request registration | Start MongoDB | Submit 10 identical requests concurrently, verify exactly 1 stored, 9 return existing | Drop test collection |
+| Test ID | Flow | Verification |
+|---------|------|--------------|
+| IT-001 | Store and retrieve resolution request | Store record, retrieve by triad, verify all fields match |
+| IT-002 | Idempotency enforcement end-to-end | Same triad+content → replay OK; same triad+different content → conflict error |
+| IT-003 | Snapshot state lifecycle | Advance marker, verify `last_snapshot` updated; attempt regression → error |
+| IT-004 | Unique index enforcement | Insert duplicate triad at MongoDB level → `DuplicateTriadError` |
+| IT-005 | Concurrent request registration | 10 identical requests concurrently → exactly 1 stored, 9 return existing |
 
 ---
 
 ## 9. Error Handling Matrix
 
-| Error Type | Detection | Response | Fallback | Logging Level |
-|------------|-----------|----------|----------|---------------|
-| Idempotency conflict | SHA-256 hash mismatch on existing triad | Raise `IdempotencyConflictError` with triad details | None — caller must handle | WARN (includes triad, excludes content) |
-| Duplicate triad (MongoDB) | `DuplicateKeyError` from pymongo | Adapter wraps as `DuplicateTriadError` | Service catches and runs idempotency check (may be concurrent insert race) | DEBUG |
-| MongoDB connection failure | `ConnectionFailure` from pymongo | Adapter wraps as `RepositoryConnectionError` | None — propagate to caller | ERROR |
-| MongoDB operation timeout | `ServerSelectionTimeoutError` or `ExecutionTimeout` | Adapter wraps as `RepositoryOperationError` | None — propagate to caller | ERROR |
-| Watermark regression | `snapshot_time <= current last_snapshot` | Raise `SnapshotRegressionError` | None — caller must handle | WARN |
-| Invalid EntityMention (missing triad fields) | Pydantic validation on `EntityMentionIdentifier` | Pydantic `ValidationError` raised at model construction | None — caller must validate before calling service | Not logged at this layer |
-| Empty content string | `entity_mention.content` is empty string | Accept and hash normally (empty string has a valid SHA-256) | None | INFO (flag unusual input) |
+| Error Type | Detection | Response | Logging Level |
+|------------|-----------|----------|---------------|
+| Idempotency conflict | SHA-256 hash mismatch on existing triad | Raise `IdempotencyConflictError` | WARN (includes triad, excludes content) |
+| Duplicate triad (MongoDB) | `DuplicateKeyError` from pymongo | Adapter wraps as `DuplicateTriadError` | DEBUG |
+| MongoDB connection failure | `ConnectionFailure` from pymongo | Adapter wraps as `RepositoryConnectionError` | ERROR |
+| MongoDB operation timeout | `ServerSelectionTimeoutError` | Adapter wraps as `RepositoryOperationError` | ERROR |
+| Snapshot regression | `snapshot_time <= current last_snapshot` | Raise `SnapshotRegressionError` | WARN |
+| Empty content | `entity_mention.content` is empty string | Raise `ValueError` before any repo call | Not logged |
+| RDF parse failure | Parser raises domain exception | Propagate unchanged to caller | Logged by parser |
 
 ---
 
 ## 10. Task Breakdown
 
-### Task 1: Define domain models
-- **Description:** Create Pydantic models: `JSONRepresentation`, `ResolutionRequestRecord`, `LookupRequestRecord`, `LookupRequestType`, `LookupState`. Verify er-spec imports work.
-- **Layers:** `models/`
-- **Dependencies:** er-spec library installed
-- **Acceptance criteria:** All models instantiate correctly with valid data; frozen models reject mutation; content_hash helper function produces deterministic SHA-256.
+### Task 1.1: Define domain models ✅
+- `ResolutionRequestRecord`, `LookupRequestRecord` created under `domain/records.py`.
 
-### Task 2: Define repository interface and exceptions
-- **Description:** Create abstract `RequestRegistryRepository` class and custom exceptions (`DuplicateTriadError`, `RepositoryConnectionError`, `RepositoryOperationError`).
-- **Layers:** `adapters/` (interface only)
-- **Dependencies:** Task 1 (models)
-- **Acceptance criteria:** ABC is importable; exception hierarchy is clean; no concrete implementation yet.
+### Task 1.2: Repository, Service, and Exceptions ✅
+- `MongoResolutionRequestRepository`, `MongoLookupStateRepository` in `adapters/records_repository.py`.
+- `RequestRegistryService` in `services/request_registry_service.py`.
+- Five exceptions in `services/exceptions.py`.
 
-### Task 3: Implement MongoDB repository
-- **Description:** Implement `MongoRequestRegistryRepository` with motor (async pymongo). Create indexes on startup. Implement all repository methods.
-- **Layers:** `adapters/`
-- **Dependencies:** Task 2 (interface), MongoDB available
-- **Acceptance criteria:** All repository methods work against a real MongoDB instance; unique index enforced; pagination works; exceptions correctly wrapped.
+### Task 1.3: Wire BDD feature files ✅
+- BDD step definitions wired with real service calls.
 
-### Task 4: Implement service layer
-- **Description:** Implement `RequestRegistryService` with idempotency algorithm, lookup state management, content hash computation. Add OpenTelemetry instrumentation.
-- **Layers:** `services/`
-- **Dependencies:** Task 2 (repository interface), Task 1 (models)
-- **Acceptance criteria:** Idempotency: new/replay/conflict all handled correctly. Watermark: advance and regression both work. OTel spans emitted. All unit tests pass with mocked repository.
+### Task 14: Public API functions and RDF integration ✅
+- Module-level public functions with `@trace_function`.
+- RDF parsing integrated into `register_resolution_request`.
+- `list_resolution_requests_by_source` and `register_lookup_request` removed (no feature file coverage).
+- "watermark" eliminated from all source code, specs, and feature files.
+- Span extractor wired in `ers_rest_api` app factory.
+- Unit and BDD tests updated: `rdf_config` + `mock_parse_entity_mention` fixtures added; all 327 unit + 200 feature tests green.
 
-### Task 5: Write integration tests
-- **Description:** Integration tests against real MongoDB (via testcontainers or docker-compose). Cover concurrent writes, index enforcement, full lifecycle flows.
-- **Layers:** `tests/`
-- **Dependencies:** Tasks 1-4
-- **Acceptance criteria:** All IT-001 through IT-005 pass. Coverage >= 80% on new code.
+### Task 5: Integration tests ⬜
+- Integration tests against real MongoDB (testcontainers or docker-compose).
+- Coverage: IT-001 through IT-005.
 
 ## Roadmap
 
-- [x] Task 1.1: Define domain models (`domain/`) — [outcomes](task11-domain-models.md)
+- [x] Task 1.1: Define domain models — [outcomes](task11-domain-models.md)
 - [x] Task 1.2: Repository, Service, and Exceptions — [outcomes](task12-repository-service-exceptions.md)
-- [x] Task 1.3: Wire BDD feature files with real service calls — completed 2026-03-20
-- [ ] Task 5: Write integration tests (`tests/`)
+- [x] Task 1.3: Wire BDD feature files — completed 2026-03-20
+- [x] Task 14: Public API functions and RDF parsing integration — [outcomes](task14.md)
+- [ ] Task 5: Write integration tests
 
 ---
 
@@ -437,25 +320,20 @@ flowchart TD
 
 | Scenario | Description |
 |----------|------------|
-| Register a new resolution request | Given a valid EntityMention with a unique triad, when the service registers it, then a ResolutionRequestRecord is stored with correct content_hash and received_at. |
-| Idempotent replay of identical request | Given an already-registered triad with identical content, when the same request is submitted again, then the existing record is returned without creating a duplicate. |
-| Reject idempotency conflict | Given an already-registered triad, when a request with the same triad but different content is submitted, then an IdempotencyConflictError is raised and no record is modified. |
-| Register request with empty content | Given a valid EntityMention where content is an empty string, when registered, then a record is stored with the SHA-256 hash of the empty string. |
+| Register a new resolution request | Given a valid EntityMention with a unique triad, when registered, a ResolutionRequestRecord is stored with correct content_hash, parsed_representation, and received_at. |
+| Idempotent replay of identical request | Given an already-registered triad with identical content, when resubmitted, the existing record is returned without creating a duplicate. |
+| Reject idempotency conflict | Given an already-registered triad, when a request with the same triad but different content is submitted, an IdempotencyConflictError is raised. |
+| Reject empty content | Given an EntityMention with empty content, when registered, a ValueError is raised and no record is created. |
 
-### Feature: Lookup State Management
-
-| Scenario | Description |
-|----------|------------|
-| Advance watermark for new source | Given no existing LookupState for a source_id, when advance_snapshot is called, then a new LookupState is created with the given snapshot_time. |
-| Advance watermark for existing source | Given an existing LookupState with last_snapshot T1, when advance_snapshot is called with T2 > T1, then last_snapshot is updated to T2. |
-| Reject watermark regression | Given an existing LookupState with last_snapshot T1, when advance_snapshot is called with T2 <= T1, then a SnapshotRegressionError is raised and last_snapshot remains T1. |
-
-### Feature: Lookup Request Registration
+### Feature: Snapshot State Management
 
 | Scenario | Description |
 |----------|------------|
-| Register a bulk lookup request | Given a valid source_id, when register_lookup_request is called with type BULK, then a LookupRequestRecord is appended with correct timestamp. |
-| Register multiple lookups from same source | Given a source_id that has previous lookup records, when a new lookup is registered, then it is appended without affecting previous records. |
+| Advance snapshot for new source | Given no existing state for a source_id, when advance_snapshot is called, a new LookupRequestRecord is created with the given snapshot_time. |
+| Advance snapshot for existing source | Given existing state with last_snapshot T1, when advance_snapshot is called with T2 > T1, last_snapshot is updated to T2. |
+| Reject snapshot regression | Given existing state with last_snapshot T1, when advance_snapshot is called with T2 <= T1, a SnapshotRegressionError is raised. |
+| Retrieve snapshot state for known source | Given a source with existing state, when get_lookup_state is called, the LookupRequestRecord is returned. |
+| Retrieve snapshot state for unknown source | Given no state for a source, when get_lookup_state is called, None is returned. |
 
 ---
 
@@ -465,47 +343,46 @@ flowchart TD
 
 | Risk | Impact | Mitigation |
 |------|--------|-----------|
-| er-spec model changes break ERS models | HIGH — all EPICs depend on er-spec | Pin er-spec version; integration test on upgrade; keep ERS models as thin wrappers |
-| MongoDB connection pool exhaustion under load | MEDIUM — service becomes unavailable | Configure pool size; circuit breaker pattern in adapter; health check endpoint |
-| Race condition on concurrent identical requests | LOW — two threads insert same triad simultaneously | MongoDB unique index provides last-line defence; service catches DuplicateTriadError and falls through to idempotency check |
-| Content hash collision (SHA-256) | NEGLIGIBLE — probability is astronomically low | Accept the risk; SHA-256 collision is not a practical concern |
+| er-spec model changes break ERS models | HIGH — all EPICs depend on er-spec | Pin er-spec version; integration test on upgrade |
+| MongoDB connection pool exhaustion under load | MEDIUM | Configure pool size; circuit breaker in adapter |
+| Race condition on concurrent identical requests | LOW | MongoDB unique index as last-line defence; service catches `DuplicateTriadError` and retries idempotency check |
+| RDF parser rejects content that passes idempotency check | MEDIUM | Parser exceptions propagate cleanly; no partial record stored |
 
 ### Assumptions
 
 1. The `er-spec` library is available as a Python package installable via pip/poetry.
-2. MongoDB is available as the persistence backend (version >= 6.0 for consistent indexes).
+2. MongoDB is available as the persistence backend (version >= 6.0).
 3. The `motor` async driver is used for MongoDB access.
 4. All timestamps are UTC and stored as ISO 8601 in MongoDB.
-5. The `content_hash` is computed from `entity_mention.content` only (not `content_type` or identifier fields).
-6. The service layer is the only layer that handles idempotency logic; the adapter enforces the unique index as a safety net.
+5. The `content_hash` is computed from `entity_mention.content` only.
+6. Idempotency logic lives exclusively in the service layer; the adapter enforces the unique index as a safety net.
+7. RDF parsing config (`RDFMappingConfig`) is loaded once and injected into the service constructor.
 
 ---
 
 ## 13. Architectural Constraints
 
-These constraints are inherited from the ERS Architecture and must be respected by all tasks.
-
 1. **Immutability of intake records** — Once a `ResolutionRequestRecord` is stored, it is never modified, merged, versioned, or deleted. (Section 9.2)
-2. **Triad as sole correlation key** — No surrogate identifiers replace `(source_id, request_id, entity_type)` for correlation, governance, replay, or audit. (Section 9.2)
+2. **Triad as sole correlation key** — No surrogate identifiers replace `(source_id, request_id, entity_type)`. (Section 9.2)
 3. **Idempotency via triad** — Reuse of an existing triad with different payload is rejected. Identical replay returns existing record. (Spine A, ADR-C1N)
 4. **At-least-once tolerance** — The system must handle duplicate submissions without creating inconsistent state. (Spine A, ERS-ERE Contract)
-5. **Delta rule** — `lastNotificationDate < lastUpdateDate` drives bulk exposure. Watermark must only advance on successful response production. (Section 9.2, UC-W3)
+5. **Delta rule** — `lastNotificationDate < lastUpdateDate` drives bulk exposure. Snapshot marker must only advance on successful response production. (Section 9.2, UC-W3)
 6. **Layered architecture** — `entrypoints` -> `services` -> `models`, `adapters` -> `models`. No reverse imports. (Cosmic Python / project conventions)
-7. **Observability at service level only** — OpenTelemetry instrumentation in services, not in models or adapters. (Project conventions)
-8. **er-spec as single source of truth** — Domain models from er-spec are imported, not redefined. ERS-local models wrap or extend them. (Architecture Section 9)
+7. **Observability at public function boundary** — `@trace_function` on module-level public functions only, not class methods. (Project OTel convention)
+8. **er-spec as single source of truth** — Domain models from er-spec are imported, not redefined. ERS-local models extend them. (Architecture Section 9)
 
 ---
 
 ## 14. Dependencies
 
-| Dependency | Type | Version constraint | Purpose |
-|-----------|------|-------------------|---------|
-| `er-spec` | Python package (external) | Compatible with current ERS | Shared domain models (`EntityMention`, `EntityMentionIdentifier`, etc.) |
-| `pydantic` | Python package | >= 2.0 | Model definitions |
-| `motor` | Python package | >= 3.0 | Async MongoDB driver |
-| `pymongo` | Python package (transitive via motor) | >= 4.0 | MongoDB operations and exceptions |
-| `opentelemetry-api` | Python package | >= 1.0 | Instrumentation |
-| MongoDB | Infrastructure | >= 6.0 | Persistence backend |
+| Dependency | Type | Purpose |
+|-----------|------|---------|
+| `er-spec` | Python package (external) | Shared domain models |
+| `pydantic` | Python package | Model definitions |
+| `motor` | Python package | Async MongoDB driver |
+| `pymongo` | Python package (transitive) | MongoDB operations and exceptions |
+| `opentelemetry-api` + `opentelemetry-sdk` | Python packages | Tracing instrumentation |
+| MongoDB | Infrastructure | Persistence backend (>= 6.0) |
 
 ---
 
@@ -513,15 +390,13 @@ These constraints are inherited from the ERS Architecture and must be respected 
 
 | Topic | Location | Section |
 |-------|----------|---------|
-| System of Request Records | `docs/modules/ROOT/pages/ERSArchitecture/conceptual-model.adoc` | Section 9.1 (information domain #1) and Section 9.2 |
-| Spine A: Resolution intake | `docs/modules/ROOT/pages/ERSArchitecture/spine-a.adoc` | Section 8.2 — "Authoritative state touched: Request Registry" |
-| Delta exposure state | `docs/modules/ROOT/pages/ERSArchitecture/conceptual-model.adoc` | Section 9.1 (information domain #4) |
-| LookupState conceptual definition | `docs/modules/ROOT/pages/ERSArchitecture/conceptual-model.adoc` | Section 9.2, paragraph on LookupState |
+| System of Request Records | `docs/modules/ROOT/pages/ERSArchitecture/conceptual-model.adoc` | Section 9.1-9.2 |
+| Spine A: Resolution intake | `docs/modules/ROOT/pages/ERSArchitecture/spine-a.adoc` | Section 8.2 |
+| Delta exposure state | `docs/modules/ROOT/pages/ERSArchitecture/conceptual-model.adoc` | Section 9.1 |
 | UC-W1 Resolve Entity Mention | `docs/modules/ROOT/pages/ERSArchitecture/core-capabilities.adoc` | Section 7.1 |
 | UC-W3 refreshBulk | `docs/modules/ROOT/pages/ERSArchitecture/core-capabilities.adoc` | Section 7.3 |
-| ERS-ERE Contract: EntityMention | `docs/modules/ROOT/pages/ERS-ERE-Contarct/interface.adoc` | "Entity Mention" and "Entity Mention Identifiers" sections |
-| Dependency inventory | `docs/modules/ROOT/pages/ERSArchitecture/dependecy-inventory.adoc` | Section 10.1 — Request Registry references |
-| Idempotency and messaging ADRs | `docs/modules/ROOT/pages/AnnexeC-ADRs/adrc1.adoc` | ADR-C1N |
+| ERS-ERE Contract: EntityMention | `docs/modules/ROOT/pages/ERS-ERE-Contarct/interface.adoc` | Entity Mention sections |
+| Idempotency ADRs | `docs/modules/ROOT/pages/AnnexeC-ADRs/adrc1.adoc` | ADR-C1N |
 
 ---
 <!-- implementation-log -->
@@ -529,33 +404,31 @@ These constraints are inherited from the ERS Architecture and must be respected 
 
 # Part 2 — Implementation Log
 
-### 2026-03-20 — Task 1.2: Repository, Service, and Exceptions
+### 2026-03-21 — Task 14: Public API functions and RDF parsing integration
 
-- **Outcome:** Five exceptions (`IdempotencyConflictError`, `SnapshotRegressionError`, `DuplicateTriadError`, `RepositoryConnectionError`, `RepositoryOperationError`) created under `services/exceptions.py`. Two repository ABCs (`ResolutionRequestRepository`, `LookupStateRepository`) and two Mongo implementations (`MongoResolutionRequestRepository`, `MongoLookupStateRepository`) created under `adapters/records_repository.py`. `RequestRegistryService` created under `services/request_registry_service.py`. `MongoCollections` extended with `RESOLUTION_REQUESTS` and `LOOKUP_STATES`. `ensure_indexes()` extended with two new indexes. 33 new unit tests (16 adapter, 11 service, 6 pre-existing domain); full suite 298/298 pass.
-- **Decisions:** `MongoResolutionRequestRepository` does not extend `BaseMongoRepository` — the `_id` is computed from the triad, not mapped from a model field. `MongoLookupStateRepository` does extend `BaseMongoRepository` with `_id_field = "source_id"`. `_from_document` operates on a local copy to avoid mutating the original dict. `RequestRegistryService` removed from `services/__init__.py` to break a circular import (`adapters → services.exceptions → services.__init__ → request_registry_service → adapters`); callers import it directly from the module.
-- **Deviations:** `RequestRegistryService` not re-exported from `services/__init__.py` (spec said it should be). Breaking the circular import required this. The exception types and adapters ABCs are still correctly exported from their respective `__init__.py` files. The `updated_at` guard in `advance_snapshot` uses `max(now, snapshot_time)` to satisfy the `LookupState` invariant that `updated_at >= last_snapshot` when `snapshot_time` is in the future.
+- **Outcome:** Module-level public async functions added to `request_registry_service.py` for all four service operations, each decorated with `@trace_function`. RDF parsing integrated into `register_resolution_request` — result stored in `parsed_representation` (JSON string). `list_resolution_requests_by_source` and `register_lookup_request` removed (no feature file coverage; latter is covered by `advance_snapshot`). `rdf_config: RDFMappingConfig` added as required constructor argument. `ers.request_registry.adapters.span_extractors` wired in `ers_rest_api` app factory. "watermark" eliminated from all source files, tests, specs, and feature files. Unit and BDD tests updated with `rdf_config` fixture and `mock_parse_entity_mention` patch (new-triad path only); 327 unit + 200 feature tests green.
+- **Decisions:** `parsed_representation` not added as a new field — it already exists on erspec's `EntityMention` as `Optional[str]`. RDF parsing moved in-scope from EPIC-02: parsing and registration are atomic — storing without parsing would leave records in an unusable state. Public functions take `service` as the last parameter (data first, service last — consistent with `parse_entity_mention(entity_mention, config)`). `mock_parse_entity_mention` patches at the service module import, not the source module, to correctly intercept the call.
+- **Deviations:** RDF parsing was explicitly out of scope in original EPIC Section 2. Scope change deliberate and approved.
 
 ### 2026-03-20 — Task 1.3: BDD feature file wiring
 
-- **Outcome:** All TODO stubs in `tests/feature/request_registry/test_resolution_request_registration.py` and `tests/feature/request_registry/test_bulk_lookup_and_snapshot_management.py` replaced with real service calls and assertions. `RequestRegistryService` instantiated with `create_autospec` repositories + real `SHA256ContentHasher`. All BDD scenarios pass.
-- **Decisions:** `LookupRequestRecord` and `LookupRequestType` re-added to domain records (originally dropped in task 1.1 design) after determining the BDD bulk scenarios require registering SINGLE/BULK lookup audit events. The append-only `LookupRequestRepository` ABC and `register_lookup_request` service method added accordingly.
+- **Outcome:** All TODO stubs in BDD step files replaced with real service calls. All scenarios pass.
+- **Decisions:** Steps import `RequestRegistryService` directly from module (not from `services/__init__.py`) to avoid circular import.
 - **Deviations:** None relative to the Gherkin scenarios.
 
-### 2026-03-19 — Task 1.1: Domain models and SHA256ContentHasher
+### 2026-03-20 — Task 1.2: Repository, Service, and Exceptions
 
-- **Outcome:** All 5 domain types (`LookupRequestType`, `JSONRepresentation`, `ResolutionRequestRecord`, `LookupRequestRecord`, `LookupState`) created as frozen Pydantic models under `src/ers/request_registry/domain/records.py`. `SHA256ContentHasher` added to `src/ers/commons/adapters/hasher.py`. 35 new unit tests; full suite 276/276 pass.
-- **Decisions:** Used `StrEnum` for `LookupRequestType` (consistent with `ResolutionOutcome`). All erspec imports use `EntityMention.identifiedBy` (camelCase per erspec contract). No modifications to existing code — purely additive.
-- **Deviations:** None.
+- **Outcome:** Five exceptions created. Two Mongo repository classes and `RequestRegistryService` implemented. `ensure_indexes()` extended. 33 new unit tests; full suite 298/298 pass.
+- **Decisions:** `MongoResolutionRequestRepository` does not use `_id_field` — `_id` is computed from the triad. `MongoLookupStateRepository` uses `_id_field = "source_id"`. `RequestRegistryService` not re-exported from `services/__init__.py` (circular import). `updated_at` uses `max(now, snapshot_time)` to satisfy `updated_at >= last_snapshot` invariant.
+- **Deviations:** `RequestRegistryService` not in `services/__init__.py`.
+
+### 2026-03-19 — Task 1.1: Domain models
+
+- **Outcome:** `ResolutionRequestRecord`, `LookupRequestRecord` created as frozen Pydantic models. `SHA256ContentHasher` added. 35 new unit tests; full suite 276/276 pass.
+- **Decisions:** `ResolutionRequestRecord` extends `EntityMention` directly (fields inlined). `LookupRequestRecord` extends erspec `LookupState`. No `JSONRepresentation` wrapper — `parsed_representation: Optional[str]` on erspec `EntityMention` serves this purpose.
+- **Deviations:** `LookupRequestType` enum not implemented. `JSONRepresentation` not implemented. `LookupState` not defined locally — erspec model used directly.
 
 ### 2026-03-16 — Gherkin features and step scaffolding
-- **Outcome:** 2 feature files created under `tests/features/request_registry/` (resolution_request_registration.feature, bulk_lookup_and_snapshot_management.feature). Step definitions scaffolded under `tests/steps/request_registry/` with TODO placeholders.
-- **Decisions:** Steps organised into `tests/steps/request_registry/` subfolder (isomorphic to features).
-- **Deviations:** None.
 
-<!-- Example entry:
-### yyyy-mm-dd — Task 1: <task title>
-- **Outcome:** What was delivered.
-- **Decisions:** Key implementation choices and their rationale.
-- **Deviations:** Any departures from the spec and why.
-- **Commits:** Link(s) to resulting commit(s).
--->
+- **Outcome:** 2 feature files created; step definitions scaffolded with TODO placeholders.
+- **Deviations:** None.

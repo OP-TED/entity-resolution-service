@@ -24,6 +24,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     """Application factory for the ERS REST API."""
+    # Register OTel span attribute extractors. Must be imported here (not at module
+    # level) so they are registered after the module graph is fully loaded.
+    import ers.commons.adapters.span_extractors  # noqa: F401
+    import ers.request_registry.adapters.span_extractors  # noqa: F401
+
     app = FastAPI(
         title=config.ERS_API_NAME,
         debug=config.DEBUG,

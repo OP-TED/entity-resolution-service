@@ -25,7 +25,7 @@
 
 | Epic | Component | Score | Status |
 |------|-----------|-------|--------|
-| [ERS-EPIC-01](epics/ers-epic-01-request-registry/EPIC.md) | Request Registry | 9.7 | Implementation in progress (Tasks 1.1–1.3 done) |
+| [ERS-EPIC-01](epics/ers-epic-01-request-registry/EPIC.md) | Request Registry | 9.7 | Implementation complete (Tasks 1.1–1.3, 13, 14 done). Integration tests pending. |
 | [ERS-EPIC-02](epics/ers-epic-02-rdf-mention-parser/EPIC.md) | RDF Mention Parser | 9.8 | Gherkin Complete |
 | [ERS-EPIC-03](epics/ers-epic-03-ere-contract-client/EPIC.md) | ERE Contract Client | 9.8 | Gherkin Complete |
 | [ERS-EPIC-04](epics/ers-epic-04-resolution-decision-store/EPIC.md) | Decision Store | 9.8 | Gherkin Complete |
@@ -38,13 +38,13 @@
 
 ## Current Phase
 
-- Branch: `feature/ERS1-143-task11` (stacked on `feature/ERS1-137-5`) — EPIC-01 Request Registry implementation
+- Branch: `feature/ERS1-144-task13` — EPIC-01 Tasks 13 + 14 (OTel + Public API)
 - **[2026-03-19] Task 1.1 complete** — domain models + `SHA256ContentHasher`
 - **[2026-03-20] Tasks 1.2–1.3 complete** — Mongo repositories + `RequestRegistryService` + BDD features
-- **[2026-03-20] Task 1.1 revised** — models simplified to compose with erspec (`EntityMention`, `LookupState`); dropped `JSONRepresentation`, `LookupRequestType`, repository ABCs, audit log concept. Adapter reuses `BaseMongoRepository`. 51 request_registry tests pass.
-- **[2026-03-20] Agent MCP tools** — all agents updated with gitnexus, ide, context7 MCP tools in frontmatter
-- **[2026-03-21] PR review + refactoring** — addressed PR #19/20/22 comments; removed `MongoCollections`; `_collection_name` pattern in `BaseMongoRepository`; erspec `EntityType` removal fixes; `ResolutionRequestRecord` triad validator; 302 unit + 200 feature tests green
-- **[2026-03-21] PR created** — `feature/ERS1-143-task11` → `develop`, assigned to gkostkowski
+- **[2026-03-20] Task 1.1 revised** — models simplified to compose with erspec; dropped `JSONRepresentation`, `LookupRequestType`, repository ABCs. 51 request_registry tests pass.
+- **[2026-03-21] PR review + refactoring** — addressed PR #19/20/22 comments; 302 unit + 200 feature tests green. PR created → `develop`.
+- **[2026-03-21] Task 13 complete** — OTel tracing foundation: real SDK, `configure_tracing()`, `trace_function`, extractor registry, span extractors for `EntityMention`, `EntityMentionIdentifier`, `ResolutionRequestRecord`.
+- **[2026-03-21] Task 14 complete** — Public API module-level functions, RDF parsing integration, terminology cleanup, unit + BDD tests updated. 327 unit + 200 feature tests green.
 
 ## Project Automation
 

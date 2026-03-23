@@ -117,7 +117,7 @@ class TestResolutionRequestRecord:
 
 
 # ---------------------------------------------------------------------------
-# LookupRequestRecord (per-source watermark)
+# LookupRequestRecord (per-source snapshot marker)
 # ---------------------------------------------------------------------------
 
 

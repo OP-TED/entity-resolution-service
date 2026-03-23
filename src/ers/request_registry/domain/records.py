@@ -15,7 +15,7 @@ from ers.commons.domain.data_transfer_objects import FrozenDTO
 
 
 class LookupRequestRecord(FrozenDTO, LookupState):
-    """Per-source delta exposure watermark for bulk synchronisation.
+    """Per-source delta exposure marker for bulk synchronisation.
 
     Tracks the last point in time for which bulk results were successfully
     produced for a source. Maps to lastNotificationDate in the architecture.

@@ -72,7 +72,7 @@ class MongoResolutionRequestRepository(BaseMongoRepository[ResolutionRequestReco
 
 
 class MongoLookupStateRepository(BaseMongoRepository[LookupRequestRecord, str]):
-    """MongoDB-backed repository for per-source watermark state.
+    """MongoDB-backed repository for per-source snapshot state.
 
     Uses source_id as the MongoDB _id via BaseMongoRepository.
     """
@@ -82,9 +82,9 @@ class MongoLookupStateRepository(BaseMongoRepository[LookupRequestRecord, str]):
     _collection_name = "lookup_states"
 
     async def get(self, source_id: str) -> LookupRequestRecord | None:
-        """Return the watermark for a source. Returns None if not found."""
+        """Return the snapshot state for a source. Returns None if not found."""
         return await self.find_by_id(source_id)
 
     async def upsert(self, state: LookupRequestRecord) -> LookupRequestRecord:
-        """Insert or replace the watermark for the given source_id."""
+        """Insert or replace the snapshot state for the given source_id."""
         return await self.save(state)

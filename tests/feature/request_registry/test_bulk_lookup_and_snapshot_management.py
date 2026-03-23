@@ -3,7 +3,7 @@ Step definitions for: bulk_lookup_and_snapshot_management.feature
 
 Feature: Snapshot State Management
   Covers four behaviours:
-    1. Advancing the snapshot watermark for a known source updates LookupRequestRecord.last_snapshot.
+    1. Advancing the snapshot marker for a known source updates LookupRequestRecord.last_snapshot.
     2. Advancing the snapshot to the current or earlier time raises SnapshotRegressionError.
     3. Retrieving lookup state for known sources returns the correct result.
     4. Retrieving lookup state for unknown sources returns nothing.
@@ -21,6 +21,7 @@ import pytest
 from pytest_bdd import given, parsers, scenario, then, when
 
 from ers.commons.adapters.hasher import SHA256ContentHasher
+from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
 from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
@@ -76,13 +77,26 @@ def ctx():
     return {}
 
 
+@pytest.fixture
+def rdf_config() -> RDFMappingConfig:
+    return RDFMappingConfig(
+        namespaces={"ex": "http://example.org/"},
+        entity_types={
+            "organisation": EntityTypeConfig(
+                rdf_type="ex:Organization",
+                fields={"name": "ex:name"},
+            )
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Background steps
 # ---------------------------------------------------------------------------
 
 
 @given("the Request Registry service is available")
-def request_registry_service_available(ctx):
+def request_registry_service_available(ctx, rdf_config):
     """Instantiate the RequestRegistryService with mocked repositories and a real hasher."""
     resolution_repo = create_autospec(MongoResolutionRequestRepository, instance=True)
     lookup_repo = create_autospec(MongoLookupStateRepository, instance=True)
@@ -94,6 +108,7 @@ def request_registry_service_available(ctx):
         resolution_repo=resolution_repo,
         lookup_repo=lookup_repo,
         hasher=SHA256ContentHasher(),
+        rdf_config=rdf_config,
     )
 
     ctx["resolution_repo"] = resolution_repo
@@ -139,9 +154,9 @@ def current_lookup_state(ctx, source_id, existing_last_snapshot):
 
 
 @given(
-    parsers.parse('the snapshot watermark for "{source_id}" has been advanced to "{snapshot_time}"')
+    parsers.parse('the snapshot for "{source_id}" has been advanced to "{snapshot_time}"')
 )
-def snapshot_watermark_already_advanced(ctx, source_id, snapshot_time):
+def snapshot_already_advanced(ctx, source_id, snapshot_time):
     """Pre-configure the repository to return a LookupRequestRecord with last_snapshot set."""
     ts = datetime.fromisoformat(snapshot_time)
     state = LookupRequestRecord(
