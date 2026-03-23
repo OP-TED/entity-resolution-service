@@ -12,12 +12,12 @@ TEST_DATA_DIR = TESTS_ROOT_DIR / "test_data"
 
 @pytest.fixture(scope="module")
 def redis_container():
-    """Start a Redis container once per test module. Skips if Docker is unavailable."""
+    """Start a Redis container once per test module. Fails if Docker is unavailable."""
     try:
         with RedisContainer() as container:
             yield container
-    except Exception:
-        pytest.skip("Docker not available")
+    except Exception as exc:
+        pytest.fail(f"Redis container could not be started (is Docker running?): {exc}")
 
 
 @pytest.fixture
