@@ -11,16 +11,16 @@ from ers.curation.adapters.user_action_repository import (
     UserActionCurationRepository,
 )
 from ers.resolution_decision_store.adapters.decision_repository import (
-    DecisionCurationRepository,
-    MongoDecisionCurationRepository,
+    DecisionRepository,
+    MongoDecisionRepository,
 )
 
 __all__ = [
-    "DecisionCurationRepository",
+    "DecisionRepository",
     "EntityMentionCurationRepository",
     "StatisticsRepository",
     "UserActionCurationRepository",
-    "MongoDecisionCurationRepository",
+    "MongoDecisionRepository",
     "MongoEntityMentionCurationRepository",
     "MongoStatisticsRepository",
     "MongoUserActionCurationRepository",

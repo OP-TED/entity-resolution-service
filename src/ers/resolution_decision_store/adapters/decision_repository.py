@@ -9,11 +9,10 @@ from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifi
 
 from ers.commons.adapters.decision_repository import (
     BaseDecisionRepository,
-    MongoDecisionRepository,
+    BaseMongoDecisionRepository,
 )
 from ers.commons.domain.cursor import decode_cursor, encode_cursor
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
-from ers.commons.domain.exceptions import InvalidCursorError
 
 from ers.curation.domain.data_transfer_objects import (
     DecisionFilters,
@@ -30,7 +29,7 @@ from ers.resolution_decision_store.domain.errors import (
 )
 
 
-class DecisionCurationRepository(BaseDecisionRepository):
+class DecisionRepository(BaseDecisionRepository):
     """Repository for decision projection persistence and curation specific querying."""
 
     @abstractmethod
@@ -70,9 +69,9 @@ class DecisionCurationRepository(BaseDecisionRepository):
         """Return the average number of decisions per cluster."""
 
 
-class MongoDecisionCurationRepository(
-    MongoDecisionRepository,
-    DecisionCurationRepository,
+class MongoDecisionRepository(
+    BaseMongoDecisionRepository,
+    DecisionRepository,
 ):
     """MongoDB repository for decision projections with curation-specific queries."""
 

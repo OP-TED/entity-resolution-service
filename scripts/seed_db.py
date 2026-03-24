@@ -18,7 +18,7 @@ from erspec.models.core import UserActionType
 from pymongo import AsyncMongoClient
 
 from ers import config
-from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionCurationRepository
+from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 from ers.curation.adapters.entity_mention_repository import (
     MongoEntityMentionCurationRepository,
 )
@@ -118,7 +118,7 @@ async def _create_decisions(
     mentions: list[Any],
     cluster_refs_by_mention: dict[str, list[Any]],
     cluster_ids: list[str],
-    decision_repo: MongoDecisionCurationRepository,
+    decision_repo: MongoDecisionRepository,
 ) -> list[Any]:
     decisions: list[Any] = []
     for mention in mentions:
@@ -174,7 +174,7 @@ async def seed(
     await _drop_seed_collections(db)
 
     mention_repo = MongoEntityMentionCurationRepository(db)
-    decision_repo = MongoDecisionCurationRepository(db)
+    decision_repo = MongoDecisionRepository(db)
     action_repo = MongoUserActionCurationRepository(db)
 
     mentions = await _create_mentions(mention_repo, num_mentions, num_requests)

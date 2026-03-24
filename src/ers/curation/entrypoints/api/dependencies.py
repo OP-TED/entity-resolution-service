@@ -5,9 +5,9 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from ers import config
 from ers.curation.adapters import (
-    DecisionCurationRepository,
+    DecisionRepository,
     EntityMentionCurationRepository,
-    MongoDecisionCurationRepository,
+    MongoDecisionRepository,
     MongoEntityMentionCurationRepository,
     MongoStatisticsRepository,
     MongoUserActionCurationRepository,
@@ -52,8 +52,8 @@ def get_token_service() -> TokenService:
 
 async def get_decision_repository(
     db: Annotated[AsyncDatabase, Depends(_get_database)],
-) -> DecisionCurationRepository:
-    return MongoDecisionCurationRepository(db)
+) -> DecisionRepository:
+    return MongoDecisionRepository(db)
 
 
 async def get_entity_mention_repository(
@@ -94,7 +94,7 @@ async def get_user_action_service(
 
 
 async def get_decision_curation_service(
-    decision_repo: Annotated[DecisionCurationRepository, Depends(get_decision_repository)],
+    decision_repo: Annotated[DecisionRepository, Depends(get_decision_repository)],
     entity_repo: Annotated[EntityMentionCurationRepository, Depends(get_entity_mention_repository)],
     user_action_service: Annotated[UserActionService, Depends(get_user_action_service)],
 ) -> DecisionCurationService:
@@ -106,7 +106,7 @@ async def get_decision_curation_service(
 
 
 async def get_canonical_entity_service(
-    decision_repo: Annotated[DecisionCurationRepository, Depends(get_decision_repository)],
+    decision_repo: Annotated[DecisionRepository, Depends(get_decision_repository)],
     entity_repo: Annotated[EntityMentionCurationRepository, Depends(get_entity_mention_repository)],
 ) -> CanonicalEntityService:
     return CanonicalEntityService(

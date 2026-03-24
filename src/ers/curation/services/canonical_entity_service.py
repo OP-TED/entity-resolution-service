@@ -9,7 +9,7 @@ from ers.curation.domain.data_transfer_objects import (
     CanonicalEntityPreview,
     EntityMentionPreview,
 )
-from ers.resolution_decision_store.adapters.decision_repository import DecisionCurationRepository
+from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 
 
 class CanonicalEntityService:
@@ -19,7 +19,7 @@ class CanonicalEntityService:
 
     def __init__(
         self,
-        decision_repository: DecisionCurationRepository,
+        decision_repository: DecisionRepository,
         entity_mention_repository: EntityMentionCurationRepository,
     ) -> None:
         self._decision_repository = decision_repository

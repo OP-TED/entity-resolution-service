@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.adapters.decision_repository import BaseDecisionRepository, MongoDecisionRepository
+from ers.commons.adapters.decision_repository import BaseDecisionRepository, BaseMongoDecisionRepository
 from ers.commons.adapters.entity_mention_repository import (
     EntityMentionRepository,
     MongoEntityMentionRepository,
@@ -31,7 +31,7 @@ def _get_database(request: Request) -> AsyncDatabase:
 async def get_decision_repository(
     db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> BaseDecisionRepository:
-    return MongoDecisionRepository(db)
+    return BaseMongoDecisionRepository(db)
 
 
 async def get_entity_mention_repository(

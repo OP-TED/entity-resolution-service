@@ -8,7 +8,7 @@ from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifi
 from ers.commons.domain.data_transfer_objects import CursorParams
 from ers.commons.domain.exceptions import InvalidCursorError
 from ers.resolution_decision_store.adapters.decision_repository import (
-    MongoDecisionCurationRepository,
+    MongoDecisionRepository,
 )
 from ers.resolution_decision_store.adapters.provisional_id import (
     derive_provisional_cluster_id,
@@ -56,7 +56,7 @@ def mock_database(mock_collection):
 
 @pytest.fixture()
 def repo(mock_database):
-    return MongoDecisionCurationRepository(mock_database)
+    return MongoDecisionRepository(mock_database)
 
 
 # ── upsert_decision ───────────────────────────────────────────────────────────

@@ -17,7 +17,7 @@ class BaseDecisionRepository(
     """Repository for decision projection persistence and querying."""
 
 
-class MongoDecisionRepository(
+class BaseMongoDecisionRepository(
     BaseMongoRepository[Decision, str],
     BaseDecisionRepository,
 ):
