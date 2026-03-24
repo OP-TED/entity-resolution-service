@@ -3,7 +3,7 @@ from datetime import datetime
 
 from erspec.models.core import Decision, LookupState
 
-from ers.commons.adapters.decision_repository import DecisionRepository
+from ers.commons.adapters.decision_repository import BaseDecisionRepository
 from ers.ers_rest_api.domain.data_transfer_objects import DeltaPage
 
 
@@ -14,7 +14,7 @@ class ResolutionDecisionStoreServiceABC(ABC):
     Provides read access to decisions and manages delta-sync snapshots.
     """
 
-    def __init__(self, decision_repository: DecisionRepository) -> None:
+    def __init__(self, decision_repository: BaseDecisionRepository) -> None:
         self._decision_repository = decision_repository
 
     @abstractmethod

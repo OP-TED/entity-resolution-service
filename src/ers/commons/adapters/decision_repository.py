@@ -10,7 +10,7 @@ from ers.commons.adapters.repository import (
 )
 
 
-class DecisionRepository(
+class BaseDecisionRepository(
     AsyncReadRepository[Decision, str],
     AsyncWriteRepository[Decision, str],
 ):
@@ -19,7 +19,7 @@ class DecisionRepository(
 
 class MongoDecisionRepository(
     BaseMongoRepository[Decision, str],
-    DecisionRepository,
+    BaseDecisionRepository,
 ):
     _model_class = Decision
     _id_field = "id"

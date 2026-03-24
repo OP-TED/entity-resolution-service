@@ -23,7 +23,7 @@ def repo(mongo_db: AsyncDatabase) -> MongoStatisticsRepository:
 
 async def _seed_data(db: AsyncDatabase) -> None:
     """Insert a realistic dataset across all collections."""
-    from ers.curation.adapters.decision_repository import (
+    from ers.resolution_decision_store.adapters.decision_repository import (
         MongoDecisionCurationRepository,
     )
     from ers.curation.adapters.entity_mention_repository import (

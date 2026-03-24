@@ -1,4 +1,4 @@
-"""Unit tests for MongoDecisionStoreRepository (mocked MongoDB collection)."""
+"""Unit tests for MongoDecisionCurationRepository (mocked MongoDB collection)."""
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
@@ -6,7 +6,7 @@ import pytest
 from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
 
 from ers.resolution_decision_store.adapters.decision_repository import (
-    MongoDecisionStoreRepository,
+    MongoDecisionCurationRepository,
 )
 from ers.resolution_decision_store.adapters.provisional_id import (
     derive_provisional_cluster_id,
@@ -54,7 +54,7 @@ def mock_database(mock_collection):
 
 @pytest.fixture()
 def repo(mock_database):
-    return MongoDecisionStoreRepository(mock_database)
+    return MongoDecisionCurationRepository(mock_database)
 
 
 # ── upsert_decision ───────────────────────────────────────────────────────────
@@ -129,10 +129,10 @@ async def test_find_by_triad_queries_by_triad_hash(repo, mock_collection):
     mock_collection.find_one.assert_called_once_with({"_id": expected_hash})
 
 
-# ── query_paginated ───────────────────────────────────────────────────────────
+# ── find_with_filters (unfiltered bulk pagination) ────────────────────────────
 
 @pytest.mark.asyncio
-async def test_query_paginated_first_page_no_cursor(repo, mock_collection):
+async def test_find_with_filters_first_page_no_cursor(repo, mock_collection):
     now = datetime.now(timezone.utc)
     docs = [make_doc(now + timedelta(seconds=i), triad_hash=f"hash{i}") for i in range(3)]
     cursor_mock = MagicMock()
@@ -140,13 +140,13 @@ async def test_query_paginated_first_page_no_cursor(repo, mock_collection):
     cursor_mock.limit.return_value = cursor_mock
     cursor_mock.to_list = AsyncMock(return_value=docs)
     mock_collection.find = MagicMock(return_value=cursor_mock)
-    page = await repo.query_paginated(cursor=None, page_size=3)
+    page = await repo.find_with_filters(cursor=None, page_size=3)
     assert len(page.results) == 3
     assert page.next_cursor is None
 
 
 @pytest.mark.asyncio
-async def test_query_paginated_returns_next_cursor_when_more_results(repo, mock_collection):
+async def test_find_with_filters_returns_next_cursor_when_more_results(repo, mock_collection):
     now = datetime.now(timezone.utc)
     # Return page_size+1 docs to signal more pages
     docs = [make_doc(now + timedelta(seconds=i), triad_hash=f"hash{i}") for i in range(4)]
@@ -155,13 +155,13 @@ async def test_query_paginated_returns_next_cursor_when_more_results(repo, mock_
     cursor_mock.limit.return_value = cursor_mock
     cursor_mock.to_list = AsyncMock(return_value=docs)
     mock_collection.find = MagicMock(return_value=cursor_mock)
-    page = await repo.query_paginated(cursor=None, page_size=3)
+    page = await repo.find_with_filters(cursor=None, page_size=3)
     assert len(page.results) == 3
     assert page.next_cursor is not None
 
 
 @pytest.mark.asyncio
-async def test_query_paginated_raises_invalid_cursor_on_bad_input(repo, mock_collection):
+async def test_find_with_filters_raises_invalid_cursor_on_bad_input(repo, mock_collection):
     from ers.resolution_decision_store.domain.errors import InvalidCursorError
     with pytest.raises(InvalidCursorError):
-        await repo.query_paginated(cursor="not-valid-base64!!!", page_size=10)
+        await repo.find_with_filters(cursor="not-valid-base64!!!", page_size=10)

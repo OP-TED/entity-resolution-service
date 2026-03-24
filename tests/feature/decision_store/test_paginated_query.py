@@ -60,7 +60,7 @@ def decision_store_available(ctx):
     """
     Set up the DecisionStoreService with a mocked repository.
 
-    TODO: Replace with create_autospec(MongoDecisionStoreRepository)
+    TODO: Replace with create_autospec(MongoDecisionCurationRepository)
     """
     repository = MagicMock()
     repository.query_paginated = AsyncMock()

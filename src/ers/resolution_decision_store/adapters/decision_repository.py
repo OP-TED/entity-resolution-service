@@ -1,10 +1,4 @@
-"""MongoDB repository for the Resolution Decision Store.
-
-``MongoDecisionStoreRepository`` is a parallel sibling to
-``MongoDecisionCurationRepository``: both extend ``MongoDecisionRepository``
-from ``ers.commons.adapters.decision_repository``, both operate on the
-``decisions`` collection, and both use ``erspec.Decision`` as the domain model.
-"""
+from abc import abstractmethod
 from datetime import datetime
 from typing import Any
 
@@ -13,11 +7,22 @@ from pymongo.errors import ConnectionFailure, DuplicateKeyError, OperationFailur
 
 from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
 
-from ers.commons.adapters.decision_repository import MongoDecisionRepository
+from ers.commons.adapters.decision_repository import (
+    BaseDecisionRepository,
+    MongoDecisionRepository,
+)
 from ers.commons.domain.cursor import decode_cursor, encode_cursor
+from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.commons.domain.exceptions import InvalidCursorError as CommonInvalidCursorError
-from ers.commons.domain.data_transfer_objects import CursorPage
-from ers.resolution_decision_store.adapters.provisional_id import derive_provisional_cluster_id
+
+from ers.curation.domain.data_transfer_objects import (
+    DecisionFilters,
+    DecisionOrdering,
+)
+
+from ers.resolution_decision_store.adapters.provisional_id import (
+    derive_provisional_cluster_id,
+)
 from ers.resolution_decision_store.domain.errors import (
     InvalidCursorError,
     RepositoryConnectionError,
@@ -26,16 +31,108 @@ from ers.resolution_decision_store.domain.errors import (
 )
 
 
-class MongoDecisionStoreRepository(MongoDecisionRepository):
-    """MongoDB-backed persistence for resolution decisions.
+class DecisionCurationRepository(BaseDecisionRepository):
+    """Repository for decision projection persistence and curation specific querying."""
 
-    Extends ``MongoDecisionRepository`` (which provides ``erspec.Decision``,
-    ``decisions`` collection, ``_id_field='id'``). Adds atomic upsert with
-    staleness detection, triad-based lookup, and cursor-paginated traversal.
+    @abstractmethod
+    async def find_with_filters(
+        self,
+        filters: DecisionFilters | None = None,
+        cursor_params: CursorParams | None = None,
+        mention_identifiers: list[EntityMentionIdentifier] | None = None,
+    ) -> CursorPage[Decision]:
+        """Find decisions with optional filtering and cursor-based pagination.
 
-    ``Decision.id`` equals the SHA-256 triad hash, set once via ``$setOnInsert``
-    on first write and never changed.
-    """
+        Supports both filtered curation queries and unfiltered bulk traversal.
+
+        Args:
+            filters: Optional filter criteria. None for unfiltered traversal.
+            cursor_params: Cursor-based pagination parameters (cursor, limit).
+                Defaults to CursorParams() if None.
+            mention_identifiers: When provided, restricts results to decisions
+                whose ``about_entity_mention`` is in this list (used for
+                full-text search pre-filtering).
+        """
+
+    @abstractmethod
+    async def find_mention_ids_by_cluster(
+        self,
+        cluster_id: str,
+        limit: int,
+    ) -> list[EntityMentionIdentifier]:
+        """Return entity mention identifiers for decisions placed in a cluster."""
+
+    @abstractmethod
+    async def count_distinct_clusters(self) -> int:
+        """Return the number of distinct cluster IDs across all decisions."""
+
+    @abstractmethod
+    async def average_cluster_size(self) -> float:
+        """Return the average number of decisions per cluster."""
+
+
+class MongoDecisionCurationRepository(
+    MongoDecisionRepository,
+    DecisionCurationRepository,
+):
+    """MongoDB repository for decision projections with curation-specific queries."""
+
+    _SORT_FIELD_MAP: dict[DecisionOrdering, tuple[str, bool]] = {
+        DecisionOrdering.CONFIDENCE_ASC: ("current_placement.confidence_score", True),
+        DecisionOrdering.CONFIDENCE_DESC: ("current_placement.confidence_score", False),
+        DecisionOrdering.CREATED_AT_ASC: ("created_at", True),
+        DecisionOrdering.CREATED_AT_DESC: ("created_at", False),
+        DecisionOrdering.UPDATED_AT_ASC: ("updated_at", True),
+        DecisionOrdering.UPDATED_AT_DESC: ("updated_at", False),
+    }
+
+    def _build_query(self, filters: DecisionFilters) -> dict[str, Any]:
+        query: dict[str, Any] = {}
+
+        if filters.entity_type is not None:
+            query["about_entity_mention.entity_type"] = filters.entity_type
+
+        placement_range: dict[str, dict[str, float]] = {}
+        if filters.confidence_min is not None:
+            placement_range.setdefault("current_placement.confidence_score", {})["$gte"] = (
+                filters.confidence_min
+            )
+        if filters.confidence_max is not None:
+            placement_range.setdefault("current_placement.confidence_score", {})["$lte"] = (
+                filters.confidence_max
+            )
+        if filters.similarity_min is not None:
+            placement_range.setdefault("current_placement.similarity_score", {})["$gte"] = (
+                filters.similarity_min
+            )
+        if filters.similarity_max is not None:
+            placement_range.setdefault("current_placement.similarity_score", {})["$lte"] = (
+                filters.similarity_max
+            )
+        query.update(placement_range)
+
+        return query
+
+    def _get_sort_info(self, ordering: DecisionOrdering | None) -> tuple[str, bool]:
+        """Return (mongo_field_name, is_ascending) for the given ordering."""
+        if ordering is None:
+            return "created_at", False
+        return self._SORT_FIELD_MAP[ordering]
+
+    def _build_sort(self, ordering: DecisionOrdering | None) -> list[tuple[str, int]]:
+        field, ascending = self._get_sort_info(ordering)
+        direction = 1 if ascending else -1
+        return [(field, direction), ("_id", direction)]
+
+    def _extract_sort_value(self, decision: Decision, sort_field: str) -> float | datetime | None:
+        if sort_field == "current_placement.confidence_score":
+            return decision.current_placement.confidence_score
+        if sort_field == "created_at":
+            return decision.created_at
+        if sort_field == "updated_at":
+            return decision.updated_at
+        return None
+
 
     async def upsert_decision(
         self,
@@ -127,58 +224,161 @@ class MongoDecisionStoreRepository(MongoDecisionRepository):
         triad_hash = derive_provisional_cluster_id(identifier)
         return await self.find_by_id(triad_hash)
 
-    async def query_paginated(
+    async def find_with_filters_old(
         self,
-        cursor: str | None = None,
-        page_size: int = 250,
+        filters: DecisionFilters,
+        cursor_params: CursorParams,
+        mention_identifiers: list[EntityMentionIdentifier] | None = None,
     ) -> CursorPage[Decision]:
-        """Cursor-paginated traversal over all stored decisions.
+        query = self._build_query(filters)
 
-        Orders by ``(updated_at ASC, _id ASC)``. Designed for bulk operations
-        (EPIC-07 Bulk Lookup, Spine-C sync).
+        if mention_identifiers is not None:
+            id_docs = [
+                {
+                    "source_id": mi.source_id,
+                    "request_id": mi.request_id,
+                    "entity_type": mi.entity_type,
+                }
+                for mi in mention_identifiers
+            ]
+            query["about_entity_mention"] = {"$in": id_docs}
+
+        sort_field, ascending = self._get_sort_info(filters.ordering)
+        sort = self._build_sort(filters.ordering)
+
+        if cursor_params.cursor is not None:
+            raw_value, last_id = decode_cursor(cursor_params.cursor)
+            sort_value = self._parse_cursor_sort_value(raw_value, sort_field)
+            cursor_condition = self._build_cursor_condition(
+                sort_field, sort_value, last_id, ascending
+            )
+            query = {"$and": [query, cursor_condition]}
+
+        fetch_limit = cursor_params.limit + 1
+        cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
+        results = [self._from_document(doc) async for doc in cursor]
+
+        next_cursor = None
+        if len(results) > cursor_params.limit:
+            results = results[: cursor_params.limit]
+            last = results[-1]
+            next_cursor = encode_cursor(self._extract_sort_value(last, sort_field), last.id)
+
+        return CursorPage(results=results, next_cursor=next_cursor)
+
+    async def find_with_filters(
+        self,
+        filters: DecisionFilters | None = None,
+        cursor_params: CursorParams | None = None,
+        mention_identifiers: list[EntityMentionIdentifier] | None = None,
+    ) -> CursorPage[Decision]:
+        """Cursor-paginated query over decisions with optional filtering.
+
+        Supports both:
+        1. Curation use case: filters applied, custom ordering, mention ID matching
+        2. Decision Store bulk sync use case: no filters, fixed (updated_at ASC, _id ASC)
+
+        When ``filters`` is None, performs unfiltered traversal in Decision Store mode.
 
         Args:
-            cursor: Opaque pagination token from a previous response, or ``None``
-                for the first page.
-            page_size: Maximum number of results per page.
+            filters: Optional filter criteria. None for unfiltered traversal.
+            cursor_params: Pagination params (cursor, limit). If None, uses default limit.
+            mention_identifiers: When provided, restricts results to decisions whose
+                ``about_entity_mention`` is in this list.
 
         Returns:
             A ``CursorPage`` containing results and an optional ``next_cursor``.
-
-        Raises:
-            InvalidCursorError: If the cursor string cannot be decoded.
-            RepositoryConnectionError: On MongoDB connection failure.
         """
-        query: dict[str, Any] = {}
-        if cursor is not None:
-            try:
-                raw_value, last_id = decode_cursor(cursor)
-            except CommonInvalidCursorError as exc:
-                raise InvalidCursorError(str(exc)) from exc
-            sort_value = self._parse_cursor_sort_value(raw_value, "updated_at")
-            query = self._build_cursor_condition("updated_at", sort_value, last_id, ascending=True)
+        if cursor_params is None:
+            cursor_params = CursorParams()
 
-        sort = [("updated_at", pymongo.ASCENDING), ("_id", pymongo.ASCENDING)]
-        fetch_count = page_size + 1
-        try:
-            raw_docs = (
-                await self._collection.find(query).sort(sort).limit(fetch_count).to_list(fetch_count)
+        # Unfiltered bulk sync mode (Decision Store)
+        if filters is None:
+            query: dict[str, Any] = {}
+            sort_field = "updated_at"
+            ascending = True
+            sort = [("updated_at", 1), ("_id", 1)]
+        else:
+            # Filtered curation mode
+            query = self._build_query(filters)
+
+            if mention_identifiers is not None:
+                id_docs = [
+                    {
+                        "source_id": mi.source_id,
+                        "request_id": mi.request_id,
+                        "entity_type": mi.entity_type,
+                    }
+                    for mi in mention_identifiers
+                ]
+                query["about_entity_mention"] = {"$in": id_docs}
+
+            sort_field, ascending = self._get_sort_info(filters.ordering)
+            sort = self._build_sort(filters.ordering)
+
+        # Apply cursor condition (same logic for both modes)
+        if cursor_params.cursor is not None:
+            raw_value, last_id = decode_cursor(cursor_params.cursor)
+            sort_value = self._parse_cursor_sort_value(raw_value, sort_field)
+            cursor_condition = self._build_cursor_condition(
+                sort_field, sort_value, last_id, ascending
             )
-        except ConnectionFailure as exc:
-            raise RepositoryConnectionError(str(exc)) from exc
+            if query:
+                query = {"$and": [query, cursor_condition]}
+            else:
+                query = cursor_condition
 
-        has_next = len(raw_docs) > page_size
-        page_docs = raw_docs[:page_size]
+        # Fetch page_size + 1 to detect if there are more results
+        fetch_limit = cursor_params.limit + 1
+        cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
+        results = [self._from_document(doc) async for doc in cursor]
 
-        # Encode cursor from raw docs before _from_document mutates _id → id.
-        next_cursor: str | None = None
-        if has_next and page_docs:
-            last = page_docs[-1]
-            next_cursor = encode_cursor(last["updated_at"], last["_id"])
+        # Encode next cursor if there are more results
+        next_cursor = None
+        if len(results) > cursor_params.limit:
+            results = results[: cursor_params.limit]
+            last = results[-1]
+            sort_value = (
+                self._extract_sort_value(last, sort_field)
+                if filters is not None
+                else last.updated_at
+            )
+            next_cursor = encode_cursor(sort_value, last.id)
 
-        records = [self._from_document(doc) for doc in page_docs]
+        return CursorPage(results=results, next_cursor=next_cursor)
 
-        return CursorPage(results=records, next_cursor=next_cursor)
+    async def find_mention_ids_by_cluster(
+        self,
+        cluster_id: str,
+        limit: int,
+    ) -> list[EntityMentionIdentifier]:
+        cursor = self._collection.find(
+            {"current_placement.cluster_id": cluster_id},
+            projection={"about_entity_mention": 1, "_id": 0},
+        )
+        cursor = cursor.limit(limit)
+        return [
+            EntityMentionIdentifier.model_validate(doc["about_entity_mention"])
+            async for doc in cursor
+        ]
+
+    async def count_distinct_clusters(self) -> int:
+        result = await self._collection.distinct("current_placement.cluster_id")
+        return len(result)
+
+    async def average_cluster_size(self) -> float:
+        pipeline: list[dict[str, Any]] = [
+            {
+                "$group": {
+                    "_id": "$current_placement.cluster_id",
+                    "count": {"$sum": 1},
+                }
+            },
+            {"$group": {"_id": None, "avg": {"$avg": "$count"}}},
+        ]
+        cursor = await self._collection.aggregate(pipeline)
+        result = await cursor.to_list()
+        return result[0]["avg"] if result else 0.0
 
     async def ensure_indexes(self) -> None:
         """Create required MongoDB indexes for the decisions collection.

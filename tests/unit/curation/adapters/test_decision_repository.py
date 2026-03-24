@@ -7,7 +7,7 @@ change observable behaviour for the curation repository.
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-from ers.curation.adapters.decision_repository import MongoDecisionCurationRepository
+from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionCurationRepository
 
 
 def make_repo() -> MongoDecisionCurationRepository:

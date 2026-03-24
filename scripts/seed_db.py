@@ -18,7 +18,7 @@ from erspec.models.core import UserActionType
 from pymongo import AsyncMongoClient
 
 from ers import config
-from ers.curation.adapters.decision_repository import MongoDecisionCurationRepository
+from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionCurationRepository
 from ers.curation.adapters.entity_mention_repository import (
     MongoEntityMentionCurationRepository,
 )

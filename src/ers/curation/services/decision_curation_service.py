@@ -6,7 +6,7 @@ from erspec.models.core import Decision, EntityMention
 
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.commons.services.exceptions import NotFoundError
-from ers.curation.adapters.decision_repository import DecisionCurationRepository
+from ers.resolution_decision_store.adapters.decision_repository import DecisionCurationRepository
 from ers.curation.adapters.entity_mention_repository import (
     EntityMentionCurationRepository,
 )
