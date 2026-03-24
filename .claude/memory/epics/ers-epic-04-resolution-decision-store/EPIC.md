@@ -535,23 +535,21 @@ At `tests/feature/decision_store/`:
 
 ---
 
-## Open Items / Notes for Implementer (Task 4)
+## Implementation Notes (Task 4 — resolved 2026-03-24)
 
-1. **Config access pattern**: Use `from ers import config` and access `config.DECISION_STORE_MAX_CANDIDATES`, `config.DECISION_STORE_DEFAULT_PAGE_SIZE`, `config.DECISION_STORE_MAX_PAGE_SIZE`. There is no standalone `DecisionStoreConfig` to inject — config is the global `ERSConfigResolver` singleton.
+> These decisions were made during Task 4 implementation and are recorded here for future reference.
 
-2. **Constructor takes only repository**: `DecisionStoreService.__init__(self, repository: MongoDecisionRepository)` — no config parameter. Config is accessed directly via the module-level singleton.
+1. **Config access pattern**: `from ers import config` → `config.DECISION_STORE_MAX_CANDIDATES` / `DECISION_STORE_DEFAULT_PAGE_SIZE` / `DECISION_STORE_MAX_PAGE_SIZE`. No standalone `DecisionStoreConfig` to inject — config is the global `ERSConfigResolver` singleton.
 
-3. **`find_with_filters` is the pagination entry point**: `query_decisions_paginated` delegates to `self._repository.find_with_filters(filters=None, cursor_params=CursorParams(cursor=cursor, limit=effective_size))`. The `filters=None` triggers bulk sync mode (unfiltered, `updated_at ASC`).
+2. **Constructor takes only repository**: `DecisionStoreService.__init__(self, repository: MongoDecisionRepository)` — no config parameter.
 
-4. **`span_extractors.py` — `Decision` only**: `EntityMentionIdentifier` is already registered in `src/ers/commons/adapters/span_extractors.py`. Do NOT register it again here — only register the `Decision` extractor.
+3. **Pagination entry point**: `query_decisions_paginated` delegates to `self._repository.find_with_filters(filters=None, cursor_params=CursorParams(...))`. `filters=None` triggers unfiltered bulk sync mode (`updated_at ASC`).
 
-5. **Do NOT touch `resolution_decision_store_service.py`**: This is a temporary ABC placeholder for future delta-sync work (EPIC-06). The new service lives in a separate file: `decision_store_service.py`.
+4. **`span_extractors.py` — `Decision` only**: `EntityMentionIdentifier` is already registered in `src/ers/commons/adapters/span_extractors.py`. Do not register it again.
 
-6. **Test class structure**: Group tests by method into test classes (`TestStoreDecision`, `TestGetDecisionByTriad`, `TestQueryDecisionsPaginated`, `TestPublicAPIFunctions`) — mirrors the `test_request_registry_service.py` pattern.
+5. **Do NOT touch `resolution_decision_store_service.py`**: Temporary ABC placeholder for EPIC-06 delta-sync. New service is in `decision_store_service.py`.
 
-7. **Mock repository with `create_autospec`**: Use `create_autospec(MongoDecisionRepository, instance=True)` — returns `AsyncMock` for async methods automatically. No need to manually set `return_value` for the fixture; do it per-test.
-
-8. **Plan file location**: Full task plan (tests + implementation) is at `.claude/memory/epics/ers-epic-04-resolution-decision-store/task44-decision-store-service.md`.
+6. **`CursorParams` hard cap of 50**: `CursorParams` enforces `limit ≤ 50`, overriding `DECISION_STORE_MAX_PAGE_SIZE (1000)` in practice. TC-018 in the spec is aspirational; actual cap is 50.
 
 ---
 
