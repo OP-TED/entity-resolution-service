@@ -4,7 +4,7 @@ from datetime import datetime
 from erspec.models.core import Decision, LookupState
 
 from ers.commons.adapters.decision_repository import DecisionRepository
-from ers.ers_rest_api.domain.data_transfer_objects import DeltaPage
+from ers.resolution_decision_store.domain.data_transfer_objects import DeltaPage
 
 
 # Temporary abstractions and DI

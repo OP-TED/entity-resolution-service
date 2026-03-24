@@ -4,7 +4,7 @@ from erspec.models.core import EntityMention
 
 from ers.commons.adapters.decision_repository import DecisionRepository
 from ers.commons.adapters.entity_mention_repository import EntityMentionRepository
-from ers.ers_rest_api.domain.data_transfer_objects import ResolutionResult
+from ers.ers_rest_api.domain.resolution import EntityMentionResolutionResult
 
 
 # Temporary abstractions and DI
@@ -23,5 +23,5 @@ class ResolutionCoordinatorServiceABC(ABC):
         self._decision_repository = decision_repository
 
     @abstractmethod
-    async def resolve(self, entity_mention: EntityMention) -> ResolutionResult:
+    async def resolve(self, entity_mention: EntityMention) -> EntityMentionResolutionResult:
         """Resolve an entity mention and return its cluster assignment."""

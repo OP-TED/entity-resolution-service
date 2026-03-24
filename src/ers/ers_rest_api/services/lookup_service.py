@@ -1,6 +1,6 @@
-from ers.ers_rest_api.domain.data_transfer_objects import (
-    LookupResponse,
-)
+from erspec.models.core import EntityMentionIdentifier
+
+from ers.ers_rest_api.domain.lookup import LookupResponse
 from ers.ers_rest_api.services.exceptions import MentionNotFoundError
 from ers.resolution_decision_store.services.resolution_decision_store_service import (
     ResolutionDecisionStoreServiceABC,
@@ -30,6 +30,11 @@ class LookupService:
             raise MentionNotFoundError(source_id, request_id, entity_type)
 
         return LookupResponse(
+            identified_by=EntityMentionIdentifier(
+                source_id=decision.about_entity_mention.source_id,
+                request_id=decision.about_entity_mention.request_id,
+                entity_type=decision.about_entity_mention.entity_type,
+            ),
             cluster_reference=decision.current_placement,
             last_updated=decision.updated_at or decision.created_at,
         )

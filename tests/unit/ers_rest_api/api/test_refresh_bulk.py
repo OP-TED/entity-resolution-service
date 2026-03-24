@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
+from erspec.models.core import ClusterReference, EntityMentionIdentifier
 from httpx import AsyncClient
 
-from ers.ers_rest_api.domain.data_transfer_objects import (
-    DeltaAssignment,
+from ers.ers_rest_api.domain.errors import ErrorCode
+from ers.ers_rest_api.domain.lookup import (
+    LookupResponse,
     RefreshBulkResponse,
 )
 
@@ -22,19 +24,31 @@ class TestRefreshBulkEndpoint:
     ) -> None:
         refresh_bulk_service.handle_refresh_bulk.return_value = RefreshBulkResponse(
             deltas=[
-                DeltaAssignment(
-                    source_id="SYSTEM_C",
-                    request_id="req-001",
-                    entity_type="ORGANISATION",
-                    canonical_entity_id="cluster-010",
-                    updated_at=datetime(2026, 3, 15, 10, 0, 0, tzinfo=UTC),
+                LookupResponse(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYSTEM_C",
+                        request_id="req-001",
+                        entity_type="ORGANISATION",
+                    ),
+                    cluster_reference=ClusterReference(
+                        cluster_id="cluster-010",
+                        confidence_score=0.9,
+                        similarity_score=0.85,
+                    ),
+                    last_updated=datetime(2026, 3, 15, 10, 0, 0, tzinfo=UTC),
                 ),
-                DeltaAssignment(
-                    source_id="SYSTEM_C",
-                    request_id="req-002",
-                    entity_type="ORGANISATION",
-                    canonical_entity_id="cluster-011",
-                    updated_at=datetime(2026, 3, 15, 11, 30, 0, tzinfo=UTC),
+                LookupResponse(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYSTEM_C",
+                        request_id="req-002",
+                        entity_type="ORGANISATION",
+                    ),
+                    cluster_reference=ClusterReference(
+                        cluster_id="cluster-011",
+                        confidence_score=0.9,
+                        similarity_score=0.85,
+                    ),
+                    last_updated=datetime(2026, 3, 15, 11, 30, 0, tzinfo=UTC),
                 ),
             ],
             has_more=False,
@@ -74,12 +88,18 @@ class TestRefreshBulkEndpoint:
     ) -> None:
         refresh_bulk_service.handle_refresh_bulk.return_value = RefreshBulkResponse(
             deltas=[
-                DeltaAssignment(
-                    source_id="SYSTEM_D",
-                    request_id=f"req-{i:03d}",
-                    entity_type="ORGANISATION",
-                    canonical_entity_id=f"cluster-{i:03d}",
-                    updated_at=datetime(2026, 3, 15, 10, i, 0, tzinfo=UTC),
+                LookupResponse(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYSTEM_D",
+                        request_id=f"req-{i:03d}",
+                        entity_type="ORGANISATION",
+                    ),
+                    cluster_reference=ClusterReference(
+                        cluster_id=f"cluster-{i:03d}",
+                        confidence_score=0.9,
+                        similarity_score=0.85,
+                    ),
+                    last_updated=datetime(2026, 3, 15, 10, i, 0, tzinfo=UTC),
                 )
                 for i in range(50)
             ],
@@ -121,34 +141,43 @@ class TestRefreshBulkEndpoint:
         assert response.status_code == 200
         refresh_bulk_service.handle_refresh_bulk.assert_called_once()
 
-    async def test_missing_source_id_returns_422(self, client: AsyncClient) -> None:
+    async def test_missing_source_id_returns_400(self, client: AsyncClient) -> None:
         response = await client.post("/api/v1/refresh-bulk", json={"limit": 100})
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
+        assert "source_id" in body["detail"]
 
-    async def test_empty_source_id_returns_422(self, client: AsyncClient) -> None:
+    async def test_empty_source_id_returns_400(self, client: AsyncClient) -> None:
         response = await client.post(
             "/api/v1/refresh-bulk",
             json={"source_id": "", "limit": 100},
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
 
-    async def test_zero_limit_returns_422(self, client: AsyncClient) -> None:
+    async def test_zero_limit_returns_400(self, client: AsyncClient) -> None:
         response = await client.post(
             "/api/v1/refresh-bulk",
             json={"source_id": "SYSTEM_C", "limit": 0},
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
 
-    async def test_negative_limit_returns_422(self, client: AsyncClient) -> None:
+    async def test_negative_limit_returns_400(self, client: AsyncClient) -> None:
         response = await client.post(
             "/api/v1/refresh-bulk",
             json={"source_id": "SYSTEM_C", "limit": -1},
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
 
     async def test_default_limit_applied(
         self,

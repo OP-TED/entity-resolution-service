@@ -2,14 +2,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from ers.ers_rest_api.domain.data_transfer_objects import (
-    EntityMentionRequest,
-    ErrorResponse,
+from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+from ers.ers_rest_api.domain.errors import ErrorResponse
+from ers.ers_rest_api.domain.lookup import (
     LookupResponse,
     RefreshBulkRequest,
     RefreshBulkResponse,
-    ResolutionOutcome,
-    ResolveResponse,
+)
+from ers.ers_rest_api.domain.resolution import (
+    EntityMentionResolutionRequest,
+    EntityMentionResolutionResult,
 )
 from ers.ers_rest_api.entrypoints.api.dependencies import (
     get_lookup_service,
@@ -25,17 +27,18 @@ router = APIRouter(tags=["Resolution"])
 
 @router.post(
     "/resolve",
-    response_model=ResolveResponse,
+    response_model=EntityMentionResolutionResult,
     responses={
         200: {"description": "Canonical resolution"},
         202: {"description": "Provisional resolution"},
+        400: {"model": ErrorResponse, "description": "Validation error"},
     },
 )
 async def resolve(
-    request: EntityMentionRequest,
+    request: EntityMentionResolutionRequest,
     response: Response,
     service: Annotated[ResolveService, Depends(get_resolve_service)],
-) -> ResolveResponse:
+) -> EntityMentionResolutionResult:
     """Resolve an entity mention and return canonical or provisional cluster ID."""
     result = await service.handle_resolve(request)
     if result.status == ResolutionOutcome.PROVISIONAL:
@@ -47,7 +50,8 @@ async def resolve(
     "/lookup",
     response_model=LookupResponse,
     responses={
-        404: {"model": ErrorResponse},
+        400: {"model": ErrorResponse, "description": "Validation error"},
+        404: {"model": ErrorResponse, "description": "Mention not found"},
     },
 )
 async def lookup(
@@ -63,6 +67,9 @@ async def lookup(
 @router.post(
     "/refresh-bulk",
     response_model=RefreshBulkResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Validation error"},
+    },
 )
 async def refresh_bulk(
     request: RefreshBulkRequest,

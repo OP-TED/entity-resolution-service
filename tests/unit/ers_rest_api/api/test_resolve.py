@@ -1,16 +1,22 @@
 from unittest.mock import AsyncMock
 
+from erspec.models.core import EntityMentionIdentifier
 from httpx import AsyncClient
 
-from ers.ers_rest_api.domain.data_transfer_objects import ResolutionOutcome, ResolveResponse
+from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+from ers.ers_rest_api.domain.errors import ErrorCode
+from ers.ers_rest_api.domain.resolution import EntityMentionResolutionResult
 
 VALID_RESOLVE_PAYLOAD = {
-    "source_id": "SYSTEM_A",
-    "request_id": "req-001",
-    "entity_type": "ORGANISATION",
-    "content": '{"name": "Acme Corp"}',
-    "content_type": "application/ld+json",
-    "context": "notice-2024-01",
+    "mention": {
+        "identifiedBy": {
+            "source_id": "SYSTEM_A",
+            "request_id": "req-001",
+            "entity_type": "ORGANISATION",
+        },
+        "content": '{"name": "Acme Corp"}',
+        "content_type": "application/ld+json",
+    },
 }
 
 
@@ -20,10 +26,14 @@ class TestResolveEndpoint:
         client: AsyncClient,
         resolve_service: AsyncMock,
     ) -> None:
-        resolve_service.handle_resolve.return_value = ResolveResponse(
+        resolve_service.handle_resolve.return_value = EntityMentionResolutionResult(
+            identified_by=EntityMentionIdentifier(
+                source_id="SYSTEM_A",
+                request_id="req-001",
+                entity_type="ORGANISATION",
+            ),
             canonical_entity_id="cluster-010",
             status=ResolutionOutcome.CANONICAL,
-            request_id="req-001",
         )
 
         response = await client.post("/api/v1/resolve", json=VALID_RESOLVE_PAYLOAD)
@@ -32,19 +42,34 @@ class TestResolveEndpoint:
         body = response.json()
         assert body["canonical_entity_id"] == "cluster-010"
         assert body["status"] == "CANONICAL"
-        assert body["request_id"] == "req-001"
+        assert body["identified_by"]["request_id"] == "req-001"
 
     async def test_provisional_resolution_returns_202(
         self,
         client: AsyncClient,
         resolve_service: AsyncMock,
     ) -> None:
-        resolve_service.handle_resolve.return_value = ResolveResponse(
+        resolve_service.handle_resolve.return_value = EntityMentionResolutionResult(
+            identified_by=EntityMentionIdentifier(
+                source_id="SYSTEM_A",
+                request_id="req-010",
+                entity_type="ORGANISATION",
+            ),
             canonical_entity_id="prov-singleton-001",
             status=ResolutionOutcome.PROVISIONAL,
-            request_id="req-010",
         )
-        payload = {**VALID_RESOLVE_PAYLOAD, "request_id": "req-010"}
+
+        payload = {
+            "mention": {
+                "identifiedBy": {
+                    "source_id": "SYSTEM_A",
+                    "request_id": "req-010",
+                    "entity_type": "ORGANISATION",
+                },
+                "content": '{"name": "Acme Corp"}',
+                "content_type": "application/ld+json",
+            },
+        }
 
         response = await client.post("/api/v1/resolve", json=payload)
 
@@ -53,46 +78,86 @@ class TestResolveEndpoint:
         assert body["canonical_entity_id"] == "prov-singleton-001"
         assert body["status"] == "PROVISIONAL"
 
-    async def test_missing_source_id_returns_422(self, client: AsyncClient) -> None:
-        payload = {k: v for k, v in VALID_RESOLVE_PAYLOAD.items() if k != "source_id"}
+    async def test_missing_source_id_returns_400(self, client: AsyncClient) -> None:
+        payload = {
+            "mention": {
+                "identifiedBy": {
+                    "request_id": "req-001",
+                    "entity_type": "ORGANISATION",
+                },
+                "content": '{"name": "Acme Corp"}',
+            },
+        }
 
         response = await client.post("/api/v1/resolve", json=payload)
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
+        assert "source_id" in body["detail"]
 
-    async def test_missing_request_id_returns_422(self, client: AsyncClient) -> None:
-        payload = {k: v for k, v in VALID_RESOLVE_PAYLOAD.items() if k != "request_id"}
-
-        response = await client.post("/api/v1/resolve", json=payload)
-
-        assert response.status_code == 422
-
-    async def test_missing_entity_type_returns_422(self, client: AsyncClient) -> None:
-        payload = {k: v for k, v in VALID_RESOLVE_PAYLOAD.items() if k != "entity_type"}
-
-        response = await client.post("/api/v1/resolve", json=payload)
-
-        assert response.status_code == 422
-
-    async def test_missing_content_returns_422(self, client: AsyncClient) -> None:
-        payload = {k: v for k, v in VALID_RESOLVE_PAYLOAD.items() if k != "content"}
+    async def test_missing_request_id_returns_400(self, client: AsyncClient) -> None:
+        payload = {
+            "mention": {
+                "identifiedBy": {
+                    "source_id": "SYSTEM_A",
+                    "entity_type": "ORGANISATION",
+                },
+                "content": '{"name": "Acme Corp"}',
+            },
+        }
 
         response = await client.post("/api/v1/resolve", json=payload)
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
+        assert "request_id" in body["detail"]
 
-    async def test_empty_source_id_returns_422(self, client: AsyncClient) -> None:
-        payload = {**VALID_RESOLVE_PAYLOAD, "source_id": ""}
+    async def test_missing_entity_type_returns_400(self, client: AsyncClient) -> None:
+        payload = {
+            "mention": {
+                "identifiedBy": {
+                    "source_id": "SYSTEM_A",
+                    "request_id": "req-001",
+                },
+                "content": '{"name": "Acme Corp"}',
+            },
+        }
 
         response = await client.post("/api/v1/resolve", json=payload)
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
+        assert "entity_type" in body["detail"]
 
-    async def test_malformed_json_returns_422(self, client: AsyncClient) -> None:
+    async def test_missing_content_returns_400(self, client: AsyncClient) -> None:
+        payload = {
+            "mention": {
+                "identifiedBy": {
+                    "source_id": "SYSTEM_A",
+                    "request_id": "req-001",
+                    "entity_type": "ORGANISATION",
+                },
+                "content_type": "application/ld+json",
+            },
+        }
+
+        response = await client.post("/api/v1/resolve", json=payload)
+
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
+        assert "content" in body["detail"]
+
+    async def test_malformed_json_returns_400(self, client: AsyncClient) -> None:
         response = await client.post(
             "/api/v1/resolve",
             content=b"{bad json",
             headers={"Content-Type": "application/json"},
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
