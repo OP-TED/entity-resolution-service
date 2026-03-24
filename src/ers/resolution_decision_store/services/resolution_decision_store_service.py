@@ -25,6 +25,10 @@ class ResolutionDecisionStoreServiceABC(ABC):
         entity_type: str,
     ) -> Decision | None:
         """Retrieve the current decision for a mention triad."""
+        # FIXME: already implemented by get_decision_by_triad in 
+        # src/ers/resolution_decision_store/services/decision_store_service.py
+        # Needs to be removed from here and references needs to be updated to use that function instead.
+
 
     @abstractmethod
     async def get_delta_for_source(
@@ -39,7 +43,11 @@ class ResolutionDecisionStoreServiceABC(ABC):
     @abstractmethod
     async def get_lookup_state(self, source_id: str) -> LookupState | None:
         """Retrieve the synchronisation snapshot for a source."""
+        # FIXME: already implemented in src/ers/request_registry/services/request_registry_service.py,
+        # Needs to be removed from here and the references need to be updated to use that service instead.
 
     @abstractmethod
     async def advance_snapshot(self, source_id: str, snapshot: datetime) -> None:
         """Advance the synchronisation snapshot for a source."""
+        # FIXME: already implemented in src/ers/request_registry/services/request_registry_service.py,
+        # Needs to be removed from here and the references need to be updated to use that service instead.

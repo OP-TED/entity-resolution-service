@@ -47,8 +47,8 @@ Two upstream writers exist: the Resolution Coordinator (EPIC-06) writes provisio
 
 ### In Scope
 - `domain/errors.py` — `DecisionStoreError` hierarchy and `DecisionStoreConfig` (using `env_property`)
-- MongoDB repository (adapter) `MongoDecisionCurationRepository` in `resolution_decision_store/adapters/decision_repository.py`:
-  - Single consolidated implementation extending `MongoDecisionRepository` from `ers.commons.adapters.decision_repository`
+- MongoDB repository (adapter) `MongoDecisionRepository` in `resolution_decision_store/adapters/decision_repository.py`:
+  - Single consolidated implementation extending `BaseMongoDecisionRepository` from `ers.commons.adapters.decision_repository`
   - Serves both Decision Store (unfiltered bulk queries) and Curation (filtered queries) use cases via single `find_with_filters` method
   - Supports atomic upsert with staleness condition, triad-based retrieval, and cursor-based paginated queries
   - Operates on the **`decisions` collection** using `erspec.Decision` model
@@ -202,25 +202,25 @@ All error types defined in `domain/errors.py`. Each inherits from a base `Decisi
 - Environment variables override defaults.
 - All error classes instantiable with message string; inherit from `DecisionStoreError`.
 
-### Task 2: Lift Cursor Helpers to MongoDecisionRepository (commons)
+### Task 2: Lift Cursor Helpers to BaseMongoDecisionRepository (commons)
 **Layer:** `ers.commons.adapters`
 **Dependencies:** None (pure refactor, no new domain code)
 **Description:**
 `_build_cursor_condition` and `_parse_cursor_sort_value` are generic MongoDB cursor-seek utilities with no dependency on curation-specific types. Both repositories need them.
-- Add `_build_cursor_condition`, `_parse_cursor_sort_value`, `_DATETIME_FIELDS` to `MongoDecisionRepository` in `ers.commons.adapters.decision_repository`.
-- Update `MongoDecisionCurationRepository` in `ers.resolution_decision_store.adapters.decision_repository` to inherit them.
+- Add `_build_cursor_condition`, `_parse_cursor_sort_value`, `_DATETIME_FIELDS` to `BaseMongoDecisionRepository` in `ers.commons.adapters.decision_repository`.
+- Update `MongoDecisionRepository` in `ers.resolution_decision_store.adapters.decision_repository` to inherit them.
 - Update any reference to `self._DATETIME_SORT_FIELDS` → `self._DATETIME_FIELDS`.
 
 **Acceptance Criteria:**
 - All existing curation unit tests pass without modification.
-- `MongoDecisionCurationRepository._build_cursor_condition` is accessible (via inheritance) and behaviour is identical.
+- `MongoDecisionRepository._build_cursor_condition` is accessible (via inheritance) and behaviour is identical.
 
 ### Task 3: Implement MongoDB Adapter
 **Layer:** `ers/resolution_decision_store/adapters/`
 **Dependencies:** Tasks 1 + 2
 **Description:**
-- Create `adapters/decision_repository.py` with single consolidated `MongoDecisionCurationRepository` (imported and used by both Decision Store and Curation modules).
-  - Extends `MongoDecisionRepository` from `ers.commons.adapters.decision_repository` (which already uses `erspec.Decision`, `_collection_name = "decisions"`, `_id_field = "id"`).
+- Create `adapters/decision_repository.py` with single consolidated `MongoDecisionRepository` (imported and used by both Decision Store and Curation modules).
+  - Extends `BaseMongoDecisionRepository` from `ers.commons.adapters.decision_repository` (which already uses `erspec.Decision`, `_collection_name = "decisions"`, `_id_field = "id"`).
   - Inherits `_build_cursor_condition`, `_parse_cursor_sort_value`, `_DATETIME_FIELDS` from base (added in Task 2). Do NOT re-implement these.
   - Adds all methods: `upsert_decision`, `find_by_triad`, `find_with_filters(filters=None, cursor_params=None, mention_identifiers=None)`, `find_mention_ids_by_cluster`, `count_distinct_clusters`, `average_cluster_size`, `ensure_indexes`.
   - `find_with_filters` is consolidated: when `filters=None`, operates in Decision Store bulk mode (unfiltered, ordered by `updated_at ASC, _id ASC`); when `filters` provided, operates in Curation mode (filtered, custom ordering).
@@ -236,7 +236,7 @@ All error types defined in `domain/errors.py`. Each inherits from a base `Decisi
   - Implements `SHA256(concat(source_id, request_id, entity_type))` by reusing `SHA256ContentHasher` from `ers.commons.adapters.hasher`. Do NOT re-implement SHA256.
   - Dual purpose: provisional cluster ID and the `Decision.id` value set on first insert.
 - Map all `pymongo` exceptions to domain error types (`ConnectionFailure` → `RepositoryConnectionError`, `OperationFailure` → `RepositoryOperationError`/`StaleOutcomeError`).
-- **Important:** Curation module imports `MongoDecisionCurationRepository` from `ers.resolution_decision_store.adapters.decision_repository`, not from its own package.
+- **Important:** Curation module imports `MongoDecisionRepository` from `ers.resolution_decision_store.adapters.decision_repository`, not from its own package.
 
 **Acceptance Criteria:**
 - `upsert_decision` atomically replaces only when `new_updated_at > stored_updated_at`.
@@ -252,7 +252,7 @@ All error types defined in `domain/errors.py`. Each inherits from a base `Decisi
 **Dependencies:** Tasks 1 + 3
 **Description:**
 - Create `services/decision_store_service.py` with `DecisionStoreService`.
-- Constructor: `__init__(self, repository: MongoDecisionCurationRepository, config: DecisionStoreConfig)`.
+- Constructor: `__init__(self, repository: MongoDecisionRepository, config: DecisionStoreConfig)`.
 - Class methods (not traced): `store_decision`, `get_decision_by_triad`, `query_decisions_paginated`.
 - Also expose **module-level public API functions** decorated with `@trace_function` from `ers.commons.adapters.tracing`. These are the API boundary — tracing belongs here, not on class methods. Pattern identical to `ers.request_registry.services.request_registry_service`.
   - `@trace_function(span_name="decision_store.store_decision")` async def store_decision(identifier, current, candidates, updated_at, service) -> Decision
@@ -273,7 +273,7 @@ All error types defined in `domain/errors.py`. Each inherits from a base `Decisi
 **Layer:** `tests/`
 **Dependencies:** Tasks 1-4
 **Description:**
-- Unit tests for all domain models, adapter (mock `AsyncDatabase`/collection via `MagicMock`/`AsyncMock`), service (mock repository via `create_autospec(MongoDecisionStoreRepository)`), and provisional ID derivation.
+- Unit tests for all domain models, adapter (mock `AsyncDatabase`/collection via `MagicMock`/`AsyncMock`), service (mock repository via `create_autospec(MongoDecisionRepository)`), and provisional ID derivation.
 - Minimum 90% coverage on all modules.
 
 **Acceptance Criteria:** All test cases from Section 8 pass. Coverage >= 90%.
@@ -297,8 +297,8 @@ All error types defined in `domain/errors.py`. Each inherits from a base `Decisi
 ## Roadmap
 - [x] Task 0: EPIC corrections + implementation log (2026-03-23)
 - [x] Task 1: Define Domain Errors and Configuration (domain/) (2026-03-23)
-- [ ] Task 2: Lift cursor helpers to MongoDecisionRepository (commons refactor)
-- [ ] Task 3: Implement MongoDB Adapter (adapters/)
+- [x] Task 2: Lift cursor helpers to MongoDecisionRepository (commons refactor) (2026-03-24)
+- [x] Task 3: Implement MongoDB Adapter (adapters/) (2026-03-24)
 - [ ] Task 4: Implement Service Layer (services/)
 - [ ] Task 5: Unit Tests (tests/unit/)
 - [ ] Task 6: Integration Tests (tests/integration/)
@@ -501,6 +501,25 @@ At `tests/feature/decision_store/`:
 
 ---
 
+### 2026-03-24 — Tasks 2 + 3 complete: Cursor helpers lifted + MongoDB Adapter
+
+**Files created/modified:**
+- `src/ers/resolution_decision_store/__init__.py`
+- `src/ers/resolution_decision_store/adapters/__init__.py`
+- `src/ers/resolution_decision_store/adapters/decision_repository.py` — `DecisionRepository` (ABC) + `MongoDecisionRepository` (concrete, extending `BaseMongoDecisionRepository`)
+- `src/ers/resolution_decision_store/adapters/provisional_id.py` — `derive_provisional_cluster_id`
+- `tests/unit/resolution_decision_store/adapters/__init__.py`
+- `tests/unit/resolution_decision_store/adapters/test_decision_repository.py` — 11 unit tests (all passing)
+
+**Architectural decisions confirmed:**
+- Single consolidated `MongoDecisionRepository` in `resolution_decision_store` — serves both Decision Store (unfiltered, `filters=None`) and Curation (filtered, `filters` provided) use cases via `find_with_filters`.
+- Curation module imports `MongoDecisionRepository` from `ers.resolution_decision_store.adapters.decision_repository` (not its own package).
+- Class renamed from `MongoDecisionCurationRepository` → `MongoDecisionRepository`; parent renamed from `MongoDecisionRepository` (commons) → `BaseMongoDecisionRepository` (commons).
+- `InvalidCursorError` is NOT raised explicitly in the adapter — it propagates from `decode_cursor()` in commons. Import removed from adapter.
+- Async cursor iteration in unit tests requires `cursor_mock.__aiter__ = lambda self: async_generator()` pattern.
+
+---
+
 ### 2026-03-23 — Implementation started
 
 **Task corrections applied (pre-implementation):**
@@ -513,6 +532,26 @@ At `tests/feature/decision_store/`:
 - Unit test mocking: `create_autospec(MongoDecisionStoreRepository)` (not motor mocks).
 - `PaginationCursor`/`DecisionPage` replaced by `CursorPage[Decision]` from commons (reuse existing).
 - `derive_provisional_cluster_id()` reuses `SHA256ContentHasher` from commons.
+
+---
+
+## Open Items / Notes for Implementer (Task 4)
+
+1. **Config access pattern**: Use `from ers import config` and access `config.DECISION_STORE_MAX_CANDIDATES`, `config.DECISION_STORE_DEFAULT_PAGE_SIZE`, `config.DECISION_STORE_MAX_PAGE_SIZE`. There is no standalone `DecisionStoreConfig` to inject — config is the global `ERSConfigResolver` singleton.
+
+2. **Constructor takes only repository**: `DecisionStoreService.__init__(self, repository: MongoDecisionRepository)` — no config parameter. Config is accessed directly via the module-level singleton.
+
+3. **`find_with_filters` is the pagination entry point**: `query_decisions_paginated` delegates to `self._repository.find_with_filters(filters=None, cursor_params=CursorParams(cursor=cursor, limit=effective_size))`. The `filters=None` triggers bulk sync mode (unfiltered, `updated_at ASC`).
+
+4. **`span_extractors.py` — `Decision` only**: `EntityMentionIdentifier` is already registered in `src/ers/commons/adapters/span_extractors.py`. Do NOT register it again here — only register the `Decision` extractor.
+
+5. **Do NOT touch `resolution_decision_store_service.py`**: This is a temporary ABC placeholder for future delta-sync work (EPIC-06). The new service lives in a separate file: `decision_store_service.py`.
+
+6. **Test class structure**: Group tests by method into test classes (`TestStoreDecision`, `TestGetDecisionByTriad`, `TestQueryDecisionsPaginated`, `TestPublicAPIFunctions`) — mirrors the `test_request_registry_service.py` pattern.
+
+7. **Mock repository with `create_autospec`**: Use `create_autospec(MongoDecisionRepository, instance=True)` — returns `AsyncMock` for async methods automatically. No need to manually set `return_value` for the fixture; do it per-test.
+
+8. **Plan file location**: Full task plan (tests + implementation) is at `.claude/memory/epics/ers-epic-04-resolution-decision-store/task44-decision-store-service.md`.
 
 ---
 
