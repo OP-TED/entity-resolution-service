@@ -188,6 +188,18 @@ class MongoDecisionRepository(
                 ) from exc
             raise RepositoryOperationError(str(exc)) from exc
         except OperationFailure as exc:
+            # Code 1 (InternalError) with "duplicate key" means upsert tried to insert
+            # but the _id already exists (filter didn't match due to staleness).
+            if exc.code == 1 and "duplicate key" in str(exc):
+                existing = await self._collection.find_one({"_id": triad_hash})
+                if existing:
+                    raise StaleOutcomeError(
+                        identifier.source_id,
+                        identifier.request_id,
+                        str(identifier.entity_type),
+                        stored_at=str(existing.get("updated_at")),
+                        attempted_at=str(updated_at),
+                    ) from exc
             raise RepositoryOperationError(str(exc)) from exc
         except ConnectionFailure as exc:
             raise RepositoryConnectionError(str(exc)) from exc
