@@ -179,3 +179,21 @@ async def test_find_with_filters_returns_next_cursor_when_more_results(repo, moc
 async def test_find_with_filters_raises_invalid_cursor_on_bad_input(repo, mock_collection):
     with pytest.raises(InvalidCursorError):
         await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor="not-valid-base64!!!", limit=10))
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_empty_collection_returns_empty_page(repo, mock_collection):
+    async def async_generator():
+        return
+        yield  # make it an async generator
+
+    cursor_mock = MagicMock()
+    cursor_mock.sort.return_value = cursor_mock
+    cursor_mock.limit.return_value = cursor_mock
+    cursor_mock.__aiter__ = lambda self: async_generator()
+
+    mock_collection.find = MagicMock(return_value=cursor_mock)
+
+    page = await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor=None, limit=3))
+    assert len(page.results) == 0
+    assert page.next_cursor is None

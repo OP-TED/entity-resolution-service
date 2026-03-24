@@ -120,6 +120,12 @@ class TestQueryDecisionsPaginated:
         _, kwargs = mock_repo.find_with_filters.call_args
         assert kwargs["cursor_params"].cursor == cursor
 
+    async def test_propagates_invalid_cursor_error(self, service, mock_repo):
+        from ers.commons.domain.exceptions import InvalidCursorError
+        mock_repo.find_with_filters.side_effect = InvalidCursorError()
+        with pytest.raises(InvalidCursorError):
+            await service.query_decisions_paginated(cursor="bad-cursor-value")
+
 
 class TestPublicAPIFunctions:
     async def test_store_decision_delegates_to_service(self, service, mock_repo):

@@ -299,8 +299,8 @@ All error types defined in `domain/errors.py`. Each inherits from a base `Decisi
 - [x] Task 1: Define Domain Errors and Configuration (domain/) (2026-03-23)
 - [x] Task 2: Lift cursor helpers to MongoDecisionRepository (commons refactor) (2026-03-24)
 - [x] Task 3: Implement MongoDB Adapter (adapters/) (2026-03-24)
-- [ ] Task 4: Implement Service Layer (services/)
-- [ ] Task 5: Unit Tests (tests/unit/)
+- [x] Task 4: Implement Service Layer (services/) (2026-03-24)
+- [x] Task 5: Unit Tests (tests/unit/) (2026-03-24)
 - [ ] Task 6: Integration Tests (tests/integration/)
 - [ ] Task 7: Gherkin Features (tests/feature/)
 
