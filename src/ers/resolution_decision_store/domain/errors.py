@@ -27,10 +27,6 @@ class DecisionNotFoundError(DecisionStoreError):
     """Raised when a decision triad cannot be found when one is required."""
 
 
-class InvalidCursorError(DecisionStoreError):
-    """Raised when an opaque pagination cursor cannot be decoded."""
-
-
 class RepositoryConnectionError(DecisionStoreError):
     """Raised when the MongoDB connection fails."""
 

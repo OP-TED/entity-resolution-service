@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
 
+from ers.commons.domain.data_transfer_objects import CursorParams
+from ers.commons.domain.exceptions import InvalidCursorError
 from ers.resolution_decision_store.adapters.decision_repository import (
     MongoDecisionCurationRepository,
 )
@@ -135,12 +137,19 @@ async def test_find_by_triad_queries_by_triad_hash(repo, mock_collection):
 async def test_find_with_filters_first_page_no_cursor(repo, mock_collection):
     now = datetime.now(timezone.utc)
     docs = [make_doc(now + timedelta(seconds=i), triad_hash=f"hash{i}") for i in range(3)]
+
+    async def async_generator():
+        for doc in docs:
+            yield doc
+
     cursor_mock = MagicMock()
     cursor_mock.sort.return_value = cursor_mock
     cursor_mock.limit.return_value = cursor_mock
-    cursor_mock.to_list = AsyncMock(return_value=docs)
+    cursor_mock.__aiter__ = lambda self: async_generator()
+
     mock_collection.find = MagicMock(return_value=cursor_mock)
-    page = await repo.find_with_filters(cursor=None, page_size=3)
+
+    page = await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor=None, limit=3))
     assert len(page.results) == 3
     assert page.next_cursor is None
 
@@ -150,18 +159,23 @@ async def test_find_with_filters_returns_next_cursor_when_more_results(repo, moc
     now = datetime.now(timezone.utc)
     # Return page_size+1 docs to signal more pages
     docs = [make_doc(now + timedelta(seconds=i), triad_hash=f"hash{i}") for i in range(4)]
+
+    async def async_generator():
+        for doc in docs:
+            yield doc
+
     cursor_mock = MagicMock()
     cursor_mock.sort.return_value = cursor_mock
     cursor_mock.limit.return_value = cursor_mock
-    cursor_mock.to_list = AsyncMock(return_value=docs)
+    cursor_mock.__aiter__ = lambda self: async_generator()
+
     mock_collection.find = MagicMock(return_value=cursor_mock)
-    page = await repo.find_with_filters(cursor=None, page_size=3)
+    page = await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor=None, limit=3))
     assert len(page.results) == 3
     assert page.next_cursor is not None
 
 
 @pytest.mark.asyncio
 async def test_find_with_filters_raises_invalid_cursor_on_bad_input(repo, mock_collection):
-    from ers.resolution_decision_store.domain.errors import InvalidCursorError
     with pytest.raises(InvalidCursorError):
-        await repo.find_with_filters(cursor="not-valid-base64!!!", page_size=10)
+        await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor="not-valid-base64!!!", limit=10))

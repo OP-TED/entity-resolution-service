@@ -13,7 +13,7 @@ from ers.commons.adapters.decision_repository import (
 )
 from ers.commons.domain.cursor import decode_cursor, encode_cursor
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
-from ers.commons.domain.exceptions import InvalidCursorError as CommonInvalidCursorError
+from ers.commons.domain.exceptions import InvalidCursorError
 
 from ers.curation.domain.data_transfer_objects import (
     DecisionFilters,
@@ -24,7 +24,6 @@ from ers.resolution_decision_store.adapters.provisional_id import (
     derive_provisional_cluster_id,
 )
 from ers.resolution_decision_store.domain.errors import (
-    InvalidCursorError,
     RepositoryConnectionError,
     RepositoryOperationError,
     StaleOutcomeError,

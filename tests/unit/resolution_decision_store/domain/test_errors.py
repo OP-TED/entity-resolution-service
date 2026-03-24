@@ -2,7 +2,6 @@ from ers.resolution_decision_store.domain.errors import (
     DecisionStoreError,
     StaleOutcomeError,
     DecisionNotFoundError,
-    InvalidCursorError,
     RepositoryConnectionError,
     RepositoryOperationError,
 )
@@ -13,7 +12,6 @@ def test_all_errors_inherit_from_base():
     for cls in (
         StaleOutcomeError,
         DecisionNotFoundError,
-        InvalidCursorError,
         RepositoryConnectionError,
         RepositoryOperationError,
     ):
