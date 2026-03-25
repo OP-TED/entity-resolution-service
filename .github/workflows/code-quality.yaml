@@ -13,7 +13,7 @@ name: Quality Check
 
 on:
   push:
-    branches: [develop, feature/ERS1-106/ci-setup]
+    branches: [develop]
     paths-ignore:
       - "docs/**"
       - "*.md"
@@ -21,7 +21,7 @@ on:
       - ".claude/**"
       - ".mcp.json"
   pull_request:
-    branches: [develop, feature/ERS1-106/ci-setup]
+    branches: [develop]
     paths-ignore:
       - "docs/**"
       - "*.md"
@@ -31,7 +31,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   quality:
@@ -62,7 +61,6 @@ jobs:
 
     env:
       MONGO_URI: mongodb://ci_user:ci_password@localhost:27017
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       # Checkout
@@ -131,29 +129,6 @@ jobs:
         id: cleancode
         run: make clean-code
         continue-on-error: true
-
-      # PR quality summary
-      - name: Build quality summary
-        if: always() && github.event_name == 'pull_request'
-        run: |
-          {
-            echo "## Quality Check Summary"
-            echo ""
-            echo "| Check | Status |"
-            echo "|-------|--------|"
-            echo "| Lint (Ruff) | ${{ steps.lint.outcome == 'success' && 'Passed' || 'Failed' }} |"
-            echo "| Type check (mypy) | ${{ steps.typecheck.outcome == 'success' && 'Passed' || 'Failed' }} |"
-            echo "| Architecture (import-linter) | ${{ steps.architecture.outcome == 'success' && 'Passed' || 'Failed' }} |"
-            echo "| Tests + Coverage | ${{ steps.test.outcome == 'success' && 'Passed' || 'Failed' }} |"
-            echo "| Clean code (Xenon) | ${{ steps.cleancode.outcome == 'success' && 'Passed' || 'Failed' }} |"
-          } > quality-summary.txt
-
-      - name: Post quality summary to PR
-        if: always() && github.event_name == 'pull_request'
-        uses: thollander/actions-comment-pull-request@v3
-        with:
-          file-path: quality-summary.txt
-          comment-tag: quality-check
 
       # Fail the job if any check failed
       - name: Evaluate results
