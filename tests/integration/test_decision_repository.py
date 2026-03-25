@@ -6,7 +6,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.commons.domain.data_transfer_objects import CursorParams
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
-from ers.curation.domain.data_transfer_objects import (
+from ers.commons.domain.data_transfer_objects import (
     DecisionFilters,
     DecisionOrdering,
 )

@@ -19,4 +19,4 @@ Feature: Paginated Query of Decisions
   Scenario: page_size is capped at system limit
     Given a valid decision store
     When I query with page_size 9999
-    Then the effective page_size does not exceed 50
+    Then the effective page_size does not exceed the system maximum page size

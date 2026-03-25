@@ -14,7 +14,7 @@ from ers.commons.adapters.decision_repository import (
 from ers.commons.domain.cursor import decode_cursor, encode_cursor
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 
-from ers.curation.domain.data_transfer_objects import (
+from ers.commons.domain.data_transfer_objects import (
     DecisionFilters,
     DecisionOrdering,
 )
@@ -27,6 +27,15 @@ from ers.resolution_decision_store.domain.errors import (
     RepositoryOperationError,
     StaleOutcomeError,
 )
+
+# MongoDB document field paths
+_FIELD_ENTITY_TYPE = "about_entity_mention.entity_type"
+_FIELD_CONFIDENCE = "current_placement.confidence_score"
+_FIELD_SIMILARITY = "current_placement.similarity_score"
+_FIELD_CLUSTER_ID = "current_placement.cluster_id"
+_FIELD_ABOUT_ENTITY_MENTION = "about_entity_mention"
+_FIELD_CREATED_AT = "created_at"
+_FIELD_UPDATED_AT = "updated_at"
 
 
 class DecisionRepository(BaseDecisionRepository):
@@ -76,37 +85,29 @@ class MongoDecisionRepository(
     """MongoDB repository for decision projections with curation-specific queries."""
 
     _SORT_FIELD_MAP: dict[DecisionOrdering, tuple[str, bool]] = {
-        DecisionOrdering.CONFIDENCE_ASC: ("current_placement.confidence_score", True),
-        DecisionOrdering.CONFIDENCE_DESC: ("current_placement.confidence_score", False),
-        DecisionOrdering.CREATED_AT_ASC: ("created_at", True),
-        DecisionOrdering.CREATED_AT_DESC: ("created_at", False),
-        DecisionOrdering.UPDATED_AT_ASC: ("updated_at", True),
-        DecisionOrdering.UPDATED_AT_DESC: ("updated_at", False),
+        DecisionOrdering.CONFIDENCE_ASC: (_FIELD_CONFIDENCE, True),
+        DecisionOrdering.CONFIDENCE_DESC: (_FIELD_CONFIDENCE, False),
+        DecisionOrdering.CREATED_AT_ASC: (_FIELD_CREATED_AT, True),
+        DecisionOrdering.CREATED_AT_DESC: (_FIELD_CREATED_AT, False),
+        DecisionOrdering.UPDATED_AT_ASC: (_FIELD_UPDATED_AT, True),
+        DecisionOrdering.UPDATED_AT_DESC: (_FIELD_UPDATED_AT, False),
     }
 
     def _build_query(self, filters: DecisionFilters) -> dict[str, Any]:
         query: dict[str, Any] = {}
 
         if filters.entity_type is not None:
-            query["about_entity_mention.entity_type"] = filters.entity_type
+            query[_FIELD_ENTITY_TYPE] = filters.entity_type
 
         placement_range: dict[str, dict[str, float]] = {}
         if filters.confidence_min is not None:
-            placement_range.setdefault("current_placement.confidence_score", {})["$gte"] = (
-                filters.confidence_min
-            )
+            placement_range.setdefault(_FIELD_CONFIDENCE, {})["$gte"] = filters.confidence_min
         if filters.confidence_max is not None:
-            placement_range.setdefault("current_placement.confidence_score", {})["$lte"] = (
-                filters.confidence_max
-            )
+            placement_range.setdefault(_FIELD_CONFIDENCE, {})["$lte"] = filters.confidence_max
         if filters.similarity_min is not None:
-            placement_range.setdefault("current_placement.similarity_score", {})["$gte"] = (
-                filters.similarity_min
-            )
+            placement_range.setdefault(_FIELD_SIMILARITY, {})["$gte"] = filters.similarity_min
         if filters.similarity_max is not None:
-            placement_range.setdefault("current_placement.similarity_score", {})["$lte"] = (
-                filters.similarity_max
-            )
+            placement_range.setdefault(_FIELD_SIMILARITY, {})["$lte"] = filters.similarity_max
         query.update(placement_range)
 
         return query
@@ -114,7 +115,7 @@ class MongoDecisionRepository(
     def _get_sort_info(self, ordering: DecisionOrdering | None) -> tuple[str, bool]:
         """Return (mongo_field_name, is_ascending) for the given ordering."""
         if ordering is None:
-            return "created_at", False
+            return _FIELD_CREATED_AT, False
         return self._SORT_FIELD_MAP[ordering]
 
     def _build_sort(self, ordering: DecisionOrdering | None) -> list[tuple[str, int]]:
@@ -123,11 +124,11 @@ class MongoDecisionRepository(
         return [(field, direction), ("_id", direction)]
 
     def _extract_sort_value(self, decision: Decision, sort_field: str) -> float | datetime | None:
-        if sort_field == "current_placement.confidence_score":
+        if sort_field == _FIELD_CONFIDENCE:
             return decision.current_placement.confidence_score
-        if sort_field == "created_at":
+        if sort_field == _FIELD_CREATED_AT:
             return decision.created_at
-        if sort_field == "updated_at":
+        if sort_field == _FIELD_UPDATED_AT:
             return decision.updated_at
         return None
 
@@ -234,48 +235,6 @@ class MongoDecisionRepository(
         triad_hash = derive_provisional_cluster_id(identifier)
         return await self.find_by_id(triad_hash)
 
-    async def find_with_filters_old(
-        self,
-        filters: DecisionFilters,
-        cursor_params: CursorParams,
-        mention_identifiers: list[EntityMentionIdentifier] | None = None,
-    ) -> CursorPage[Decision]:
-        query = self._build_query(filters)
-
-        if mention_identifiers is not None:
-            id_docs = [
-                {
-                    "source_id": mi.source_id,
-                    "request_id": mi.request_id,
-                    "entity_type": mi.entity_type,
-                }
-                for mi in mention_identifiers
-            ]
-            query["about_entity_mention"] = {"$in": id_docs}
-
-        sort_field, ascending = self._get_sort_info(filters.ordering)
-        sort = self._build_sort(filters.ordering)
-
-        if cursor_params.cursor is not None:
-            raw_value, last_id = decode_cursor(cursor_params.cursor)
-            sort_value = self._parse_cursor_sort_value(raw_value, sort_field)
-            cursor_condition = self._build_cursor_condition(
-                sort_field, sort_value, last_id, ascending
-            )
-            query = {"$and": [query, cursor_condition]}
-
-        fetch_limit = cursor_params.limit + 1
-        cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
-        results = [self._from_document(doc) async for doc in cursor]
-
-        next_cursor = None
-        if len(results) > cursor_params.limit:
-            results = results[: cursor_params.limit]
-            last = results[-1]
-            next_cursor = encode_cursor(self._extract_sort_value(last, sort_field), last.id)
-
-        return CursorPage(results=results, next_cursor=next_cursor)
-
     async def find_with_filters(
         self,
         filters: DecisionFilters | None = None,
@@ -305,9 +264,9 @@ class MongoDecisionRepository(
         # Unfiltered bulk sync mode (Decision Store)
         if filters is None:
             query: dict[str, Any] = {}
-            sort_field = "updated_at"
+            sort_field = _FIELD_UPDATED_AT
             ascending = True
-            sort = [("updated_at", 1), ("_id", 1)]
+            sort = [(_FIELD_UPDATED_AT, 1), ("_id", 1)]
         else:
             # Filtered curation mode
             query = self._build_query(filters)
@@ -321,7 +280,7 @@ class MongoDecisionRepository(
                     }
                     for mi in mention_identifiers
                 ]
-                query["about_entity_mention"] = {"$in": id_docs}
+                query[_FIELD_ABOUT_ENTITY_MENTION] = {"$in": id_docs}
 
             sort_field, ascending = self._get_sort_info(filters.ordering)
             sort = self._build_sort(filters.ordering)
@@ -363,12 +322,12 @@ class MongoDecisionRepository(
         limit: int,
     ) -> list[EntityMentionIdentifier]:
         cursor = self._collection.find(
-            {"current_placement.cluster_id": cluster_id},
-            projection={"about_entity_mention": 1, "_id": 0},
+            {_FIELD_CLUSTER_ID: cluster_id},
+            projection={_FIELD_ABOUT_ENTITY_MENTION: 1, "_id": 0},
         )
         cursor = cursor.limit(limit)
         return [
-            EntityMentionIdentifier.model_validate(doc["about_entity_mention"])
+            EntityMentionIdentifier.model_validate(doc[_FIELD_ABOUT_ENTITY_MENTION])
             async for doc in cursor
         ]
 
@@ -397,7 +356,7 @@ class MongoDecisionRepository(
         on ``(updated_at ASC, _id ASC)`` to support cursor pagination performance.
         """
         await self._collection.create_index(
-            [("updated_at", pymongo.ASCENDING), ("_id", pymongo.ASCENDING)],
+            [(_FIELD_UPDATED_AT, pymongo.ASCENDING), ("_id", pymongo.ASCENDING)],
             name="idx_decision_store_updated_at_id",
             background=True,
         )

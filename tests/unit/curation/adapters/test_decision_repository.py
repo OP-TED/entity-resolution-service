@@ -1,4 +1,4 @@
-"""Regression tests for cursor-seek helpers on MongoDecisionCurationRepository.
+"""Regression tests for cursor-seek helpers on MongoDecisionRepository.
 
 These tests exist to guarantee that lifting _build_cursor_condition and
 _parse_cursor_sort_value to the MongoDecisionRepository base class does not

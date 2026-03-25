@@ -124,11 +124,21 @@ class RedisConfig:
 class DecisionStoreConfig:
     @env_property(default_value="5")
     def DECISION_STORE_MAX_CANDIDATES(self, config_value: str) -> int:
-        return int(config_value)
+        value = int(config_value)
+        if value < 1:
+            raise ValueError(f"DECISION_STORE_MAX_CANDIDATES must be >= 1, got {value}")
+        return value
 
     @env_property(default_value="250")
     def DECISION_STORE_DEFAULT_PAGE_SIZE(self, config_value: str) -> int:
-        return int(config_value)
+        value = int(config_value)
+        max_size = self.DECISION_STORE_MAX_PAGE_SIZE
+        if value > max_size:
+            raise ValueError(
+                f"DECISION_STORE_DEFAULT_PAGE_SIZE ({value}) must be <= "
+                f"DECISION_STORE_MAX_PAGE_SIZE ({max_size})"
+            )
+        return value
 
     @env_property(default_value="1000")
     def DECISION_STORE_MAX_PAGE_SIZE(self, config_value: str) -> int:

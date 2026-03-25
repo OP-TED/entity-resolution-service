@@ -1,4 +1,4 @@
-"""Unit tests for MongoDecisionCurationRepository (mocked MongoDB collection)."""
+"""Unit tests for MongoDecisionRepository (mocked MongoDB collection)."""
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock
 

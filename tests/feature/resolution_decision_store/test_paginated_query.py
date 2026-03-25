@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
 from pytest_bdd import given, scenario, then, when
 
+from ers import config
 from ers.commons.domain.cursor import encode_cursor
 from ers.commons.domain.data_transfer_objects import CursorPage
 from ers.resolution_decision_store.services.decision_store_service import query_decisions_paginated
@@ -199,8 +200,8 @@ def step_empty_page(ctx):
     assert ctx["result"].next_cursor is None
 
 
-@then("the effective page_size does not exceed 50")
+@then("the effective page_size does not exceed the system maximum page size")
 def step_page_size_capped(ctx):
     assert ctx["raised_exception"] is None, ctx["raised_exception"]
     effective_limit = ctx["call_args"].kwargs["cursor_params"].limit
-    assert effective_limit <= 50
+    assert effective_limit <= config.DECISION_STORE_MAX_PAGE_SIZE

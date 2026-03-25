@@ -2,6 +2,17 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+
+class DecisionOrdering(StrEnum):
+    """Allowed ordering options for decision listing."""
+
+    CONFIDENCE_ASC = "confidence_score"
+    CONFIDENCE_DESC = "-confidence_score"
+    CREATED_AT_ASC = "created_at"
+    CREATED_AT_DESC = "-created_at"
+    UPDATED_AT_ASC = "updated_at"
+    UPDATED_AT_DESC = "-updated_at"
+
 MAX_PER_PAGE = 50
 DEFAULT_PER_PAGE = 20
 
@@ -10,6 +21,18 @@ class FrozenDTO(BaseModel):
     """Base model for all application-layer DTOs."""
 
     model_config = ConfigDict(frozen=True)
+
+
+class DecisionFilters(FrozenDTO):
+    """Filtering criteria for decision queries."""
+
+    entity_type: str | None = None
+    confidence_min: float | None = None
+    confidence_max: float | None = None
+    similarity_min: float | None = None
+    similarity_max: float | None = None
+    search: str | None = None
+    ordering: DecisionOrdering | None = None
 
 
 class ERSRequest(FrozenDTO):
