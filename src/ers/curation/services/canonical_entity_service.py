@@ -60,6 +60,7 @@ class CanonicalEntityService:
 
         current_id = decision.current_placement.cluster_id
         alternatives = [c for c in decision.candidates if c.cluster_id != current_id]
+        alternatives.sort(key=lambda c: c.confidence_score, reverse=True)
 
         total = len(alternatives)
         start = (pagination.page - 1) * pagination.per_page
