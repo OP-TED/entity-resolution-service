@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from ers.curation.entrypoints.api.dependencies import get_auth_service
+from ers.curation.entrypoints.api.v1.schemas import ErrorResponse
 from ers.users.domain.data_transfer_objects import (
     LoginRequest,
     RefreshRequest,
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     "/register",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
+    responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
 )
 async def register(
     body: RegisterRequest,
@@ -28,7 +30,11 @@ async def register(
     return await service.register(body)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}},
+)
 async def login(
     body: LoginRequest,
     service: Annotated[AuthService, Depends(get_auth_service)],
@@ -37,7 +43,11 @@ async def login(
     return await service.login(body)
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}},
+)
 async def refresh(
     body: RefreshRequest,
     service: Annotated[AuthService, Depends(get_auth_service)],

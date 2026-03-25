@@ -17,7 +17,7 @@ ICON_WARNING = [!]
 ICON_PROGRESS = [-]
 
 # Coverage flags — appended only in coverage-aware targets
-COV_FLAGS = --cov=src --cov-report=term-missing --cov-fail-under=80
+COV_FLAGS = --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=80
 
 #-----------------------------------------------------------------------------
 # Dev commands
@@ -140,7 +140,7 @@ check-architecture: ## Check architecture constraints with import-linter
 
 test: ## Run all tests (with coverage)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running all tests$(END_BUILD_PRINT)"
-	@ poetry run pytest $(TEST_PATH) $(COV_FLAGS)
+	@ poetry run pytest $(TEST_PATH) $(COV_FLAGS) --junitxml=test-results.xml
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) All tests passed$(END_BUILD_PRINT)"
 
 test-unit: ## Run unit tests only
@@ -253,7 +253,7 @@ clean: ## Remove build artifacts and caches
 	@ rm -rf .mypy_cache
 	@ rm -rf .ruff_cache
 	@ rm -rf .tox
-	@ rm -rf .coverage htmlcov
+	@ rm -rf .coverage htmlcov coverage.xml test-results.xml
 	@ rm -rf *.egg-info
 	@ rm -rf reports
 	@ poetry run ruff clean 2>/dev/null || true

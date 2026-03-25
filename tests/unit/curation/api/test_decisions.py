@@ -111,7 +111,7 @@ class TestListDecisions:
     ) -> None:
         response = await client.get(BASE_URL, params={"ordering": "invalid_field"})
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
 
 class TestAcceptDecision:
@@ -325,7 +325,7 @@ class TestBulkAcceptDecisions:
             json={"decision_ids": []},
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
 
 class TestBulkRejectDecisions:
@@ -361,4 +361,4 @@ class TestBulkRejectDecisions:
             json={"decision_ids": []},
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400

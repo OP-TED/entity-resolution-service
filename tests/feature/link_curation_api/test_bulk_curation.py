@@ -307,4 +307,4 @@ def n_results_with_status_plural(response: Any, count: int, status: str) -> None
 
 @then("the request is rejected as invalid")
 def request_rejected(response: Any) -> None:
-    assert response.status_code == 422
+    assert response.status_code == 400

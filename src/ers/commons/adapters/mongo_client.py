@@ -30,9 +30,9 @@ class MongoClientManager:
         """Create required indexes on the database collections."""
         db = self.get_database()
 
-        await db["entity_mentions"].create_index(
+        await db["resolution_requests"].create_index(
             [("content", "text"), ("parsed_representation", "text")],
-            name="entity_mentions_text",
+            name="resolution_requests_text",
         )
 
         await db["decisions"].create_index(

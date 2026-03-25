@@ -1,11 +1,16 @@
-"""MongoDB repository implementations for Request Registry records."""
+"""Repository abstractions and MongoDB implementations for Request Registry records."""
 
+from abc import abstractmethod
 from typing import Any
 
 from erspec.models.core import EntityMentionIdentifier
 from pymongo.errors import ConnectionFailure, DuplicateKeyError, PyMongoError
 
-from ers.commons.adapters.repository import BaseMongoRepository
+from ers.commons.adapters.repository import (
+    AsyncReadRepository,
+    AsyncWriteRepository,
+    BaseMongoRepository,
+)
 from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
 from ers.request_registry.services.exceptions import (
     DuplicateTriadError,
@@ -14,7 +19,33 @@ from ers.request_registry.services.exceptions import (
 )
 
 
-class MongoResolutionRequestRepository(BaseMongoRepository[ResolutionRequestRecord, str]):
+class ResolutionRequestRepository(
+    AsyncReadRepository[ResolutionRequestRecord, str],
+    AsyncWriteRepository[ResolutionRequestRecord, str],
+):
+    """Abstract repository for resolution request records."""
+
+    @abstractmethod
+    async def store(self, record: ResolutionRequestRecord) -> ResolutionRequestRecord:
+        """Insert-only store for a new resolution request record."""
+
+    @abstractmethod
+    async def find_by_triad(
+        self, identifier: EntityMentionIdentifier
+    ) -> ResolutionRequestRecord | None:
+        """Find a record by its identifier triad."""
+
+    @abstractmethod
+    async def find_by_source_id(
+        self, source_id: str, limit: int = 100, offset: int = 0
+    ) -> list[ResolutionRequestRecord]:
+        """Return a paginated list of records for a given source_id."""
+
+
+class MongoResolutionRequestRepository(
+    BaseMongoRepository[ResolutionRequestRecord, str],
+    ResolutionRequestRepository,
+):
     """MongoDB-backed repository for ResolutionRequestRecord.
 
     Extends BaseMongoRepository with a computed composite _id derived from the
@@ -64,9 +95,7 @@ class MongoResolutionRequestRepository(BaseMongoRepository[ResolutionRequestReco
     ) -> list[ResolutionRequestRecord]:
         """Return a paginated list of records for a given source_id."""
         cursor = (
-            self._collection.find({"identifiedBy.source_id": source_id})
-            .skip(offset)
-            .limit(limit)
+            self._collection.find({"identifiedBy.source_id": source_id}).skip(offset).limit(limit)
         )
         return [self._from_document(doc) async for doc in cursor]
 

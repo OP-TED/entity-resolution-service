@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from ers.commons.domain.exceptions import DomainError, InvalidCursorError
@@ -7,98 +8,53 @@ from ers.curation.domain.exceptions import (
     AlreadyCuratedError,
     InvalidClusterError,
 )
-from ers.users.domain.exceptions import AuthenticationError, AuthorizationError, LastAdminError
+from ers.users.domain.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    LastAdminError,
+)
+
+
+def _make_handler(status_code: int):
+    async def handler(request: Request, exc: Exception) -> JSONResponse:
+        return JSONResponse(
+            status_code=status_code,
+            content={"detail": getattr(exc, "message", str(exc))},
+        )
+
+    return handler
 
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register domain and application exception handlers."""
 
-    @app.exception_handler(NotFoundError)
-    async def not_found_handler(
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(
         request: Request,
-        exc: NotFoundError,
+        exc: RequestValidationError,
     ) -> JSONResponse:
-        return JSONResponse(
-            status_code=404,
-            content={"detail": exc.message},
-        )
+        details = []
+        for err in exc.errors():
+            loc = " -> ".join(str(part) for part in err["loc"] if part != "body")
+            msg = err["msg"]
+            details.append(f"{loc}: {msg}" if loc else msg)
 
-    @app.exception_handler(AuthenticationError)
-    async def authentication_error_handler(
-        request: Request,
-        exc: AuthenticationError,
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=401,
-            content={"detail": exc.message},
-        )
-
-    @app.exception_handler(AuthorizationError)
-    async def authorization_error_handler(
-        request: Request,
-        exc: AuthorizationError,
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=403,
-            content={"detail": exc.message},
-        )
-
-    @app.exception_handler(AlreadyCuratedError)
-    async def already_curated_handler(
-        request: Request,
-        exc: AlreadyCuratedError,
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=409,
-            content={"detail": exc.message},
-        )
-
-    @app.exception_handler(InvalidClusterError)
-    async def invalid_cluster_handler(
-        request: Request,
-        exc: InvalidClusterError,
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=409,
-            content={"detail": exc.message},
-        )
-
-    @app.exception_handler(InvalidCursorError)
-    async def invalid_cursor_handler(
-        request: Request,
-        exc: InvalidCursorError,
-    ) -> JSONResponse:
         return JSONResponse(
             status_code=400,
-            content={"detail": exc.message},
+            content={"detail": "; ".join(details)},
         )
 
-    @app.exception_handler(LastAdminError)
-    async def last_admin_handler(
-        request: Request,
-        exc: LastAdminError,
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=409,
-            content={"detail": exc.message},
-        )
+    handlers = {
+        NotFoundError: 404,
+        AuthenticationError: 401,
+        AuthorizationError: 403,
+        AlreadyCuratedError: 409,
+        InvalidClusterError: 409,
+        InvalidCursorError: 400,
+        LastAdminError: 409,
+        ApplicationError: 400,
+        DomainError: 400,
+    }
 
-    @app.exception_handler(ApplicationError)
-    async def application_error_handler(
-        request: Request,
-        exc: ApplicationError,
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=400,
-            content={"detail": exc.message},
-        )
-
-    @app.exception_handler(DomainError)
-    async def domain_error_handler(
-        request: Request,
-        exc: DomainError,
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=400,
-            content={"detail": exc.message},
-        )
+    for exc_class, status_code in handlers.items():
+        app.add_exception_handler(exc_class, _make_handler(status_code))

@@ -52,7 +52,7 @@ class TestRegisterEndpoint:
 
         assert response.status_code == 401
 
-    async def test_register_short_password_returns_422(
+    async def test_register_short_password_returns_400(
         self,
         client: AsyncClient,
     ) -> None:
@@ -61,9 +61,9 @@ class TestRegisterEndpoint:
             json={"email": "x@example.com", "password": "short"},
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
-    async def test_register_invalid_email_returns_422(
+    async def test_register_invalid_email_returns_400(
         self,
         client: AsyncClient,
     ) -> None:
@@ -72,7 +72,7 @@ class TestRegisterEndpoint:
             json={"email": "not-an-email", "password": "securepassword"},
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
 
 
 class TestLoginEndpoint:
