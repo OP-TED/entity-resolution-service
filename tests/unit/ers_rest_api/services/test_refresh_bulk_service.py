@@ -9,8 +9,9 @@ from erspec.models.core import (
     LookupState,
 )
 
-from ers.ers_rest_api.domain.data_transfer_objects import DeltaPage, RefreshBulkRequest
+from ers.ers_rest_api.domain.lookup import RefreshBulkRequest
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
+from ers.resolution_decision_store.domain.data_transfer_objects import DeltaPage
 from ers.resolution_decision_store.services.resolution_decision_store_service import (
     ResolutionDecisionStoreServiceABC,
 )
@@ -75,8 +76,8 @@ class TestRefreshBulkService:
         )
 
         assert len(result.deltas) == 2
-        assert result.deltas[0].canonical_entity_id == "cluster-010"
-        assert result.deltas[1].request_id == "req-002"
+        assert result.deltas[0].cluster_reference.cluster_id == "cluster-010"
+        assert result.deltas[1].identified_by.request_id == "req-002"
         assert result.has_more is False
         decision_store.advance_snapshot.assert_called_once()
 

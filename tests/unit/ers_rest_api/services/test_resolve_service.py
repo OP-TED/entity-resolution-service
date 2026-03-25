@@ -1,24 +1,28 @@
 from unittest.mock import AsyncMock, create_autospec
 
 import pytest
+from erspec.models.core import EntityMention, EntityMentionIdentifier
 
-from ers.ers_rest_api.domain.data_transfer_objects import (
-    EntityMentionRequest,
-    ResolutionOutcome,
-    ResolutionResult,
+from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+from ers.ers_rest_api.domain.resolution import (
+    EntityMentionResolutionRequest,
+    EntityMentionResolutionResult,
 )
 from ers.ers_rest_api.services.resolve_service import ResolveService
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
     ResolutionCoordinatorServiceABC,
 )
 
-REQUEST = EntityMentionRequest(
-    source_id="SYSTEM_A",
-    request_id="req-001",
-    entity_type="ORGANISATION",
-    content='{"name": "Acme Corp"}',
-    content_type="application/ld+json",
-    context="notice-2024-01",
+REQUEST = EntityMentionResolutionRequest(
+    mention=EntityMention(
+        identifiedBy=EntityMentionIdentifier(
+            source_id="SYSTEM_A",
+            request_id="req-001",
+            entity_type="ORGANISATION",
+        ),
+        content='{"name": "Acme Corp"}',
+        content_type="application/ld+json",
+    ),
 )
 
 
@@ -38,27 +42,35 @@ class TestResolveService:
         service: ResolveService,
         coordinator: AsyncMock,
     ) -> None:
-        coordinator.resolve.return_value = ResolutionResult(
+        coordinator.resolve.return_value = EntityMentionResolutionResult(
+            identified_by=EntityMentionIdentifier(
+                source_id="SYSTEM_A",
+                request_id="req-001",
+                entity_type="ORGANISATION",
+            ),
             canonical_entity_id="cluster-010",
-            outcome=ResolutionOutcome.CANONICAL,
-            request_id="req-001",
+            status=ResolutionOutcome.CANONICAL,
         )
 
         result = await service.handle_resolve(REQUEST)
 
         assert result.canonical_entity_id == "cluster-010"
         assert result.status == ResolutionOutcome.CANONICAL
-        assert result.request_id == "req-001"
+        assert result.identified_by.request_id == "req-001"
 
     async def test_provisional_resolution_maps_correctly(
         self,
         service: ResolveService,
         coordinator: AsyncMock,
     ) -> None:
-        coordinator.resolve.return_value = ResolutionResult(
+        coordinator.resolve.return_value = EntityMentionResolutionResult(
+            identified_by=EntityMentionIdentifier(
+                source_id="SYSTEM_A",
+                request_id="req-001",
+                entity_type="ORGANISATION",
+            ),
             canonical_entity_id="prov-singleton-001",
-            outcome=ResolutionOutcome.PROVISIONAL,
-            request_id="req-001",
+            status=ResolutionOutcome.PROVISIONAL,
         )
 
         result = await service.handle_resolve(REQUEST)
@@ -71,10 +83,14 @@ class TestResolveService:
         service: ResolveService,
         coordinator: AsyncMock,
     ) -> None:
-        coordinator.resolve.return_value = ResolutionResult(
+        coordinator.resolve.return_value = EntityMentionResolutionResult(
+            identified_by=EntityMentionIdentifier(
+                source_id="SYSTEM_A",
+                request_id="req-001",
+                entity_type="ORGANISATION",
+            ),
             canonical_entity_id="cluster-010",
-            outcome=ResolutionOutcome.CANONICAL,
-            request_id="req-001",
+            status=ResolutionOutcome.CANONICAL,
         )
 
         await service.handle_resolve(REQUEST)

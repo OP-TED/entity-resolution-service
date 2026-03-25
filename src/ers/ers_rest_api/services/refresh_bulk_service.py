@@ -1,7 +1,9 @@
 from datetime import UTC, datetime
 
-from ers.ers_rest_api.domain.data_transfer_objects import (
-    DeltaAssignment,
+from erspec.models.core import EntityMentionIdentifier
+
+from ers.ers_rest_api.domain.lookup import (
+    LookupResponse,
     RefreshBulkRequest,
     RefreshBulkResponse,
 )
@@ -29,12 +31,14 @@ class RefreshBulkService:
         )
 
         deltas = [
-            DeltaAssignment(
-                source_id=d.about_entity_mention.source_id,
-                request_id=d.about_entity_mention.request_id,
-                entity_type=d.about_entity_mention.entity_type,
-                canonical_entity_id=d.current_placement.cluster_id,
-                updated_at=d.updated_at or d.created_at,
+            LookupResponse(
+                identified_by=EntityMentionIdentifier(
+                    source_id=d.about_entity_mention.source_id,
+                    request_id=d.about_entity_mention.request_id,
+                    entity_type=d.about_entity_mention.entity_type,
+                ),
+                cluster_reference=d.current_placement,
+                last_updated=d.updated_at or d.created_at,
             )
             for d in page.deltas
         ]
