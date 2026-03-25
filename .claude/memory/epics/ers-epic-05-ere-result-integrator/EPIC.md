@@ -60,7 +60,7 @@ The **ERE Result Integrator** is a service that:
 
 | Component | Choice | Why |
 |-----------|--------|-----|
-| Async Adapter | Redis Streams + Pub/Sub | Supports at-least-once; message retention; simple ordering |
+| Async Adapter | Redis list queue (LPUSH/BRPOP) | Matches existing `RedisEREClient`; at-least-once via blocking pop |
 | Correlation | Triad (sourceId, requestId, entityType) | Stable, user-provided, matches Request Registry key |
 | Deduplication Marker | Timestamp (ISO 8601) | Simple, ERE-provided, no custom versioning needed |
 | Stale Detection | `if timestamp ≤ stored: reject` | Deterministic, stateless rule |
@@ -95,15 +95,15 @@ The **ERE Result Integrator** is a service that:
 
 | Model | Purpose |
 |-------|---------|
-| `OutcomeMessage` | Received ERE response envelope (ere_request_id, timestamp, entity_mention_id) |
-| `CorrelationTriad` | Value object: (sourceId, requestId, entityType) for idempotent key |
-| `ClusterAssignment` | Latest decision per mention: clusterId, alternatives, timestamp |
-| `OutcomeValidationError` | Exception for contract violations (missing triad, invalid schema) |
+| `OutcomeValidationError` | Exception for contract violations (null timestamp, empty candidates, invalid schema) |
 
-**Invariants:**
-- Triad fields are never null (validated on construction)
-- Timestamp must be ISO 8601 string (not parsed; stored as string for ordering)
-- ClusterAssignment timestamp always ≥ previous timestamp (enforced by service)
+**No new domain models needed:** `EntityMentionResolutionResponse` (erspec) replaces `OutcomeMessage`; `EntityMentionIdentifier` (erspec) replaces `CorrelationTriad`; `Decision` (erspec) replaces `ClusterAssignment`. Using erspec types directly avoids a lossy mapping step — `OutcomeMessage` as specified in the original draft omitted `candidates` entirely.
+
+**Invariants enforced by the service (not a new model):**
+- `timestamp` is `Optional[datetime]` in erspec — service must raise `OutcomeValidationError` if `None`
+- `candidates` must be non-empty — service must raise `OutcomeValidationError` if empty
+- Triad fields (`source_id`, `request_id`, `entity_type`) are always non-empty (guaranteed by erspec `EntityMentionIdentifier`)
+- Staleness check (`updated_at ≥ stored`) is enforced atomically by `MongoDecisionRepository.upsert_decision()` — service handles `StaleOutcomeError`, does not pre-check
 
 #### 2.2 Adapters (`adapters/`)
 
@@ -165,7 +165,7 @@ class OutcomeIntegrationWorker:
         """Poll outcomes from listener; call service for each."""
         async for message in self.listener.consume():
             try:
-                self.service.integrate_outcome(message)
+                await self.service.integrate_outcome(message)
             except OutcomeValidationError as e:
                 log.error(f"Contract violation: {e.detail}", extra={"triad": message.triad})
             except TriadNotFoundError as e:
@@ -387,7 +387,7 @@ Feature: Integrate ERE Resolution Outcomes
 | Component | Epic | Status |
 |-----------|------|--------|
 | Request Registry | [ERS-EPIC-01](../ers-epic-01-request-registry/EPIC.md) | ✅ Complete |
-| Decision Store | [ERS-EPIC-04](../ers-epic-04-resolution-decision-store/EPIC.md) | ⬜ Pending |
+| Decision Store | [ERS-EPIC-04](../ers-epic-04-resolution-decision-store/EPIC.md) | ✅ Complete |
 | ERE Contract Client | [ERS-EPIC-03](../ers-epic-03-ere-contract-client/EPIC.md) | ✅ Complete |
 
 ### Architectural Constraints (From Roadmap)
