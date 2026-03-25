@@ -165,7 +165,6 @@ class MongoDecisionRepository(
                 "updated_at": updated_at,
             },
             "$setOnInsert": {
-                "id": triad_hash,
                 "created_at": updated_at,
             },
         }
