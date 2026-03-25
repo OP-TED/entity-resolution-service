@@ -17,6 +17,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage MongoDB client lifecycle for the ERS REST API."""
     manager = MongoClientManager(config.MONGO_URI, config.MONGO_DATABASE_NAME)
     await manager.connect()
+    await manager.ensure_indexes()
     app.state.mongo_db = manager.get_database()
     try:
         yield

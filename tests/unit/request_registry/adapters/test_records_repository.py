@@ -4,7 +4,7 @@ AsyncCollection is mocked — no real MongoDB required.
 """
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from erspec.models.core import EntityMentionIdentifier
@@ -107,9 +107,7 @@ class TestTriadId:
         result = repo._triad_id(identifier)
         assert "::" in result
 
-    def test_consistent_for_same_identifier(
-        self, repo: MongoResolutionRequestRepository
-    ) -> None:
+    def test_consistent_for_same_identifier(self, repo: MongoResolutionRequestRepository) -> None:
         identifier = _identifier()
         assert repo._triad_id(identifier) == repo._triad_id(identifier)
 
@@ -194,9 +192,7 @@ class TestFindByTriad:
 
         await repo.find_by_triad(_identifier())
 
-        async_collection.find_one.assert_called_once_with(
-            {"_id": repo._triad_id(_identifier())}
-        )
+        async_collection.find_one.assert_called_once_with({"_id": repo._triad_id(_identifier())})
 
     async def test_returns_none_when_not_found(
         self,
@@ -215,8 +211,7 @@ class TestFindByTriad:
         async_collection: AsyncMock,
     ) -> None:
         record = _record()
-        doc = record.model_dump(mode="json")
-        doc["_id"] = repo._triad_id(record.identifiedBy)
+        doc = repo._to_document(record)
         async_collection.find_one.return_value = doc
 
         result = await repo.find_by_triad(_identifier())
@@ -232,26 +227,23 @@ class TestFindByTriad:
 
 
 class TestFromDocument:
-    def test_pops_id_and_validates(self, repo: MongoResolutionRequestRepository) -> None:
+    def test_maps_id_back_to_identified_by(self, repo: MongoResolutionRequestRepository) -> None:
         record = _record()
-        doc = record.model_dump(mode="json")
-        doc["_id"] = repo._triad_id(record.identifiedBy)
+        doc = repo._to_document(record)
 
         result = repo._from_document(doc)
 
         assert result.identifiedBy.source_id == SOURCE_ID
+        assert result.identifiedBy.request_id == REQUEST_ID
+        assert result.identifiedBy.entity_type == ENTITY_TYPE
         assert result.content_hash == VALID_HASH
-        assert "_id" not in result.model_dump()
 
     def test_original_doc_not_mutated(self, repo: MongoResolutionRequestRepository) -> None:
         record = _record()
-        doc = record.model_dump(mode="json")
-        doc["_id"] = repo._triad_id(record.identifiedBy)
-        original_keys = set(doc.keys())
+        doc = repo._to_document(record)
 
         repo._from_document(doc)
 
-        # Original doc must still contain _id (not mutated in place)
         assert "_id" in doc
 
 
@@ -266,9 +258,7 @@ class TestMongoLookupStateRepository:
         return AsyncMock()
 
     @pytest.fixture
-    def lookup_repo(
-        self, lookup_collection: AsyncMock
-    ) -> MongoLookupStateRepository:
+    def lookup_repo(self, lookup_collection: AsyncMock) -> MongoLookupStateRepository:
         db = MagicMock()
         db.__getitem__ = MagicMock(return_value=lookup_collection)
         return MongoLookupStateRepository(db)
@@ -287,7 +277,8 @@ class TestMongoLookupStateRepository:
         lookup_collection.replace_one.assert_called_once()
         call_kwargs = lookup_collection.replace_one.call_args
         assert call_kwargs.kwargs.get("upsert") is True or (
-            len(call_kwargs.args) >= 3 and call_kwargs.args[2] is True
+            len(call_kwargs.args) >= 3
+            and call_kwargs.args[2] is True
             or call_kwargs.kwargs.get("upsert", False)
         )
         assert result is state

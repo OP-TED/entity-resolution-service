@@ -35,7 +35,7 @@ class MongoStatisticsRepository(StatisticsRepository):
     def __init__(self, database: AsyncDatabase) -> None:
         self._decisions: AsyncCollection = database["decisions"]
         self._user_actions: AsyncCollection = database["user_actions"]
-        self._entity_mentions: AsyncCollection = database["entity_mentions"]
+        self._resolution_requests: AsyncCollection = database["resolution_requests"]
 
     def _build_time_filter(self, filters: StatisticsFilters) -> dict:
         match: dict = {}
@@ -84,11 +84,9 @@ class MongoStatisticsRepository(StatisticsRepository):
     ) -> RegistryStatistics:
         entity_filter: dict = {}
         if filters.entity_type is not None:
-            entity_filter["_id.entity_type"] = filters.entity_type
+            entity_filter["identifiedBy.entity_type"] = filters.entity_type
 
-        total_entity_mentions = await self._entity_mentions.count_documents(
-            entity_filter
-        )
+        total_entity_mentions = await self._resolution_requests.count_documents(entity_filter)
 
         decision_filter: dict = {}
         if filters.entity_type is not None:
@@ -118,8 +116,8 @@ class MongoStatisticsRepository(StatisticsRepository):
         avg_result = await avg_cursor.to_list()
         average_cluster_size = avg_result[0]["avg"] if avg_result else 0.0
 
-        distinct_requests = await self._entity_mentions.distinct(
-            "_id.request_id",
+        distinct_requests = await self._resolution_requests.distinct(
+            "identifiedBy.request_id",
             entity_filter,
         )
         resolution_requests = len(distinct_requests)

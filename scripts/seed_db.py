@@ -19,25 +19,27 @@ from pymongo import AsyncMongoClient
 
 from ers import config
 from ers.curation.adapters.decision_repository import MongoDecisionCurationRepository
-from ers.curation.adapters.entity_mention_repository import (
-    MongoEntityMentionCurationRepository,
-)
 from ers.curation.adapters.user_action_repository import (
     MongoUserActionCurationRepository,
+)
+from ers.request_registry.adapters.records_repository import (
+    MongoResolutionRequestRepository,
 )
 
 # only used for seeding/testing
 from tests.unit.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
-    EntityMentionFactory,
     EntityMentionIdentifierFactory,
+    ResolutionRequestRecordFactory,
     UserActionFactory,
 )
 
 ENTITY_TYPES = ["ORGANISATION", "PROCEDURE"]
 ACTION_TYPES = list(UserActionType)
 CURATORS = ["curator-1", "curator-2", "curator-3"]
+
+SEED_COLLECTIONS = ["decisions", "resolution_requests", "user_actions"]
 
 
 def _random_past(max_days: int = 90) -> datetime:
@@ -49,16 +51,12 @@ def _random_past(max_days: int = 90) -> datetime:
 
 
 async def _drop_seed_collections(db: Any) -> None:
-    for name in (
-        MongoCollections.DECISIONS,
-        MongoCollections.ENTITY_MENTIONS,
-        MongoCollections.USER_ACTIONS,
-    ):
+    for name in SEED_COLLECTIONS:
         await db[name].drop()
 
 
 async def _create_mentions(
-    mention_repo: MongoEntityMentionCurationRepository,
+    mention_repo: MongoResolutionRequestRepository,
     num_mentions: int,
     num_requests: int,
 ) -> list[Any]:
@@ -71,9 +69,9 @@ async def _create_mentions(
             request_id=random.choice(request_ids),
             entity_type=entity_type,
         )
-        mention = EntityMentionFactory.build(identifiedBy=identifier)
-        mentions.append(mention)
-        await mention_repo.save(mention)
+        record = ResolutionRequestRecordFactory.build(identifiedBy=identifier)
+        mentions.append(record)
+        await mention_repo.store(record)
     return mentions
 
 
@@ -173,7 +171,7 @@ async def seed(
     db = client[config.MONGO_DATABASE_NAME]
     await _drop_seed_collections(db)
 
-    mention_repo = MongoEntityMentionCurationRepository(db)
+    mention_repo = MongoResolutionRequestRepository(db)
     decision_repo = MongoDecisionCurationRepository(db)
     action_repo = MongoUserActionCurationRepository(db)
 

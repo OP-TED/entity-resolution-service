@@ -24,7 +24,7 @@ class EntityService:
         Raises:
             NotFoundError: If the entity mention does not exist.
         """
-        entity = await self._entity_mention_repository.find_by_id(identifier)
+        entity = await self._entity_mention_repository.find_by_triad(identifier)
         if entity is None:
             raise NotFoundError(
                 "EntityMention",

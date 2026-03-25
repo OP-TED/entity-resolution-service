@@ -4,13 +4,13 @@ from fastapi import Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ers.commons.adapters.decision_repository import DecisionRepository, MongoDecisionRepository
-from ers.commons.adapters.entity_mention_repository import (
-    EntityMentionRepository,
-    MongoEntityMentionRepository,
-)
 from ers.ers_rest_api.services.lookup_service import LookupService
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
 from ers.ers_rest_api.services.resolve_service import ResolveService
+from ers.request_registry.adapters.records_repository import (
+    MongoResolutionRequestRepository,
+    ResolutionRequestRepository,
+)
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
     ResolutionCoordinatorServiceABC,
 )
@@ -34,18 +34,18 @@ async def get_decision_repository(
     return MongoDecisionRepository(db)
 
 
-async def get_entity_mention_repository(
+async def get_resolution_request_repository(
     db: Annotated[AsyncDatabase, Depends(_get_database)],
-) -> EntityMentionRepository:
-    return MongoEntityMentionRepository(db)
+) -> ResolutionRequestRepository:
+    return MongoResolutionRequestRepository(db)
 
 
 # Module service providers (implementations pending their respective EPICs)
 
 
 async def get_resolution_coordinator(
-    entity_mention_repository: Annotated[
-        EntityMentionRepository, Depends(get_entity_mention_repository)
+    resolution_request_repository: Annotated[
+        ResolutionRequestRepository, Depends(get_resolution_request_repository)
     ],
     decision_repository: Annotated[DecisionRepository, Depends(get_decision_repository)],
 ) -> ResolutionCoordinatorServiceABC:

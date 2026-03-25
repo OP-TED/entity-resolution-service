@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import UTC, datetime
 
@@ -12,6 +13,7 @@ from erspec.models.core import (
 )
 from polyfactory.factories.pydantic_factory import ModelFactory
 
+from ers.request_registry.domain.records import ResolutionRequestRecord
 from ers.users.domain.users import User
 
 
@@ -78,6 +80,18 @@ class EntityMentionFactory(ModelFactory):
     @classmethod
     def parsed_representation(cls) -> str:
         return f"{json.dumps(cls._payload())}"
+
+
+class ResolutionRequestRecordFactory(EntityMentionFactory):
+    __model__ = ResolutionRequestRecord
+
+    @classmethod
+    def content_hash(cls) -> str:
+        return hashlib.sha256(cls.__faker__.uuid4().encode()).hexdigest()
+
+    @classmethod
+    def received_at(cls) -> datetime:
+        return datetime.now(UTC)
 
 
 class CanonicalEntityIdentifierFactory(ModelFactory):

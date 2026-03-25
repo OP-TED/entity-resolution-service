@@ -9,7 +9,8 @@ from ers.curation.domain.data_transfer_objects import StatisticsFilters
 from tests.unit.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
-    EntityMentionFactory,
+    EntityMentionIdentifierFactory,
+    ResolutionRequestRecordFactory,
     UserActionFactory,
 )
 
@@ -26,24 +27,33 @@ async def _seed_data(db: AsyncDatabase) -> None:
     from ers.curation.adapters.decision_repository import (
         MongoDecisionCurationRepository,
     )
-    from ers.curation.adapters.entity_mention_repository import (
-        MongoEntityMentionCurationRepository,
-    )
     from ers.curation.adapters.user_action_repository import (
         MongoUserActionCurationRepository,
     )
+    from ers.request_registry.adapters.records_repository import (
+        MongoResolutionRequestRepository,
+    )
 
-    mention_repo = MongoEntityMentionCurationRepository(db)
+    mention_repo = MongoResolutionRequestRepository(db)
     decision_repo = MongoDecisionCurationRepository(db)
     action_repo = MongoUserActionCurationRepository(db)
 
-    mentions = EntityMentionFactory.batch(4)
-    mentions[0].identifiedBy.entity_type = "ORGANISATION"
-    mentions[1].identifiedBy.entity_type = "ORGANISATION"
-    mentions[2].identifiedBy.entity_type = "PROCEDURE"
-    mentions[3].identifiedBy.entity_type = "ORGANISATION"
+    mentions = [
+        ResolutionRequestRecordFactory.build(
+            identifiedBy=EntityMentionIdentifierFactory.build(entity_type="ORGANISATION"),
+        ),
+        ResolutionRequestRecordFactory.build(
+            identifiedBy=EntityMentionIdentifierFactory.build(entity_type="ORGANISATION"),
+        ),
+        ResolutionRequestRecordFactory.build(
+            identifiedBy=EntityMentionIdentifierFactory.build(entity_type="PROCEDURE"),
+        ),
+        ResolutionRequestRecordFactory.build(
+            identifiedBy=EntityMentionIdentifierFactory.build(entity_type="ORGANISATION"),
+        ),
+    ]
     for m in mentions:
-        await mention_repo.save(m)
+        await mention_repo.store(m)
 
     cluster_a = ClusterReferenceFactory.build(cluster_id="cluster-a")
     cluster_b = ClusterReferenceFactory.build(cluster_id="cluster-b")
