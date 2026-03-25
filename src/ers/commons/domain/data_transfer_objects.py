@@ -13,6 +13,8 @@ class DecisionOrdering(StrEnum):
     UPDATED_AT_ASC = "updated_at"
     UPDATED_AT_DESC = "-updated_at"
 
+# FIXME: the below values need to be reconciled with the pagination limits in
+# the global config
 MAX_PER_PAGE = 50
 DEFAULT_PER_PAGE = 20
 
