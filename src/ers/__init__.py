@@ -132,6 +132,8 @@ class DecisionStoreConfig:
     @env_property(default_value="250")
     def DECISION_STORE_DEFAULT_PAGE_SIZE(self, config_value: str) -> int:
         value = int(config_value)
+        if value < 1:
+            raise ValueError(f"DECISION_STORE_DEFAULT_PAGE_SIZE must be >= 1, got {value}")
         max_size = self.DECISION_STORE_MAX_PAGE_SIZE
         if value > max_size:
             raise ValueError(
@@ -142,7 +144,10 @@ class DecisionStoreConfig:
 
     @env_property(default_value="1000")
     def DECISION_STORE_MAX_PAGE_SIZE(self, config_value: str) -> int:
-        return int(config_value)
+        value = int(config_value)
+        if value < 1:
+            raise ValueError(f"DECISION_STORE_MAX_PAGE_SIZE must be >= 1, got {value}")
+        return value
 
 
 class ObservabilityConfig:
