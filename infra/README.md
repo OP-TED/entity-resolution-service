@@ -17,7 +17,8 @@ infra/
 
 | Service | Purpose | Port |
 |---|---|---|
-| `api` | ERS FastAPI application | 8000 |
+| `ers-api` | ERS FastAPI application | see `infra/compose.yaml` |
+| `curation-api` | Curation FastAPI application | see `infra/compose.yaml` |
 | `ferretdb` | MongoDB-compatible document store | 27017 |
 | `postgres` | FerretDB storage backend | — |
 | `redis` | ERE contract message queue (ere_requests / ere_responses) | 6379 |
