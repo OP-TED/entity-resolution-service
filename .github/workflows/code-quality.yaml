@@ -121,8 +121,6 @@ jobs:
         id: test
         run: make test
         continue-on-error: true
-        # TODO: Replace with make test-ci once the team agrees on a target
-        # that generates coverage.xml and test-results.xml for SonarCloud.
 
       # Clean code
       - name: Clean code check (Xenon)
