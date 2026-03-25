@@ -1,7 +1,9 @@
+# Docker Compose configuration for development environment
+
 x-api-common: &api-common
   build:
     context: ..
-    dockerfile: infra/docker/Dockerfile
+    dockerfile: infra/docker/dev.Dockerfile
   env_file:
     - .env
   environment:
@@ -28,12 +30,16 @@ x-api-common: &api-common
 services:
   curation-api:
     <<: *api-common
+    container_name: "curation-api"
     command: ["/scripts/start-curation-api.sh"]
     ports:
       - "${UVICORN_PORT:-8000}:8000"
+    environment:
+      - SEED_DB=true  # for development only
 
   ers-api:
     <<: *api-common
+    container_name: "ers-api"
     command: ["/scripts/start-ers-api.sh"]
     ports:
       - "${ERS_API_PORT:-8001}:8001"
@@ -41,6 +47,7 @@ services:
   postgres:
     image: ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0
     restart: on-failure
+    container_name: "postgres"
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-username}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
@@ -53,6 +60,7 @@ services:
   ferretdb:
     image: ghcr.io/ferretdb/ferretdb:2.7.0
     restart: on-failure
+    container_name: "ferretdb"
     ports:
       - "27017:27017"
     environment:
