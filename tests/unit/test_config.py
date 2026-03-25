@@ -31,3 +31,23 @@ def test_env_override_max_page_size(monkeypatch):
 
     cfg = ERSConfigResolver()
     assert cfg.DECISION_STORE_MAX_PAGE_SIZE == 500
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "-100"])
+def test_default_page_size_rejects_non_positive(monkeypatch, value):
+    monkeypatch.setenv("DECISION_STORE_DEFAULT_PAGE_SIZE", value)
+    from ers import ERSConfigResolver
+
+    cfg = ERSConfigResolver()
+    with pytest.raises(ValueError, match="DECISION_STORE_DEFAULT_PAGE_SIZE must be >= 1"):
+        _ = cfg.DECISION_STORE_DEFAULT_PAGE_SIZE
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "-100"])
+def test_max_page_size_rejects_non_positive(monkeypatch, value):
+    monkeypatch.setenv("DECISION_STORE_MAX_PAGE_SIZE", value)
+    from ers import ERSConfigResolver
+
+    cfg = ERSConfigResolver()
+    with pytest.raises(ValueError, match="DECISION_STORE_MAX_PAGE_SIZE must be >= 1"):
+        _ = cfg.DECISION_STORE_MAX_PAGE_SIZE
