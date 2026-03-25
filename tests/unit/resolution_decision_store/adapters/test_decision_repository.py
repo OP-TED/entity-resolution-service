@@ -197,3 +197,83 @@ async def test_find_with_filters_empty_collection_returns_empty_page(repo, mock_
     page = await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor=None, limit=3))
     assert len(page.results) == 0
     assert page.next_cursor is None
+
+
+# ── find_mention_ids_by_cluster ───────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_find_mention_ids_by_cluster_returns_identifiers(repo, mock_collection):
+    docs = [
+        {"about_entity_mention": {"source_id": "s1", "request_id": "r1", "entity_type": "Person"}},
+        {"about_entity_mention": {"source_id": "s2", "request_id": "r2", "entity_type": "Person"}},
+    ]
+
+    async def async_generator():
+        for doc in docs:
+            yield doc
+
+    cursor_mock = MagicMock()
+    cursor_mock.limit.return_value = cursor_mock
+    cursor_mock.__aiter__ = lambda self: async_generator()
+    mock_collection.find = MagicMock(return_value=cursor_mock)
+
+    result = await repo.find_mention_ids_by_cluster("cluster-abc", limit=10)
+    assert len(result) == 2
+    assert result[0].source_id == "s1"
+    assert result[1].source_id == "s2"
+
+
+@pytest.mark.asyncio
+async def test_find_mention_ids_by_cluster_queries_by_cluster_id(repo, mock_collection):
+    async def async_generator():
+        return
+        yield
+
+    cursor_mock = MagicMock()
+    cursor_mock.limit.return_value = cursor_mock
+    cursor_mock.__aiter__ = lambda self: async_generator()
+    mock_collection.find = MagicMock(return_value=cursor_mock)
+
+    await repo.find_mention_ids_by_cluster("target-cluster", limit=5)
+    mock_collection.find.assert_called_once()
+    call_args = mock_collection.find.call_args
+    assert call_args[0][0]["current_placement.cluster_id"] == "target-cluster"
+
+
+# ── count_distinct_clusters ───────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_count_distinct_clusters_returns_count(repo, mock_collection):
+    mock_collection.distinct = AsyncMock(return_value=["c1", "c2", "c3"])
+    result = await repo.count_distinct_clusters()
+    assert result == 3
+    mock_collection.distinct.assert_called_once_with("current_placement.cluster_id")
+
+
+@pytest.mark.asyncio
+async def test_count_distinct_clusters_returns_zero_when_empty(repo, mock_collection):
+    mock_collection.distinct = AsyncMock(return_value=[])
+    result = await repo.count_distinct_clusters()
+    assert result == 0
+
+
+# ── average_cluster_size ──────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_average_cluster_size_returns_average(repo, mock_collection):
+    agg_cursor = AsyncMock()
+    agg_cursor.to_list = AsyncMock(return_value=[{"avg": 3.5}])
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
+
+    result = await repo.average_cluster_size()
+    assert result == 3.5
+
+
+@pytest.mark.asyncio
+async def test_average_cluster_size_returns_zero_when_no_decisions(repo, mock_collection):
+    agg_cursor = AsyncMock()
+    agg_cursor.to_list = AsyncMock(return_value=[])
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
+
+    result = await repo.average_cluster_size()
+    assert result == 0.0

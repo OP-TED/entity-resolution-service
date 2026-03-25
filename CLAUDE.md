@@ -52,6 +52,10 @@ These rules apply to ALL agents in this project.
 ### Working Methodology
 
 - Use project-specific tooling defined in `README.md` (like `make` targets).
+- Always run Python commands via Poetry: if project-specific tooling is insufficient, then run Python by yourself. In that case, prefix every Python tool invocation
+  with `poetry run` (e.g. `poetry run pytest`, `poetry run pylint`, `poetry run python`).
+  Never invoke `python`, `pytest`, `pylint`, or similar tools directly — they may
+  resolve to the wrong interpreter or a globally-installed version.
 - As a final step of every significant code change, run relevant tests via
   available tooling and auto-fix issues (new, regression).
 - Use planning mode (`/plan`) before writing to files for reasoning-heavy work —

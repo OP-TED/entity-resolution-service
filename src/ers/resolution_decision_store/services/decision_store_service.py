@@ -6,7 +6,7 @@ from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifi
 
 from ers import config
 from ers.commons.adapters.tracing import trace_function
-from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
+from ers.commons.domain.data_transfer_objects import MAX_PER_PAGE, CursorPage, CursorParams
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 
 _log = logging.getLogger(__name__)
@@ -87,11 +87,11 @@ class DecisionStoreService:
         """
         effective_size = min(
             page_size if page_size is not None else config.DECISION_STORE_DEFAULT_PAGE_SIZE,
-            config.DECISION_STORE_MAX_PAGE_SIZE,
+            MAX_PER_PAGE,
         )
         return await self._repository.find_with_filters(
             filters=None,
-            cursor_params=CursorParams.model_construct(cursor=cursor, limit=effective_size),
+            cursor_params=CursorParams(cursor=cursor, limit=effective_size),
         )
 
 
