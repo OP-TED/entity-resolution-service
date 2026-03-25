@@ -29,7 +29,11 @@ from ers.curation.services import (
 router = APIRouter(prefix="/curation/decisions", tags=["Decisions"])
 
 
-@router.get("", response_model=CursorPage[DecisionSummary])
+@router.get(
+    "",
+    response_model=CursorPage[DecisionSummary],
+    responses={400: {"model": ErrorResponse}},
+)
 async def list_decisions(
     filters: DecisionFiltersDep,
     cursor_params: CursorPagination,
@@ -43,7 +47,7 @@ async def list_decisions(
 @router.get(
     "/{decision_id}/proposed-canonical-entity",
     response_model=CanonicalEntityPreview,
-    responses={404: {"model": ErrorResponse}},
+    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
 )
 async def get_proposed_canonical_entity(
     decision_id: str,
@@ -57,7 +61,7 @@ async def get_proposed_canonical_entity(
 @router.get(
     "/{decision_id}/alternative-canonical-entities",
     response_model=PaginatedResult[CanonicalEntityPreview],
-    responses={404: {"model": ErrorResponse}},
+    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
 )
 async def get_alternative_canonical_entities(
     decision_id: str,
@@ -72,7 +76,11 @@ async def get_alternative_canonical_entities(
 @router.post(
     "/{decision_id}/accept",
     status_code=status.HTTP_204_NO_CONTENT,
-    responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+    },
 )
 async def accept_decision(
     decision_id: str,
@@ -87,7 +95,11 @@ async def accept_decision(
 @router.post(
     "/{decision_id}/reject",
     status_code=status.HTTP_204_NO_CONTENT,
-    responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+    },
 )
 async def reject_decision(
     decision_id: str,
@@ -103,6 +115,7 @@ async def reject_decision(
     "/{decision_id}/assign",
     status_code=status.HTTP_204_NO_CONTENT,
     responses={
+        400: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         409: {"model": ErrorResponse},
     },
@@ -122,7 +135,11 @@ async def assign_decision(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/bulk-accept", response_model=BulkActionResponse)
+@router.post(
+    "/bulk-accept",
+    response_model=BulkActionResponse,
+    responses={400: {"model": ErrorResponse}},
+)
 async def bulk_accept_decisions(
     body: BulkActionRequest,
     user: VerifiedUser,
@@ -132,7 +149,11 @@ async def bulk_accept_decisions(
     return await service.bulk_accept_decisions(body.decision_ids, actor=user.email)
 
 
-@router.post("/bulk-reject", response_model=BulkActionResponse)
+@router.post(
+    "/bulk-reject",
+    response_model=BulkActionResponse,
+    responses={400: {"model": ErrorResponse}},
+)
 async def bulk_reject_decisions(
     body: BulkActionRequest,
     user: VerifiedUser,

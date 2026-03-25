@@ -8,13 +8,17 @@ from ers.commons.domain.data_transfer_objects import PaginatedResult
 from ers.curation.domain.data_transfer_objects import UserActionFilters, UserActionSummary
 from ers.curation.entrypoints.api.auth import AdminUser
 from ers.curation.entrypoints.api.dependencies import get_user_action_service
-from ers.curation.entrypoints.api.v1.schemas import Pagination
+from ers.curation.entrypoints.api.v1.schemas import ErrorResponse, Pagination
 from ers.curation.services import UserActionService
 
 router = APIRouter(prefix="/user-actions", tags=["User Actions"])
 
 
-@router.get("", response_model=PaginatedResult[UserActionSummary])
+@router.get(
+    "",
+    response_model=PaginatedResult[UserActionSummary],
+    responses={400: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+)
 async def list_user_actions(
     pagination: Pagination,
     _admin: AdminUser,

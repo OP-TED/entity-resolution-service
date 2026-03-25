@@ -2,9 +2,11 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from ers import config
 from ers.commons.adapters.mongo_client import MongoClientManager
@@ -78,4 +80,27 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(v1_router, prefix=config.API_V1_PREFIX)
 
+    app.openapi = lambda: _custom_openapi(app)  # type: ignore[assignment]
+
     return app
+
+
+def _custom_openapi(app: FastAPI) -> dict[str, Any]:
+    """Generate OpenAPI schema without the default 422 validation error response."""
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    for path_item in schema.get("paths", {}).values():
+        for operation in path_item.values():
+            if isinstance(operation, dict):
+                operation.get("responses", {}).pop("422", None)
+
+    app.openapi_schema = schema
+    return schema
