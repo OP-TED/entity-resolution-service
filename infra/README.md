@@ -7,7 +7,7 @@ Deployment and infrastructure files for the Entity Resolution Service.
 ```
 infra/
 ├── .env.example      # Environment variable template
-├── compose.yaml      # Docker Compose service definitions
+├── compose.dev.yaml  # Docker Compose for local development
 ├── Dockerfile        # Multi-stage build (ARG ENVIRONMENT=production|development)
 ├── entrypoint.sh     # Container entrypoint (seeding + service start)
 └── README.md

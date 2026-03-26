@@ -8,7 +8,7 @@ SRC_PATH = ${PROJECT_PATH}/src
 TEST_PATH = ${PROJECT_PATH}/tests
 BUILD_PATH = ${PROJECT_PATH}/dist
 PACKAGE_NAME = ers
-COMPOSE_FILE = ${PROJECT_PATH}/infra/compose.yaml
+COMPOSE_FILE = ${PROJECT_PATH}/infra/compose.dev.yaml
 ENV_FILE = ${PROJECT_PATH}/infra/.env
 
 ICON_DONE = [✔]

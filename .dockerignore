@@ -24,7 +24,7 @@ __pycache__
 
 # Docker (no need to send these into the build context)
 infra/Dockerfile
-infra/compose.yaml
+infra/compose.dev.yaml
 infra/README.md
 infra/.env
 infra/.env.*
