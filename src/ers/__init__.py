@@ -92,6 +92,11 @@ class ERSRestApiConfig:
     def ERS_API_PORT(self, config_value: str) -> int:
         return int(config_value)
 
+    @env_property(default_value="false")
+    def USE_MOCK_SERVICES(self, config_value: str) -> bool:
+        """Enable factory-generated mock responses (temporary dev)."""
+        return config_value.lower() == "true"
+
 
 class EREConfig:
     @env_property(default_value="1000")
