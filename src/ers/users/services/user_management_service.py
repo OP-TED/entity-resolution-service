@@ -1,9 +1,9 @@
 import uuid
 from datetime import UTC, datetime
 
+from ers.commons.adapters.hasher import ContentHasher
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import ApplicationError, NotFoundError
-from ers.commons.adapters.hasher import ContentHasher
 from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.data_transfer_objects import (
     CreateUserRequest,

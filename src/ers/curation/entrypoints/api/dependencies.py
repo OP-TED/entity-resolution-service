@@ -4,6 +4,7 @@ from fastapi import Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ers import config
+from ers.commons.adapters.hasher import Argon2PasswordHasher, ContentHasher
 from ers.curation.adapters import (
     DecisionCurationRepository,
     EntityMentionCurationRepository,
@@ -22,7 +23,6 @@ from ers.curation.services import (
     UserActionService,
 )
 from ers.users.adapters import MongoUserRepository, UserRepository
-from ers.commons.adapters.hasher import Argon2PasswordHasher, ContentHasher
 from ers.users.services import AuthService, UserManagementService
 from ers.users.services.token_service import JWTTokenService, TokenService
 
