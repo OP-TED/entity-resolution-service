@@ -1,5 +1,12 @@
 # Docker Compose configuration for development environment
 
+x-api-env: &api-env
+  PYTHONDONTWRITEBYTECODE: 1
+  PYTHONUNBUFFERED: 1
+  # FerretDB authenticates via PostgreSQL credentials
+  MONGO_URI: mongodb://${POSTGRES_USER:-username}:${POSTGRES_PASSWORD:-password}@ferretdb:27017
+  MONGO_DATABASE_NAME: ${MONGO_DATABASE_NAME:-ers}
+
 x-api-common: &api-common
   build:
     context: ..
@@ -9,11 +16,7 @@ x-api-common: &api-common
   env_file:
     - .env
   environment:
-    - PYTHONDONTWRITEBYTECODE=1
-    - PYTHONUNBUFFERED=1
-    # FerretDB authenticates via PostgreSQL credentials
-    - MONGO_URI=mongodb://${POSTGRES_USER:-username}:${POSTGRES_PASSWORD:-password}@ferretdb:27017
-    - MONGO_DATABASE_NAME=${MONGO_DATABASE_NAME:-ers}
+    <<: *api-env
   restart: unless-stopped
   depends_on:
     ferretdb:
@@ -38,7 +41,8 @@ services:
     ports:
       - "${UVICORN_PORT:-8000}:8000"
     environment:
-      - SEED_DB=true  # for development only
+      <<: *api-env
+      SEED_DB: "true"  # dev-only: seed DB on startup
 
   ers-api:
     <<: *api-common
