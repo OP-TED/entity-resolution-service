@@ -99,3 +99,90 @@ class TestRedisOutcomeListenerYield:
         """RedisOutcomeListener implements AsyncOutcomeListener."""
         from ers.ere_result_integrator.adapters.outcome_listener import AsyncOutcomeListener
         assert issubclass(RedisOutcomeListener, AsyncOutcomeListener)
+
+
+class TestRedisOutcomeListenerResilience:
+    """Gap A/C/D — connection drop, bad messages, unknown types."""
+
+    async def test_timeout_swallowed_and_polling_resumes(self):
+        """Gap A: TimeoutError (BRPOP window) is swallowed; next poll yields response."""
+        valid_resp = make_resolution_response()
+        client = MagicMock(spec=AbstractClient)
+        client.pull_response = AsyncMock(side_effect=[TimeoutError(), valid_resp])
+
+        listener = RedisOutcomeListener(client=client)
+        items = await collect_n(listener.consume(), 1)
+
+        assert len(items) == 1
+        assert items[0] is valid_resp
+
+    async def test_connection_error_re_raised(self):
+        """Gap A: ConnectionError propagates out of consume() to trigger worker restart."""
+        client = MagicMock(spec=AbstractClient)
+        client.pull_response = AsyncMock(side_effect=ConnectionError("Redis down"))
+
+        listener = RedisOutcomeListener(client=client)
+        with pytest.raises(ConnectionError):
+            await collect_n(listener.consume(), 1)
+
+    async def test_connection_error_logged_as_error(self, caplog):
+        """Gap A: ConnectionError triggers an ERROR log before propagating."""
+        client = MagicMock(spec=AbstractClient)
+        client.pull_response = AsyncMock(side_effect=ConnectionError("Redis down"))
+
+        listener = RedisOutcomeListener(client=client)
+        with caplog.at_level(logging.ERROR, logger="ers.ere_result_integrator"):
+            with pytest.raises(ConnectionError):
+                await collect_n(listener.consume(), 1)
+
+        assert any("connection" in r.message.lower() for r in caplog.records)
+
+    async def test_bad_json_skipped_and_polling_resumes(self):
+        """Gap C: ValueError (malformed message) is discarded; next valid response yielded."""
+        valid_resp = make_resolution_response()
+        client = MagicMock(spec=AbstractClient)
+        client.pull_response = AsyncMock(side_effect=[ValueError("bad JSON"), valid_resp])
+
+        listener = RedisOutcomeListener(client=client)
+        items = await collect_n(listener.consume(), 1)
+
+        assert len(items) == 1
+        assert items[0] is valid_resp
+
+    async def test_bad_json_logged_as_error(self, caplog):
+        """Gap C: ValueError triggers an ERROR log."""
+        valid_resp = make_resolution_response()
+        client = MagicMock(spec=AbstractClient)
+        client.pull_response = AsyncMock(side_effect=[ValueError("bad JSON"), valid_resp])
+
+        listener = RedisOutcomeListener(client=client)
+        with caplog.at_level(logging.ERROR, logger="ers.ere_result_integrator"):
+            await collect_n(listener.consume(), 1)
+
+        assert any("undeserializable" in r.message.lower() for r in caplog.records)
+
+    async def test_unknown_response_type_skipped(self):
+        """Gap D: Unknown response type is not yielded; next valid response is yielded."""
+        unknown = MagicMock()  # neither EntityMentionResolutionResponse nor EREErrorResponse
+        valid_resp = make_resolution_response()
+        client = MagicMock(spec=AbstractClient)
+        client.pull_response = AsyncMock(side_effect=[unknown, valid_resp])
+
+        listener = RedisOutcomeListener(client=client)
+        items = await collect_n(listener.consume(), 1)
+
+        assert len(items) == 1
+        assert items[0] is valid_resp
+
+    async def test_unknown_response_type_logged_as_warning(self, caplog):
+        """Gap D: Unknown response type triggers a WARNING log."""
+        unknown = MagicMock()
+        valid_resp = make_resolution_response()
+        client = MagicMock(spec=AbstractClient)
+        client.pull_response = AsyncMock(side_effect=[unknown, valid_resp])
+
+        listener = RedisOutcomeListener(client=client)
+        with caplog.at_level(logging.WARNING, logger="ers.ere_result_integrator"):
+            await collect_n(listener.consume(), 1)
+
+        assert any("unrecognised" in r.message.lower() for r in caplog.records)

@@ -68,36 +68,56 @@ class OutcomeIntegrationWorker:
             await asyncio.gather(self._task, return_exceptions=True)
 
     async def run(self) -> None:
-        """Infinite polling loop - pull one outcome, process it, repeat.
+        """Polling loop - pull one outcome, process it, repeat.
 
+        Restarts automatically after a Redis ``ConnectionError`` (5 s back-off).
         ``OutcomeValidationError`` and ``TriadNotFoundError`` are logged and
-        swallowed so the loop continues. All other exceptions are logged but
-        also swallowed to prevent crashing the background task.
+        swallowed so the loop continues. Infrastructure ``ConnectionError`` from
+        the service layer (registry / decision store) is logged distinctly and
+        swallowed. All other exceptions are logged and swallowed to prevent
+        crashing the background task.
         """
         _log.info("OutcomeIntegrationWorker started")
-        async for message in self._listener.consume():
-            try:
-                await integrate_outcome(message, self._service)
-            except OutcomeValidationError as exc:
-                _log.error(
-                    "Contract violation - outcome rejected",
-                    extra={
-                        "detail": exc.detail,
-                        "ere_request_id": message.ere_request_id,
-                    },
-                )
-            except TriadNotFoundError as exc:
-                _log.warning(
-                    "Triad not found - outcome ignored",
-                    extra={
-                        "source_id": exc.identifier.source_id,
-                        "request_id": exc.identifier.request_id,
-                        "entity_type": exc.identifier.entity_type,
-                    },
-                )
-            except Exception as exc:  # noqa: BLE001
-                _log.error(
-                    "Unexpected error processing ERE outcome",
-                    exc_info=exc,
-                    extra={"ere_request_id": message.ere_request_id},
-                )
+        try:
+            while True:
+                try:
+                    async for message in self._listener.consume():
+                        try:
+                            await integrate_outcome(message, self._service)
+                        except OutcomeValidationError as exc:
+                            _log.error(
+                                "Contract violation - outcome rejected",
+                                extra={
+                                    "detail": exc.detail,
+                                    "ere_request_id": message.ere_request_id,
+                                },
+                            )
+                        except TriadNotFoundError as exc:
+                            _log.warning(
+                                "Triad not found - outcome ignored",
+                                extra={
+                                    "source_id": exc.identifier.source_id,
+                                    "request_id": exc.identifier.request_id,
+                                    "entity_type": exc.identifier.entity_type,
+                                },
+                            )
+                        except ConnectionError as exc:
+                            _log.error(
+                                "Infrastructure connection error - outcome may be retried on restart",
+                                exc_info=exc,
+                                extra={"ere_request_id": message.ere_request_id},
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            _log.error(
+                                "Unexpected error processing ERE outcome",
+                                exc_info=exc,
+                                extra={"ere_request_id": message.ere_request_id},
+                            )
+                    break  # listener exhausted normally (test or graceful shutdown)
+                except ConnectionError as exc:
+                    _log.error("Redis disconnected - retrying in 5 s", exc_info=exc)
+                    await asyncio.sleep(5)
+                    _log.info("Attempting to reconnect to Redis outcome listener")
+        except asyncio.CancelledError:
+            _log.info("OutcomeIntegrationWorker stopped")
+            raise

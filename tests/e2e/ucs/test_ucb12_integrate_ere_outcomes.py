@@ -5,7 +5,7 @@ UC-B1.2 — Integrate ERE Resolution Outcomes (Asynchronous)
   Tests the async outcome integration path:
     ERE outcome message → ERS consumer → Decision Store update
 
-  Covers 10 scenarios:
+  Covers 9 scenarios:
     1. Standard resolution outcome — Decision Store updated with cluster + alternatives.
     2. Draft identifier replaced by authoritative ERE outcome.
     3. Draft identifier confirmed by ERE.
@@ -13,8 +13,7 @@ UC-B1.2 — Integrate ERE Resolution Outcomes (Asynchronous)
     5. Duplicate outcome — idempotent handling.
     6. Uncorrelated outcome (unknown triad) — rejected.
     7. Invalid outcome message — rejected, state unchanged.
-    8. Messaging publish failure — logged, Decision Store unchanged.
-    9. Score preservation — ERS does not alter confidence/similarity.
+    8. Score preservation — ERS does not alter confidence/similarity.
 
   The actor is ERS itself (internal). Outcomes arrive via messaging.
   The trigger is consuming an ERE clustering outcome message.
@@ -87,14 +86,6 @@ def test_uncorrelated_outcome():
     "Reject an invalid ERE outcome message",
 )
 def test_invalid_outcome():
-    pass
-
-
-@scenario(
-    FEATURE_FILE,
-    "Messaging publish failure does not modify Decision Store state",
-)
-def test_messaging_publish_failure():
     pass
 
 
@@ -335,18 +326,6 @@ def ere_emits_outcome_with_score_table(ctx, cluster_id, datatable):
         )
 
 
-@given("the ERE messaging boundary is unavailable for publishing")
-def ere_messaging_unavailable(ctx):
-    """
-    Configure the messaging publisher to fail.
-
-    TODO: ctx["ere_publisher"].publish = AsyncMock(
-        side_effect=MessagingException("ERE messaging unavailable")
-    )
-    """
-    ctx["messaging_unavailable"] = True
-
-
 # ---------------------------------------------------------------------------
 # When
 # ---------------------------------------------------------------------------
@@ -369,19 +348,6 @@ def consume_outcome(ctx):
 def consume_duplicate_outcome(ctx):
     """Re-invoke the integrator with the same message (duplicate test)."""
     ctx["duplicate_result"] = None  # TODO: replace with real integrator call
-
-
-@when("ERS attempts to publish a resolve message for that mention")
-def attempt_publish(ctx):
-    """
-    Attempt to publish a resolve message via the ERE messaging boundary.
-
-    TODO: try:
-        await ctx["ere_publisher"].publish(resolve_message)
-    except MessagingException:
-        ctx["publish_failed"] = True
-    """
-    ctx["publish_failed"] = None  # TODO: replace with real publish call
 
 
 # ---------------------------------------------------------------------------
@@ -505,14 +471,6 @@ def rejection_logged(ctx):
     """
     TODO: Verify that a log entry was produced for the rejected outcome.
           Use caplog or a mock logger to assert the log message.
-    """
-    assert True  # TODO: implement
-
-
-@then("the publish failure is logged")
-def publish_failure_logged(ctx):
-    """
-    TODO: Verify a log entry was produced for the messaging publish failure.
     """
     assert True  # TODO: implement
 

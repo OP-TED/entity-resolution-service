@@ -158,3 +158,11 @@ Feature: UC-B1.1 — Resolve Entity Mention via ERS API
     When the originator submits the resolve request
     Then the response returns error "SERVICE_ERROR"
     And the request is registered in the Request Registry with triad "SYSTEM_I", "req-070", "ORGANISATION"
+
+  Scenario: Return service error when the ERE messaging boundary is unavailable
+    Given an entity mention with triad "SYSTEM_J", "req-080", "ORGANISATION"
+    And the mention content is "mock:org-001" with context "notice-2024-08"
+    And the ERE messaging boundary is unavailable for publishing
+    When the originator submits the resolve request
+    Then the response returns error "SERVICE_ERROR"
+    And no decision is written to the Decision Store

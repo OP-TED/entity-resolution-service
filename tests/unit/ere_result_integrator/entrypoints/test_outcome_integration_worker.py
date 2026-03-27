@@ -1,7 +1,8 @@
 """Unit tests for OutcomeIntegrationWorker — covers UT-006."""
 import asyncio
+import logging
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, create_autospec
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
 from erspec.models.core import ClusterReference, EntityMentionIdentifier
@@ -129,3 +130,58 @@ class TestOutcomeIntegrationWorker:
         worker = OutcomeIntegrationWorker(listener=listener, service=service)
         worker.start()
         await worker.stop()  # must not hang or raise
+
+    async def test_run_restarts_after_connection_error_from_listener(self):
+        """Gap A: ConnectionError from listener triggers restart; next batch processes."""
+        message = make_response()
+        call_count = 0
+
+        async def first_fails_then_yields():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ConnectionError("Redis down")
+            yield message
+
+        listener = MagicMock(spec=AsyncOutcomeListener)
+        # side_effect (callable) is used here rather than return_value so that each
+        # call to consume() produces a fresh generator object. return_value would
+        # return the same exhausted generator on the second call (after restart).
+        listener.consume.side_effect = first_fails_then_yields
+        service = create_autospec(OutcomeIntegrationService, instance=True)
+        service.integrate_outcome = AsyncMock(return_value=None)
+
+        with patch("asyncio.sleep", new=AsyncMock()):
+            worker = OutcomeIntegrationWorker(listener=listener, service=service)
+            await worker.run()
+
+        service.integrate_outcome.assert_called_once_with(message)
+
+    async def test_run_continues_after_connection_error_in_service(self):
+        """Gap E: ConnectionError from integrate_outcome is caught; next message processes."""
+        m1, m2 = make_response(), make_response()
+        listener = MagicMock(spec=AsyncOutcomeListener)
+        listener.consume.return_value = two_message_generator(m1, m2)
+        service = create_autospec(OutcomeIntegrationService, instance=True)
+        service.integrate_outcome = AsyncMock(
+            side_effect=[ConnectionError("DB down"), None]
+        )
+
+        worker = OutcomeIntegrationWorker(listener=listener, service=service)
+        await worker.run()
+
+        assert service.integrate_outcome.call_count == 2
+
+    async def test_infrastructure_connection_error_logged_distinctly(self, caplog):
+        """Gap E: ConnectionError from service produces an infrastructure-specific log."""
+        message = make_response()
+        listener = MagicMock(spec=AsyncOutcomeListener)
+        listener.consume.return_value = one_shot_generator(message)
+        service = create_autospec(OutcomeIntegrationService, instance=True)
+        service.integrate_outcome = AsyncMock(side_effect=ConnectionError("DB down"))
+
+        worker = OutcomeIntegrationWorker(listener=listener, service=service)
+        with caplog.at_level(logging.ERROR, logger="ers.ere_result_integrator"):
+            await worker.run()
+
+        assert any("infrastructure" in r.message.lower() for r in caplog.records)

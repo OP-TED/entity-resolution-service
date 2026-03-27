@@ -216,3 +216,49 @@ class TestValidation:
             await service.integrate_outcome(make_response(candidates=[]))
         assert "candidates" in exc_info.value.detail.lower()
         mock_registry.get_resolution_request.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Gap B: coordinator callback error — decision persisted, no propagation
+# ---------------------------------------------------------------------------
+
+
+class TestCallbackError:
+    async def test_callback_error_does_not_propagate(self, mock_registry, mock_decision_store):
+        """Gap B: callback raising does not propagate; service returns the persisted Decision."""
+        failing_callback = AsyncMock(side_effect=RuntimeError("coordinator down"))
+        svc = OutcomeIntegrationService(
+            registry_service=mock_registry,
+            decision_service=mock_decision_store,
+            on_outcome_stored=failing_callback,
+        )
+        result = await svc.integrate_outcome(make_response())
+        assert isinstance(result, Decision)
+
+    async def test_callback_error_logged_as_error(
+        self, mock_registry, mock_decision_store, caplog
+    ):
+        """Gap B: callback raising triggers an ERROR log mentioning notification failure."""
+        failing_callback = AsyncMock(side_effect=RuntimeError("coordinator down"))
+        svc = OutcomeIntegrationService(
+            registry_service=mock_registry,
+            decision_service=mock_decision_store,
+            on_outcome_stored=failing_callback,
+        )
+        with caplog.at_level(logging.ERROR, logger="ers.ere_result_integrator"):
+            await svc.integrate_outcome(make_response())
+
+        assert any("notification" in r.message.lower() for r in caplog.records)
+
+    async def test_decision_still_persisted_when_callback_fails(
+        self, mock_registry, mock_decision_store
+    ):
+        """Gap B: store_decision is called even though the callback later fails."""
+        failing_callback = AsyncMock(side_effect=RuntimeError("coordinator down"))
+        svc = OutcomeIntegrationService(
+            registry_service=mock_registry,
+            decision_service=mock_decision_store,
+            on_outcome_stored=failing_callback,
+        )
+        await svc.integrate_outcome(make_response())
+        mock_decision_store.store_decision.assert_called_once()
