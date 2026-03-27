@@ -4,7 +4,7 @@
 **Component:** ERE Result Integrator
 **Spine:** Spine B (Asynchronous Engine Interaction & Outcome Integration)
 **Phase:** 2 — Core Flows (after Registry, RDF Parser, ERE Contract Client are complete)
-**Status:** ⬜ Ready for Implementation
+**Status:** ✅ Implementation Complete
 
 ---
 
@@ -509,22 +509,25 @@ Feature: Integrate ERE Resolution Outcomes
 - [x] **ERS-EPIC-03 (ERE Contract Client)** must be complete (messaging adapter setup)
 - [x] er-spec library must expose `EntityMentionResolutionResponse` model
 
-### Phase 3 Sequence (Recommended Order)
+### Phase 3 Sequence (Completed)
 
-| Step | Task file | What |
-|------|-----------|------|
-| 1 | [task51-domain-errors.md](task51-domain-errors.md) | `OutcomeValidationError`, `TriadNotFoundError` |
-| 2 | [task52-outcome-listener-interface.md](task52-outcome-listener-interface.md) | `AsyncOutcomeListener` ABC |
-| 3 | [task53-redis-outcome-listener.md](task53-redis-outcome-listener.md) | `RedisOutcomeListener` |
-| 4 | [task54-outcome-integration-service.md](task54-outcome-integration-service.md) | `OutcomeIntegrationService` (TDD — tests first) |
-| 5 | [task55-outcome-integration-worker.md](task55-outcome-integration-worker.md) | `OutcomeIntegrationWorker` (TDD — tests first) |
-| 6 | [task56-unit-tests.md](task56-unit-tests.md) | Domain + adapter unit tests |
-| 7 | [task57-integration-tests.md](task57-integration-tests.md) | Integration tests + wire Gherkin step defs |
+| Step | Task file | What | Status |
+|------|-----------|------|--------|
+| 1 | [task51-domain-errors.md](task51-domain-errors.md) | `OutcomeValidationError`, `TriadNotFoundError` | ✅ Complete |
+| 2 | [task52-outcome-listener-interface.md](task52-outcome-listener-interface.md) | `AsyncOutcomeListener` ABC | ✅ Complete |
+| 3 | [task53-redis-outcome-listener.md](task53-redis-outcome-listener.md) | `RedisOutcomeListener` + OTel span extractors | ✅ Complete |
+| 4 | [task54-outcome-integration-service.md](task54-outcome-integration-service.md) | `OutcomeIntegrationService` + traced public API | ✅ Complete |
+| 5 | [task55-outcome-integration-worker.md](task55-outcome-integration-worker.md) | `OutcomeIntegrationWorker` | ✅ Complete |
+| 6 | [task56-unit-tests.md](task56-unit-tests.md) | Domain + adapter unit tests (34 tests, all pass) | ✅ Complete |
+| 7 | [task57-integration-tests.md](task57-integration-tests.md) | IT-001–IT-004 + Gherkin step defs fully wired | ✅ Complete |
+| 8 | [task58-e2e-ucb12-wiring.md](task58-e2e-ucb12-wiring.md) | Wire e2e UC-B1.2 step definitions (TODO placeholders → real service calls) | ⬜ Pending |
+| 9 | [task59-resilience-gaps.md](task59-resilience-gaps.md) | Fix 5 resilience gaps (Redis drop, callback raise, bad JSON, unknown type, infra vs business errors) | ⬜ Pending |
 
 **Estimated Scope:** ~500-650 LOC (no new models; adapters ~200, service ~200, entrypoint ~100, errors ~50)
 
 ---
 
-**Epic Status:** All prerequisites met. Ready for implementation.
+**Epic Status:** ✅ Implementation complete. All 34 unit tests pass. IT-001–IT-004 integration tests implemented. Gherkin step defs fully wired. Pending: PR to `develop`.
+**Open tasks:** Task 58 (e2e wiring, blocks on EPIC-06/07), Task 59 (resilience gaps, can proceed independently).
 **Clarity Gate Score:** 9.2/10 ✅ (re-verified after spec alignment with EPICs 1–4)
-**Last Updated:** 2026-03-25
+**Last Updated:** 2026-03-27
