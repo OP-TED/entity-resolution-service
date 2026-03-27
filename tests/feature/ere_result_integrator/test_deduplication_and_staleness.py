@@ -215,6 +215,10 @@ def ere_delivers_outcomes_in_order(ctx, datatable):
 
 @then("the outcome is ignored without modifying the Decision Store")
 def outcome_ignored(ctx):
+    # assert_called_once() confirms the service reached store_decision() and
+    # that it raised StaleOutcomeError (no real write occurred). The mock was
+    # configured with side_effect=StaleOutcomeError in the given step, so a
+    # single call means the stale path was taken and no retry happened.
     ctx["decisions"].store_decision.assert_called_once()
 
 

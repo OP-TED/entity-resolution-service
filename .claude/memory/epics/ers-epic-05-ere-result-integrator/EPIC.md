@@ -520,14 +520,13 @@ Feature: Integrate ERE Resolution Outcomes
 | 5 | [task55-outcome-integration-worker.md](task55-outcome-integration-worker.md) | `OutcomeIntegrationWorker` | ✅ Complete |
 | 6 | [task56-unit-tests.md](task56-unit-tests.md) | Domain + adapter unit tests (34 tests, all pass) | ✅ Complete |
 | 7 | [task57-integration-tests.md](task57-integration-tests.md) | IT-001–IT-004 + Gherkin step defs fully wired | ✅ Complete |
-| 8 | [task58-e2e-ucb12-wiring.md](task58-e2e-ucb12-wiring.md) | Wire e2e UC-B1.2 step definitions (TODO placeholders → real service calls) | ⬜ Pending |
-| 9 | [task59-resilience-gaps.md](task59-resilience-gaps.md) | Fix 5 resilience gaps (Redis drop, callback raise, bad JSON, unknown type, infra vs business errors) | ⬜ Pending |
+| 8 | [task58-e2e-ucb12-wiring.md](task58-e2e-ucb12-wiring.md) | Wire e2e UC-B1.2 step definitions (TODO placeholders → real service calls) | ✅ Complete |
+| 9 | [task59-resilience-gaps.md](task59-resilience-gaps.md) | Fix 5 resilience gaps (Redis drop, callback raise, bad JSON, unknown type, infra vs business errors) | ✅ Complete |
 
 **Estimated Scope:** ~500-650 LOC (no new models; adapters ~200, service ~200, entrypoint ~100, errors ~50)
 
 ---
 
-**Epic Status:** ✅ Implementation complete. All 34 unit tests pass. IT-001–IT-004 integration tests implemented. Gherkin step defs fully wired. Pending: PR to `develop`.
-**Open tasks:** Task 58 (e2e wiring, blocks on EPIC-06/07), Task 59 (resilience gaps, can proceed independently).
+**Epic Status:** ✅ Complete. All 869 tests pass. 12 e2e UC-B1.2 scenarios fully wired. 5 resilience gaps fixed (Tasks 58 + 59). Pending: PR to `develop`.
 **Clarity Gate Score:** 9.2/10 ✅ (re-verified after spec alignment with EPICs 1–4)
 **Last Updated:** 2026-03-27

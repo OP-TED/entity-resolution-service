@@ -217,6 +217,18 @@ class TestValidation:
         assert "candidates" in exc_info.value.detail.lower()
         mock_registry.get_resolution_request.assert_not_called()
 
+    async def test_timezone_naive_timestamp_raises(self, service, mock_registry):
+        """Timezone-naive timestamp → OutcomeValidationError before registry.
+
+        datetime.now() (without UTC) produces a naive datetime. The service
+        rejects it to prevent silent MongoDB comparison failures.
+        """
+        naive_ts = datetime.now()  # intentionally naive — no tzinfo
+        with pytest.raises(OutcomeValidationError) as exc_info:
+            await service.integrate_outcome(make_response(timestamp=naive_ts))
+        assert "timezone" in exc_info.value.detail.lower()
+        mock_registry.get_resolution_request.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # Gap B: coordinator callback error — decision persisted, no propagation

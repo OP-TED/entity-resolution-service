@@ -111,6 +111,11 @@ def mention_exists_in_registry(ctx, source_id, request_id):
     parsers.parse('the Decision Store "{prior_state}" a prior cluster assignment for that triad')
 )
 def decision_store_prior_state(ctx, prior_state):
+    # Deliberate no-op: the service's 6-step algorithm does not branch on
+    # whether a prior assignment exists — it always attempts store_decision()
+    # and relies on StaleOutcomeError for deduplication. Both "contains" and
+    # "does not contain" rows exercise the same code path; the distinction is
+    # expressed in the scenario prose for business readability only.
     pass
 
 

@@ -18,6 +18,13 @@ root_packages =
 ; --- Tier hierarchy: entrypoints > orchestration > foundation > commons ---
 ; Pipe (|) = independent siblings at same tier level.
 ; Parentheses = optional (skipped if package doesn't exist yet).
+;
+; TODO: two pre-existing violations break this contract and must be fixed:
+;   1. ers.resolution_coordinator.services.resolution_coordinator_service
+;      imports ers.ers_rest_api.domain.resolution (Tier 2 → Tier 3)
+;   2. ers.request_registry.services.request_registry_service
+;      imports ers.rdf_mention_parser (same-tier peer import, Tier 1 → Tier 1)
+; Until those are fixed, `lint-imports` will report this contract as BROKEN.
 [importlinter:contract:tier-hierarchy]
 name = Tier hierarchy: entrypoints > orchestration > foundation > commons
 type = layers
