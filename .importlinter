@@ -30,6 +30,8 @@ layers =
 ; --- Intra-component layers: domain, adapters, services ---
 ; When packages are created, add them here: ers.request_registry,
 ; ers.rdf_mention_parser, ers.resolution_decision_store, ers.user_action_store
+; Note: ers.ere_result_integrator and ers.curation have entrypoints and are
+; covered by the layers-all contract below instead of this one.
 [importlinter:contract:layers-domain-adapters-services]
 name = Layers [domain,adapters,services]: svc > adp > dom
 type = layers
@@ -45,9 +47,6 @@ containers =
 
 ; --- Intra-component layers: adapters, services ---
 
-; --- Intra-component layers: adapters, entrypoints, services ---
-; When package is created, add: ers.ere_result_integrator
-
 ; --- Intra-component layers: domain, entrypoints, services ---
 ; When package is created, add: ers.ers_rest_api
 
@@ -62,6 +61,7 @@ layers =
     (domain)
 containers =
     ers.curation
+    ers.ere_result_integrator
 
 ; --- Commons must not import any business component ---
 [importlinter:contract:commons-isolation]

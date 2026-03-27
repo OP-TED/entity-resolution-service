@@ -511,13 +511,15 @@ Feature: Integrate ERE Resolution Outcomes
 
 ### Phase 3 Sequence (Recommended Order)
 
-1. **Domain errors** (`domain/errors.py`) — `OutcomeValidationError`, `TriadNotFoundError` (both subclass `ApplicationError`)
-2. **Adapter interface** (`adapters/outcome_listener.py`) — `AsyncOutcomeListener` with `consume()` async generator contract
-3. **Adapter implementation** (`adapters/redis_outcome_listener.py`) — `RedisOutcomeListener` wrapping `AbstractClient.pull_response()`
-4. **Service** (`services/outcome_integration_service.py`) — `OutcomeIntegrationService`; depends on `MongoResolutionRequestRepository` + `DecisionStoreService`
-5. **Entrypoint** (`entrypoints/outcome_integration_worker.py`) — `OutcomeIntegrationWorker`; depends on service + concrete listener
-6. **Unit Tests** — per-layer (test as you build)
-7. **Integration Tests** — after all layers complete
+| Step | Task file | What |
+|------|-----------|------|
+| 1 | [task51-domain-errors.md](task51-domain-errors.md) | `OutcomeValidationError`, `TriadNotFoundError` |
+| 2 | [task52-outcome-listener-interface.md](task52-outcome-listener-interface.md) | `AsyncOutcomeListener` ABC |
+| 3 | [task53-redis-outcome-listener.md](task53-redis-outcome-listener.md) | `RedisOutcomeListener` |
+| 4 | [task54-outcome-integration-service.md](task54-outcome-integration-service.md) | `OutcomeIntegrationService` (TDD — tests first) |
+| 5 | [task55-outcome-integration-worker.md](task55-outcome-integration-worker.md) | `OutcomeIntegrationWorker` (TDD — tests first) |
+| 6 | [task56-unit-tests.md](task56-unit-tests.md) | Domain + adapter unit tests |
+| 7 | [task57-integration-tests.md](task57-integration-tests.md) | Integration tests + wire Gherkin step defs |
 
 **Estimated Scope:** ~500-650 LOC (no new models; adapters ~200, service ~200, entrypoint ~100, errors ~50)
 
