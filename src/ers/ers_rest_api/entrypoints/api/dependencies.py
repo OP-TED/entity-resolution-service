@@ -3,7 +3,8 @@ from typing import Annotated
 from fastapi import Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.adapters.decision_repository import DecisionRepository, MongoDecisionRepository
+
+from ers.commons.adapters.decision_repository import BaseDecisionRepository, BaseMongoDecisionRepository
 from ers.ers_rest_api.services.lookup_service import LookupService
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
 from ers.ers_rest_api.services.resolve_service import ResolveService
@@ -30,8 +31,8 @@ def _get_database(request: Request) -> AsyncDatabase:
 
 async def get_decision_repository(
     db: Annotated[AsyncDatabase, Depends(_get_database)],
-) -> DecisionRepository:
-    return MongoDecisionRepository(db)
+) -> BaseDecisionRepository:
+    return BaseMongoDecisionRepository(db)
 
 
 async def get_resolution_request_repository(
@@ -47,13 +48,13 @@ async def get_resolution_coordinator(
     resolution_request_repository: Annotated[
         ResolutionRequestRepository, Depends(get_resolution_request_repository)
     ],
-    decision_repository: Annotated[DecisionRepository, Depends(get_decision_repository)],
+    decision_repository: Annotated[BaseDecisionRepository, Depends(get_decision_repository)],
 ) -> ResolutionCoordinatorServiceABC:
     raise NotImplementedError("Resolution Coordinator implementation pending (EPIC-06)")
 
 
 async def get_decision_store(
-    decision_repository: Annotated[DecisionRepository, Depends(get_decision_repository)],
+    decision_repository: Annotated[BaseDecisionRepository, Depends(get_decision_repository)],
 ) -> ResolutionDecisionStoreServiceABC:
     raise NotImplementedError("Resolution Decision Store implementation pending (EPIC-04)")
 

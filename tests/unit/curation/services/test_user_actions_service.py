@@ -13,7 +13,7 @@ from ers.commons.domain.data_transfer_objects import (
 )
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters import (
-    DecisionCurationRepository,
+    DecisionRepository,
     EntityMentionCurationRepository,
     UserActionCurationRepository,
 )
@@ -41,7 +41,7 @@ def entity_mention_repository() -> MagicMock:
 
 @pytest.fixture
 def decision_repository() -> MagicMock:
-    return create_autospec(DecisionCurationRepository, instance=True)
+    return create_autospec(DecisionRepository, instance=True)
 
 
 @pytest.fixture

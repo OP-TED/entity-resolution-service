@@ -9,11 +9,18 @@ from erspec.models.core import (
 )
 from pydantic import Field, Json
 
-from ers.commons.domain.data_transfer_objects import FrozenDTO
+from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering, FrozenDTO
 
 T = TypeVar("T")
 BULK_ACTION_MAX_SIZE = 200
 
+# DecisionFilters and DecisionOrdering are defined in ers.commons.domain.data_transfer_objects
+# and re-exported here for backward compatibility.
+__all__ = [
+    "DecisionFilters",
+    "DecisionOrdering",
+    "BaseOrdering",
+]
 
 class BaseOrdering(StrEnum):
     """Base ordering options available to all entity listings."""

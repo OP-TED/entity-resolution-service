@@ -41,6 +41,7 @@ containers =
     ers.users
     ers.commons
     ers.ere_contract_client
+    ers.resolution_decision_store
 
 ; --- Intra-component layers: adapters, services ---
 

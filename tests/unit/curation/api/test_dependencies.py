@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 from ers.commons.adapters.hasher import Argon2PasswordHasher
 from ers.curation.adapters import (
-    MongoDecisionCurationRepository,
+    MongoDecisionRepository,
     MongoEntityMentionCurationRepository,
     MongoStatisticsRepository,
     MongoUserActionCurationRepository,
@@ -59,7 +59,7 @@ class TestRepositoryProviders:
     async def test_get_decision_repository(self):
         mock_db = MagicMock()
         result = await get_decision_repository(mock_db)
-        assert isinstance(result, MongoDecisionCurationRepository)
+        assert isinstance(result, MongoDecisionRepository)
 
     async def test_get_entity_mention_repository(self):
         mock_db = MagicMock()

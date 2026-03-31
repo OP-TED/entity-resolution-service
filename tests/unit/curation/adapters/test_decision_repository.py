@@ -3,10 +3,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 from erspec.models.core import EntityMentionIdentifier
 
-from ers.curation.adapters.decision_repository import MongoDecisionCurationRepository
-from ers.curation.domain.data_transfer_objects import (
-    DecisionFilters,
-)
+from ers.commons.domain.data_transfer_objects import CursorParams, DecisionFilters
+from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 from tests.unit.factories import DecisionFactory, EntityMentionIdentifierFactory
 
 
@@ -48,7 +46,7 @@ def _make_repo():
     mock_collection = AsyncMock()
     mock_collection.find = MagicMock(return_value=_MockAsyncCursor([]))
     mock_db.__getitem__.return_value = mock_collection
-    repo = MongoDecisionCurationRepository(mock_db)
+    repo = MongoDecisionRepository(mock_db)
     return repo, mock_collection
 
 
@@ -147,6 +145,30 @@ class TestParseCursorSortValue:
         repo, _ = _make_repo()
         result = repo._parse_cursor_sort_value(0.85, "current_placement.confidence_score")
         assert result == 0.85
+
+
+class TestFindWithFilters:
+    async def test_count_documents_called_when_filters_provided(self):
+        """count is populated from count_documents in curation (filtered) mode."""
+        repo, col = _make_repo()
+        col.count_documents = AsyncMock(return_value=42)
+
+        result = await repo.find_with_filters(
+            filters=DecisionFilters(), cursor_params=CursorParams()
+        )
+
+        assert result.count == 42
+        col.count_documents.assert_awaited_once()
+
+    async def test_count_not_called_in_bulk_sync_mode(self):
+        """count_documents is skipped (count=0) in unfiltered bulk sync mode."""
+        repo, col = _make_repo()
+        col.count_documents = AsyncMock(return_value=99)
+
+        result = await repo.find_with_filters(filters=None)
+
+        assert result.count == 0
+        col.count_documents.assert_not_awaited()
 
 
 class TestFindMentionIdsByCluster:

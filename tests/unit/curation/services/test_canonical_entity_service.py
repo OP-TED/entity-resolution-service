@@ -5,7 +5,6 @@ import pytest
 from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters import (
-    DecisionCurationRepository,
     EntityMentionCurationRepository,
 )
 from ers.curation.domain.data_transfer_objects import CanonicalEntityPreview
@@ -16,11 +15,12 @@ from tests.unit.factories import (
     EntityMentionFactory,
     EntityMentionIdentifierFactory,
 )
+from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 
 
 @pytest.fixture
 def decision_repository() -> MagicMock:
-    return create_autospec(DecisionCurationRepository, instance=True)
+    return create_autospec(DecisionRepository, instance=True)
 
 
 @pytest.fixture

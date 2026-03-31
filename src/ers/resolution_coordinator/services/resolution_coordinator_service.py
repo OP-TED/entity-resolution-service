@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from erspec.models.core import EntityMention
 
-from ers.commons.adapters.decision_repository import DecisionRepository
+from ers.commons.adapters.decision_repository import BaseDecisionRepository
 from ers.ers_rest_api.domain.resolution import EntityMentionResolutionResult
 from ers.request_registry.adapters.records_repository import ResolutionRequestRepository
 
@@ -17,7 +17,7 @@ class ResolutionCoordinatorServiceABC(ABC):
     def __init__(
         self,
         resolution_request_repository: ResolutionRequestRepository,
-        decision_repository: DecisionRepository,
+        decision_repository: BaseDecisionRepository,
     ) -> None:
         self._resolution_request_repository = resolution_request_repository
         self._decision_repository = decision_repository
