@@ -6,14 +6,14 @@ from ers.ers_rest_api.domain.resolution import (
     EntityMentionResolutionResult,
 )
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
-    ResolutionCoordinatorServiceABC,
+    ResolutionCoordinatorService,
 )
 
 
 class ResolveService:
     """Orchestrator for the POST /resolve and /resolve-bulk endpoints."""
 
-    def __init__(self, resolution_coordinator: ResolutionCoordinatorServiceABC) -> None:
+    def __init__(self, resolution_coordinator: ResolutionCoordinatorService) -> None:
         self._coordinator = resolution_coordinator
 
     async def handle_resolve(
@@ -21,7 +21,7 @@ class ResolveService:
         request: EntityMentionResolutionRequest,
     ) -> EntityMentionResolutionResult:
         """Resolve an entity mention and return the cluster assignment."""
-        return await self._coordinator.resolve(request.mention)
+        return await self._coordinator.resolve_single(request.mention)
 
     async def handle_bulk_resolve(
         self,
@@ -32,7 +32,7 @@ class ResolveService:
         # TODO: replace with batch resolve method to resolution coordinator service once available
         for item in request.mentions:
             try:
-                result = await self._coordinator.resolve(item.mention)
+                result = await self._coordinator.resolve_single(item.mention)
                 results.append(result)
             except Exception:
                 identifier = item.mention.identifiedBy

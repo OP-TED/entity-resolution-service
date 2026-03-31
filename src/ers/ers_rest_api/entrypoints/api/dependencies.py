@@ -12,7 +12,7 @@ from ers.request_registry.adapters.records_repository import (
     ResolutionRequestRepository,
 )
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
-    ResolutionCoordinatorServiceABC,
+    ResolutionCoordinatorService,
 )
 from ers.resolution_decision_store.services.resolution_decision_store_service import (
     ResolutionDecisionStoreServiceABC,
@@ -48,7 +48,7 @@ async def get_resolution_coordinator(
         ResolutionRequestRepository, Depends(get_resolution_request_repository)
     ],
     decision_repository: Annotated[BaseDecisionRepository, Depends(get_decision_repository)],
-) -> ResolutionCoordinatorServiceABC:
+) -> ResolutionCoordinatorService:
     raise NotImplementedError("Resolution Coordinator implementation pending (EPIC-06)")
 
 
@@ -62,7 +62,7 @@ async def get_decision_store(
 
 
 async def get_resolve_service(
-    coordinator: Annotated[ResolutionCoordinatorServiceABC, Depends(get_resolution_coordinator)],
+    coordinator: Annotated[ResolutionCoordinatorService, Depends(get_resolution_coordinator)],
 ) -> ResolveService:
     return ResolveService(resolution_coordinator=coordinator)
 

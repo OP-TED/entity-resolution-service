@@ -12,7 +12,7 @@ from ers.ers_rest_api.domain.resolution import (
 )
 from ers.ers_rest_api.services.resolve_service import ResolveService
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
-    ResolutionCoordinatorServiceABC,
+    ResolutionCoordinatorService,
 )
 
 REQUEST = EntityMentionResolutionRequest(
@@ -30,7 +30,7 @@ REQUEST = EntityMentionResolutionRequest(
 
 @pytest.fixture
 def coordinator() -> AsyncMock:
-    return create_autospec(ResolutionCoordinatorServiceABC, instance=True)
+    return create_autospec(ResolutionCoordinatorService, instance=True)
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ class TestResolveService:
         service: ResolveService,
         coordinator: AsyncMock,
     ) -> None:
-        coordinator.resolve.return_value = EntityMentionResolutionResult(
+        coordinator.resolve_single.return_value = EntityMentionResolutionResult(
             identified_by=EntityMentionIdentifier(
                 source_id="SYSTEM_A",
                 request_id="req-001",
@@ -65,7 +65,7 @@ class TestResolveService:
         service: ResolveService,
         coordinator: AsyncMock,
     ) -> None:
-        coordinator.resolve.return_value = EntityMentionResolutionResult(
+        coordinator.resolve_single.return_value = EntityMentionResolutionResult(
             identified_by=EntityMentionIdentifier(
                 source_id="SYSTEM_A",
                 request_id="req-001",
@@ -85,7 +85,7 @@ class TestResolveService:
         service: ResolveService,
         coordinator: AsyncMock,
     ) -> None:
-        coordinator.resolve.return_value = EntityMentionResolutionResult(
+        coordinator.resolve_single.return_value = EntityMentionResolutionResult(
             identified_by=EntityMentionIdentifier(
                 source_id="SYSTEM_A",
                 request_id="req-001",
@@ -97,7 +97,7 @@ class TestResolveService:
 
         await service.handle_resolve(REQUEST)
 
-        call_args = coordinator.resolve.call_args[0][0]
+        call_args = coordinator.resolve_single.call_args[0][0]
         assert call_args.identifiedBy.source_id == "SYSTEM_A"
         assert call_args.identifiedBy.request_id == "req-001"
         assert call_args.identifiedBy.entity_type == "ORGANISATION"
@@ -108,7 +108,7 @@ class TestResolveService:
         service: ResolveService,
         coordinator: AsyncMock,
     ) -> None:
-        coordinator.resolve.side_effect = RuntimeError("coordinator unavailable")
+        coordinator.resolve_single.side_effect = RuntimeError("coordinator unavailable")
 
         with pytest.raises(RuntimeError, match="coordinator unavailable"):
             await service.handle_resolve(REQUEST)
@@ -148,7 +148,7 @@ class TestBulkResolveService:
         service: ResolveService,
         coordinator: AsyncMock,
     ) -> None:
-        coordinator.resolve.side_effect = [
+        coordinator.resolve_single.side_effect = [
             EntityMentionResolutionResult(
                 identified_by=BULK_REQUEST.mentions[0].mention.identifiedBy,
                 canonical_entity_id="cluster-A",
@@ -173,7 +173,7 @@ class TestBulkResolveService:
         service: ResolveService,
         coordinator: AsyncMock,
     ) -> None:
-        coordinator.resolve.side_effect = [
+        coordinator.resolve_single.side_effect = [
             EntityMentionResolutionResult(
                 identified_by=BULK_REQUEST.mentions[0].mention.identifiedBy,
                 canonical_entity_id="cluster-A",
@@ -196,7 +196,7 @@ class TestBulkResolveService:
         service: ResolveService,
         coordinator: AsyncMock,
     ) -> None:
-        coordinator.resolve.side_effect = RuntimeError("total failure")
+        coordinator.resolve_single.side_effect = RuntimeError("total failure")
 
         result = await service.handle_bulk_resolve(BULK_REQUEST)
 

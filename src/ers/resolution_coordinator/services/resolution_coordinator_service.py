@@ -30,16 +30,13 @@ from ers.request_registry.services.request_registry_service import (
     RequestRegistryService,
 )
 from ers.resolution_coordinator.domain.exceptions import (
-    CoordinatorException,
     ParsingFailedException,
     ResolutionTimeoutException,
 )
 from ers.resolution_coordinator.services.async_resolution_waiter import (
     AsyncResolutionWaiter,
 )
-from ers.resolution_decision_store.adapters.provisional_id import (
-    derive_provisional_cluster_id,
-)
+from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.resolution_decision_store.domain.errors import (
     RepositoryConnectionError,
     StaleOutcomeError,
@@ -165,18 +162,23 @@ class ResolutionCoordinatorService:
 
     async def resolve_bulk(
         self, entity_mentions: list[EntityMention]
-    ) -> list[Decision | CoordinatorException]:
+    ) -> list[Decision | Exception]:
         """Resolve multiple entity mentions concurrently.
 
         Each mention is resolved independently via ``resolve_single``.
         Failures are captured as exception objects in the results list,
         preserving input order. One failing mention does not abort the batch.
 
+        Note:
+            The result list may contain any exception type raised by
+            ``resolve_single``, including ``IdempotencyConflictError``
+            (which is not a ``CoordinatorException``).
+
         Args:
             entity_mentions: The list of entity mentions to resolve.
 
         Returns:
-            A list of Decision or CoordinatorException in input order.
+            A list of Decision or Exception in input order.
 
         Raises:
             ResolutionTimeoutException: If the bulk time budget is exceeded.
@@ -222,14 +224,14 @@ class ResolutionCoordinatorService:
                 candidates=[cluster_ref],
                 updated_at=datetime.now(UTC),
             )
-        except StaleOutcomeError:
+        except StaleOutcomeError as exc:
             decision = await self._decision_store_service.get_decision_by_triad(
                 identifier
             )
             if decision is None:  # pragma: no cover — ERE wrote it moments ago
-                raise ResolutionTimeoutException(  # pylint: disable=raise-missing-from
+                raise ResolutionTimeoutException(
                     "Decision vanished after StaleOutcomeError"
-                )
+                ) from exc
             return decision
         except RepositoryConnectionError as exc:
             raise ResolutionTimeoutException(
@@ -250,6 +252,6 @@ async def resolve_single(
 async def resolve_bulk(
     entity_mentions: list[EntityMention],
     service: ResolutionCoordinatorService,
-) -> list[Decision | CoordinatorException]:
+) -> list[Decision | Exception]:
     """Traced entry point for bulk resolution."""
     return await service.resolve_bulk(entity_mentions)

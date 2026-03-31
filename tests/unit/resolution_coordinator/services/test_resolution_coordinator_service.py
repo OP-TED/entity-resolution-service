@@ -26,7 +26,6 @@ from ers.request_registry.services.request_registry_service import (
     RequestRegistryService,
 )
 from ers.resolution_coordinator.domain.exceptions import (
-    CoordinatorException,
     ParsingFailedException,
     ResolutionTimeoutException,
 )
