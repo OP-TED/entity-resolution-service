@@ -40,9 +40,7 @@ File: `src/ers/resolution_coordinator/services/async_resolution_waiter.py`
 class AsyncResolutionWaiter:
 
     def __init__(self) -> None:
-        self._events: dict[str, asyncio.Event] = {}
-        self._waiter_counts: dict[str, int] = {}
-        self._lock: asyncio.Lock = asyncio.Lock()
+        self._events: WeakValueDictionary[str, asyncio.Event] = WeakValueDictionary()
 
     async def get_or_create(self, triad_key: str) -> asyncio.Event: ...
     async def notify(self, triad_key: str) -> None: ...
@@ -58,6 +56,51 @@ no separator. Consistent with `derive_provisional_cluster_id` in
 - No business logic, no logging, no OTel spans
 - No public module-level function wrapper
 - No Redis, Celery, or any external broker
+- No `asyncio.Lock` (see Design Rationale below)
+- No manual reference counting (see Design Rationale below)
+
+---
+
+## Design Rationale
+
+### Why no `asyncio.Lock`
+
+A previous version of this spec included `asyncio.Lock` on all three methods. This was
+removed after analysis:
+
+asyncio is **single-threaded**. Coroutines interleave **only at `await` points**. Every
+operation inside the three methods — dict lookup, dict assignment, `event.set()` — is
+pure synchronous Python with no `await` between them. Therefore, no two coroutines can
+ever interleave inside these critical sections, with or without a lock.
+
+The lock's only effect would be adding an extra `await` on every call, introducing
+contention overhead and an extra suspension point — for zero safety benefit.
+
+**The lock was cargo-culted from thread-safe patterns. It does not apply to
+single-threaded asyncio.**
+
+### Why `WeakValueDictionary` instead of manual reference counting
+
+A previous version used two dicts (`_events` and `_waiter_counts`) with manual reference
+counting in `release` to know when to evict an event.
+
+`weakref.WeakValueDictionary` replaces this entirely:
+
+- Each caller of `get_or_create` receives a strong reference to the `asyncio.Event`
+  and holds it as a local variable until its coroutine finishes.
+- As long as at least one coroutine holds that local reference, the event stays in
+  the `WeakValueDictionary` automatically.
+- When the last coroutine releases its local reference (end of `finally` block), CPython's
+  reference-counting GC immediately removes the entry from the dict — no explicit eviction needed.
+- `notify` on a key whose all waiters have already released is a natural no-op: the key
+  is no longer in the dict.
+
+**Result:** `release` becomes a no-op. The two-dict design collapses to one dict. No
+counting, no bookkeeping.
+
+**CPython assumption:** `WeakValueDictionary` cleanup is immediate under CPython's
+reference-counting GC. This is acceptable for an MVP service. If the service ever runs
+under PyPy or GraalPy, this assumption must be revisited.
 
 ---
 
@@ -65,32 +108,26 @@ no separator. Consistent with `derive_provisional_cluster_id` in
 
 **`get_or_create(triad_key) → asyncio.Event`**
 
-Acquires `self._lock` for the entire read-check-write sequence to prevent a race where
-two coroutines both see "key absent" and each create a separate Event:
+Check the `WeakValueDictionary`. If the key is absent (or the value has been GC'd),
+create a new `asyncio.Event`, store it, and return it. The caller holds a strong reference,
+keeping the event alive for the duration of its wait.
 
 ```python
-async with self._lock:
-    if triad_key not in self._events:
-        self._events[triad_key] = asyncio.Event()
-        self._waiter_counts[triad_key] = 1
-    else:
-        self._waiter_counts[triad_key] += 1
-    return self._events[triad_key]
+async def get_or_create(self, triad_key: str) -> asyncio.Event:
+    event = self._events.get(triad_key)
+    if event is None:
+        event = asyncio.Event()
+        self._events[triad_key] = event
+    return event
 ```
 
 **`notify(triad_key) → None`**
 
-Acquires `self._lock`, looks up the Event, calls `event.set()` while still holding the
-lock. `asyncio.Event.set()` is not a coroutine — it is safe to call under `asyncio.Lock`.
-
-Holding the lock during `set()` prevents a race where `release` removes the Event between
-the dict lookup and the `set()` call.
-
-If `triad_key` is not in `_events`: no-op. This is a valid late signal after all waiters
-have already released (e.g., all timed out).
+Look up the key. If present (at least one waiter is still alive), call `event.set()`.
+If absent (all waiters timed out and released): no-op.
 
 ```python
-async with self._lock:
+async def notify(self, triad_key: str) -> None:
     event = self._events.get(triad_key)
     if event is not None:
         event.set()
@@ -98,40 +135,21 @@ async with self._lock:
 
 **`release(triad_key) → None`**
 
-Acquires `self._lock`, decrements `_waiter_counts[triad_key]`. When count reaches 0,
-removes both the Event and the count entry. If key is absent: no-op (defensive).
+No-op. The `WeakValueDictionary` evicts the entry automatically when the caller drops
+its strong reference. This method exists to satisfy the integration contract with T6.3
+(which calls `release` in a `finally` block) and to make the lifecycle explicit to callers.
 
 ```python
-async with self._lock:
-    if triad_key not in self._waiter_counts:
-        return
-    self._waiter_counts[triad_key] -= 1
-    if self._waiter_counts[triad_key] == 0:
-        del self._events[triad_key]
-        del self._waiter_counts[triad_key]
+async def release(self, triad_key: str) -> None:
+    pass
 ```
-
-**Why asyncio.Lock (not threading.Lock):**
-All callers are coroutines in the same event loop. `asyncio.Lock` releases the event
-loop between `acquire` and continuation — `threading.Lock` would deadlock in async code.
-
-**asyncio.Event vs manual flags:**
-`asyncio.Event` is the stdlib primitive designed exactly for this pattern. Do not
-reimplement with `asyncio.Condition` or `asyncio.Queue` — they add unnecessary complexity.
-`event.wait()` suspends the coroutine without blocking the event loop.
 
 ---
 
-## pytest-asyncio Setup Check
+## pytest-asyncio Setup
 
-Before writing tests, verify the project's asyncio test configuration:
-
-1. Check `pyproject.toml` for `asyncio_mode` under `[tool.pytest.ini_options]`.
-   - If `asyncio_mode = "auto"` → no decorator needed on test functions
-   - If absent or `"strict"` → add `@pytest.mark.asyncio` to each async test
-2. Check that `pytest-asyncio` is in `[tool.poetry.dev-dependencies]` or `[tool.poetry.group.test]`.
-   If absent, add it and run `poetry lock --no-update && poetry install`.
-3. Document which mode is in use as a comment at the top of the test file.
+`asyncio_mode = auto` in `pytest.ini` — no `@pytest.mark.asyncio` decorator needed on
+test functions. Confirmed from project configuration.
 
 ---
 
@@ -147,21 +165,21 @@ Before writing tests, verify the project's asyncio test configuration:
 
 ## Unit Tests
 
-All tests are `async`. Cover:
+All tests are `async`. `asyncio_mode = auto` — no decorator needed.
 
 | Test | Scenario |
 |------|----------|
-| `test_get_or_create_new_key` | New key → Event created, count = 1 |
-| `test_get_or_create_same_key_returns_same_event` | Same key twice → identical Event object, count = 2 |
+| `test_get_or_create_new_key` | New key → Event created and returned |
+| `test_get_or_create_same_key_returns_same_event` | Same key twice → identical Event object |
 | `test_notify_sets_event` | `notify` on existing key → `event.is_set()` is True |
 | `test_notify_unknown_key_is_noop` | `notify` on absent key → no exception, no side effect |
-| `test_release_decrements_count` | 2 waiters, 1 releases → Event still in dict, count = 1 |
-| `test_release_last_waiter_removes_event` | 1 waiter releases → Event removed from internal dict |
+| `test_release_is_noop` | `release` on any key → no exception, no state change |
+| `test_event_removed_after_last_ref_dropped` | After all local refs dropped → key absent from internal dict |
 | `test_release_unknown_key_is_noop` | Release on absent key → no exception |
-| `test_concurrent_get_or_create` | 10 coroutines call `get_or_create` on same key via `asyncio.gather` → all get same Event object, count = 10 |
+| `test_concurrent_get_or_create` | 10 coroutines call `get_or_create` on same key via `asyncio.gather` → all get same Event object |
 | `test_notify_unblocks_all_waiters` | 3 coroutines await the same Event; `notify` → all 3 unblock |
 | `test_notify_after_all_released_is_noop` | All waiters release, then `notify` → no error |
-| `test_late_notify_after_timeout` | Waiter times out (asyncio.wait_for), then `notify` called → no error, Event already cleaned up |
+| `test_late_notify_after_timeout` | Waiter times out, releases, then `notify` called → no error |
 
 Reference implementation for `test_notify_unblocks_all_waiters`:
 
@@ -193,16 +211,20 @@ async def test_late_notify_after_timeout():
     with pytest.raises(asyncio.TimeoutError):
         await asyncio.wait_for(event.wait(), timeout=0.01)
     await waiter.release(key)
-    # After release, notify is a no-op
-    await waiter.notify(key)   # must not raise
+    del event                       # drop last strong ref → WeakValueDict evicts entry
+    await waiter.notify(key)        # must not raise
 ```
+
+Note: `test_event_removed_after_last_ref_dropped` must explicitly `del` the local
+`event` variable to trigger GC eviction, then assert the key is absent from
+`waiter._events`.
 
 ---
 
 ## Definition of Done
 
 - [ ] All unit tests pass: `poetry run pytest tests/unit/resolution_coordinator/services/test_async_resolution_waiter.py -v`
-- [ ] `asyncio_mode` setting verified and documented in test file header comment
+- [ ] `asyncio_mode = auto` confirmed and documented in test file header comment
 - [ ] No test uses `threading.Lock`, `time.sleep`, or real timeouts > 1s
 - [ ] `AsyncResolutionWaiter` imports nothing from `ers.resolution_coordinator.domain`
   or any business-logic module
