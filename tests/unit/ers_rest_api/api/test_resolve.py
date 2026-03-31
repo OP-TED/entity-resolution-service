@@ -5,7 +5,10 @@ from httpx import AsyncClient
 
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
 from ers.ers_rest_api.domain.errors import ErrorCode
-from ers.ers_rest_api.domain.resolution import EntityMentionResolutionResult
+from ers.ers_rest_api.domain.resolution import (
+    BulkResolveResponse,
+    EntityMentionResolutionResult,
+)
 
 VALID_RESOLVE_PAYLOAD = {
     "mention": {
@@ -161,3 +164,52 @@ class TestResolveEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
+
+
+class TestResolveBulkEndpoint:
+    async def test_returns_200_with_results(
+        self,
+        client: AsyncClient,
+        resolve_service: AsyncMock,
+    ) -> None:
+        resolve_service.handle_bulk_resolve.return_value = BulkResolveResponse(
+            results=[
+                EntityMentionResolutionResult(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYS_A",
+                        request_id="req-001",
+                        entity_type="ORGANISATION",
+                    ),
+                    canonical_entity_id="cluster-010",
+                    status=ResolutionOutcome.CANONICAL,
+                ),
+            ],
+        )
+
+        payload = {
+            "mentions": [
+                {
+                    "mention": {
+                        "identifiedBy": {
+                            "source_id": "SYS_A",
+                            "request_id": "req-001",
+                            "entity_type": "ORGANISATION",
+                        },
+                        "content": '{"name": "Acme Corp"}',
+                        "content_type": "application/ld+json",
+                    },
+                },
+            ],
+        }
+
+        response = await client.post("/api/v1/resolve-bulk", json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["results"]) == 1
+        assert body["results"][0]["canonical_entity_id"] == "cluster-010"
+
+    async def test_empty_mentions_returns_400(self, client: AsyncClient) -> None:
+        response = await client.post("/api/v1/resolve-bulk", json={"mentions": []})
+
+        assert response.status_code == 400

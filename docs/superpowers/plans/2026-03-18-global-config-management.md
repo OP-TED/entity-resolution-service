@@ -287,28 +287,28 @@ def _make(cls, **env_overrides):
 class TestAppConfig:
     def test_app_name_default(self, monkeypatch):
         monkeypatch.delenv("APP_NAME", raising=False)
-        from ers import AppConfig
-        assert AppConfig().APP_NAME == "Entity Resolution Service"
+        from ers import CurationAppConfig
+        assert CurationAppConfig().APP_NAME == "Entity Resolution Service"
 
     def test_debug_default_is_false(self, monkeypatch):
         monkeypatch.delenv("DEBUG", raising=False)
-        from ers import AppConfig
-        assert AppConfig().DEBUG is False
+        from ers import CurationAppConfig
+        assert CurationAppConfig().DEBUG is False
 
     def test_debug_true_from_env(self, monkeypatch):
         monkeypatch.setenv("DEBUG", "true")
-        from ers import AppConfig
-        assert AppConfig().DEBUG is True
+        from ers import CurationAppConfig
+        assert CurationAppConfig().DEBUG is True
 
     def test_cors_origins_default_is_list(self, monkeypatch):
         monkeypatch.delenv("CORS_ORIGINS", raising=False)
-        from ers import AppConfig
-        assert AppConfig().CORS_ORIGINS == ["*"]
+        from ers import CurationAppConfig
+        assert CurationAppConfig().CORS_ORIGINS == ["*"]
 
     def test_cors_origins_from_env(self, monkeypatch):
         monkeypatch.setenv("CORS_ORIGINS", '["https://a.com","https://b.com"]')
-        from ers import AppConfig
-        assert AppConfig().CORS_ORIGINS == ["https://a.com", "https://b.com"]
+        from ers import CurationAppConfig
+        assert CurationAppConfig().CORS_ORIGINS == ["https://a.com", "https://b.com"]
 
 
 class TestJWTConfig:

@@ -66,6 +66,7 @@ class TestListDecisions:
         )
         decision_repository.find_with_filters.return_value = CursorPage(
             results=[decision],
+            count=42,
             next_cursor=None,
         )
         entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
@@ -76,6 +77,7 @@ class TestListDecisions:
         )
 
         assert len(result.results) == 1
+        assert result.count == 42
         summary = result.results[0]
         assert isinstance(summary, DecisionSummary)
         assert summary.id == decision.id

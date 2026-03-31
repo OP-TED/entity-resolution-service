@@ -270,7 +270,7 @@ def register_rejected_vague(response: Any) -> None:
 
 @then("the registration is rejected as invalid")
 def register_rejected_invalid(response: Any) -> None:
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 @then("the response contains an access token and a refresh token")

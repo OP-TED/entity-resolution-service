@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Generic, TypeVar
+from typing import Any, ClassVar, TypeVar
 
 from pymongo.asynchronous.database import AsyncDatabase
 
@@ -7,7 +7,7 @@ T = TypeVar("T")
 ID = TypeVar("ID")
 
 
-class AsyncReadRepository(ABC, Generic[T, ID]):
+class AsyncReadRepository[T, ID](ABC):
     """Abstract async read-only repository."""
 
     @abstractmethod
@@ -15,7 +15,7 @@ class AsyncReadRepository(ABC, Generic[T, ID]):
         """Find an entity by its identifier. Returns None if not found."""
 
 
-class AsyncWriteRepository(ABC, Generic[T, ID]):
+class AsyncWriteRepository[T, ID](ABC):
     """Abstract async write repository."""
 
     @abstractmethod

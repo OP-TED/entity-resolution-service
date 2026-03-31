@@ -8,7 +8,7 @@ SRC_PATH = ${PROJECT_PATH}/src
 TEST_PATH = ${PROJECT_PATH}/tests
 BUILD_PATH = ${PROJECT_PATH}/dist
 PACKAGE_NAME = ers
-COMPOSE_FILE = ${PROJECT_PATH}/infra/compose.yaml
+COMPOSE_FILE = ${PROJECT_PATH}/infra/compose.dev.yaml
 ENV_FILE = ${PROJECT_PATH}/infra/.env
 
 ICON_DONE = [✔]
@@ -17,7 +17,7 @@ ICON_WARNING = [!]
 ICON_PROGRESS = [-]
 
 # Coverage flags — appended only in coverage-aware targets
-COV_FLAGS = --cov=src --cov-report=term-missing --cov-fail-under=80
+COV_FLAGS = --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=80
 
 #-----------------------------------------------------------------------------
 # Dev commands
@@ -65,8 +65,11 @@ help: ## Display available targets
 	@ echo -e "  $(BUILD_PRINT)Docker:$(END_BUILD_PRINT)"
 	@ echo "    up                   - Start services (docker compose up -d)"
 	@ echo "    down                 - Stop services (docker compose down)"
+	@ echo "    down-volumes         - Stop services and remove volumes"
 	@ echo "    rebuild              - Rebuild and start services"
+	@ echo "    rebuild-clean        - Rebuild from scratch (no cache)"
 	@ echo "    logs                 - Follow service logs"
+	@ echo "    watch                - Start services with file watching (hot-reload)"
 	@ echo ""
 	@ echo -e "  $(BUILD_PRINT)Utilities:$(END_BUILD_PRINT)"
 	@ echo "    clean                - Remove build artifacts and caches"
@@ -140,7 +143,7 @@ check-architecture: ## Check architecture constraints with import-linter
 
 test: ## Run all tests (with coverage)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running all tests$(END_BUILD_PRINT)"
-	@ poetry run pytest $(TEST_PATH) $(COV_FLAGS)
+	@ poetry run pytest $(TEST_PATH) $(COV_FLAGS) --junitxml=test-results.xml
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) All tests passed$(END_BUILD_PRINT)"
 
 test-unit: ## Run unit tests only
@@ -221,25 +224,43 @@ clean-code: ## Xenon threshold checks
 #-----------------------------------------------------------------------------
 # Docker
 #-----------------------------------------------------------------------------
-.PHONY: up down rebuild logs
+.PHONY: check-env up down down-volumes rebuild rebuild-clean logs watch
 
-up: ## Start services (docker compose up -d)
+check-env:
+	@ test -f $(ENV_FILE) || (echo -e "$(BUILD_PRINT)$(ICON_ERROR) Missing $(ENV_FILE). Run: cp infra/.env.example infra/.env$(END_BUILD_PRINT)" && exit 1)
+
+up: check-env ## Start services (docker compose up -d)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Starting services$(END_BUILD_PRINT)"
 	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up -d
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services started$(END_BUILD_PRINT)"
 
-down: ## Stop services (docker compose down)
+down: check-env ## Stop services (docker compose down)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Stopping services$(END_BUILD_PRINT)"
 	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) down
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services stopped$(END_BUILD_PRINT)"
 
-rebuild: ## Rebuild and start services
+down-volumes: check-env ## Stop services and remove volumes
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Stopping services and removing volumes$(END_BUILD_PRINT)"
+	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) down -v
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services stopped and volumes removed$(END_BUILD_PRINT)"
+
+rebuild: check-env ## Rebuild and start services
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Rebuilding services$(END_BUILD_PRINT)"
 	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up -d --build
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services rebuilt and started$(END_BUILD_PRINT)"
 
-logs: ## Follow service logs
+rebuild-clean: check-env ## Rebuild from scratch (no cache) and start services
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Rebuilding services (no cache)$(END_BUILD_PRINT)"
+	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) build --no-cache
+	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up -d
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services rebuilt (clean) and started$(END_BUILD_PRINT)"
+
+logs: check-env ## Follow service logs
 	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) logs -f
+
+watch: check-env ## Start services with file watching (hot-reload)
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Starting services with watch$(END_BUILD_PRINT)"
+	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) watch
 
 #-----------------------------------------------------------------------------
 # Utilities
@@ -253,7 +274,7 @@ clean: ## Remove build artifacts and caches
 	@ rm -rf .mypy_cache
 	@ rm -rf .ruff_cache
 	@ rm -rf .tox
-	@ rm -rf .coverage htmlcov
+	@ rm -rf .coverage htmlcov coverage.xml test-results.xml
 	@ rm -rf *.egg-info
 	@ rm -rf reports
 	@ poetry run ruff clean 2>/dev/null || true

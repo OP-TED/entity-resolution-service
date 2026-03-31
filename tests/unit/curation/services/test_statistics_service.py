@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
+
 from ers.curation.adapters import StatisticsRepository
 from ers.curation.domain.data_transfer_objects import (
     CurationStatistics,

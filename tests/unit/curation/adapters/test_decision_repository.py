@@ -1,78 +1,221 @@
-"""Regression tests for cursor-seek helpers on MongoDecisionRepository.
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
-These tests exist to guarantee that lifting _build_cursor_condition and
-_parse_cursor_sort_value to the MongoDecisionRepository base class does not
-change observable behaviour for the curation repository.
-"""
-from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from erspec.models.core import EntityMentionIdentifier
 
+from ers.commons.domain.data_transfer_objects import CursorParams, DecisionFilters
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
+from tests.unit.factories import DecisionFactory, EntityMentionIdentifierFactory
 
 
-def make_repo() -> MongoDecisionRepository:
-    db = MagicMock()
-    db.__getitem__ = MagicMock(return_value=MagicMock())
-    return MongoDecisionRepository(db)
+class _MockAsyncCursor:
+    def __init__(self, documents: list[dict]):
+        self._documents = list(documents)
+
+    def sort(self, *_a, **_kw):
+        return self
+
+    def skip(self, *_a, **_kw):
+        return self
+
+    def limit(self, *_a, **_kw):
+        return self
+
+    def __aiter__(self):
+        return _AsyncDocIterator(self._documents)
 
 
-# ── _build_cursor_condition ───────────────────────────────────────────────────
+class _AsyncDocIterator:
+    def __init__(self, docs):
+        self._docs = docs
+        self._index = 0
 
-def test_ascending_non_null_produces_or_with_gt():
-    repo = make_repo()
-    result = repo._build_cursor_condition("updated_at", "2025-01-01", "id123", ascending=True)
-    assert "$or" in result
-    assert {"updated_at": {"$gt": "2025-01-01"}} in result["$or"]
-    assert {"updated_at": "2025-01-01", "_id": {"$gt": "id123"}} in result["$or"]
+    def __aiter__(self):
+        return self
 
-
-def test_descending_non_null_produces_or_with_lt():
-    repo = make_repo()
-    result = repo._build_cursor_condition("updated_at", "2025-01-01", "id123", ascending=False)
-    assert "$or" in result
-    assert {"updated_at": {"$lt": "2025-01-01"}} in result["$or"]
-    assert {"updated_at": "2025-01-01", "_id": {"$lt": "id123"}} in result["$or"]
+    async def __anext__(self):
+        if self._index >= len(self._docs):
+            raise StopAsyncIteration
+        doc = self._docs[self._index]
+        self._index += 1
+        return doc
 
 
-def test_ascending_null_value_includes_ne_none_branch():
-    repo = make_repo()
-    result = repo._build_cursor_condition("updated_at", None, "id123", ascending=True)
-    assert "$or" in result
-    or_clauses = result["$or"]
-    assert {"updated_at": None, "_id": {"$gt": "id123"}} in or_clauses
-    assert {"updated_at": {"$ne": None}} in or_clauses
+def _make_repo():
+    mock_db = MagicMock()
+    mock_collection = AsyncMock()
+    mock_collection.find = MagicMock(return_value=_MockAsyncCursor([]))
+    mock_db.__getitem__.return_value = mock_collection
+    repo = MongoDecisionRepository(mock_db)
+    return repo, mock_collection
 
 
-def test_descending_null_value_restricts_to_null_field():
-    repo = make_repo()
-    result = repo._build_cursor_condition("updated_at", None, "id123", ascending=False)
-    assert result == {"updated_at": None, "_id": {"$lt": "id123"}}
+class TestBuildQuery:
+    def test_confidence_max_filter(self):
+        repo, _ = _make_repo()
+        filters = DecisionFilters(confidence_max=0.9)
+        result = repo._build_query(filters)
+        assert result["current_placement.confidence_score"]["$lte"] == 0.9
+
+    def test_similarity_min_filter(self):
+        repo, _ = _make_repo()
+        filters = DecisionFilters(similarity_min=0.5)
+        result = repo._build_query(filters)
+        assert result["current_placement.similarity_score"]["$gte"] == 0.5
+
+    def test_similarity_max_filter(self):
+        repo, _ = _make_repo()
+        filters = DecisionFilters(similarity_max=0.95)
+        result = repo._build_query(filters)
+        assert result["current_placement.similarity_score"]["$lte"] == 0.95
+
+    def test_combined_confidence_and_similarity(self):
+        repo, _ = _make_repo()
+        filters = DecisionFilters(
+            confidence_min=0.3,
+            confidence_max=0.8,
+            similarity_min=0.4,
+            similarity_max=0.9,
+        )
+        result = repo._build_query(filters)
+        assert result["current_placement.confidence_score"] == {"$gte": 0.3, "$lte": 0.8}
+        assert result["current_placement.similarity_score"] == {"$gte": 0.4, "$lte": 0.9}
 
 
-# ── _parse_cursor_sort_value ──────────────────────────────────────────────────
+class TestBuildCursorCondition:
+    def test_ascending_with_none_sort_value(self):
+        repo, _ = _make_repo()
+        result = repo._build_cursor_condition("created_at", None, "last-id", ascending=True)
+        assert "$or" in result
+        assert len(result["$or"]) == 2
+        assert result["$or"][0] == {"created_at": None, "_id": {"$gt": "last-id"}}
+        assert result["$or"][1] == {"created_at": {"$ne": None}}
 
-def test_datetime_field_returns_datetime_object():
-    repo = make_repo()
-    iso = "2025-06-01T12:00:00+00:00"
-    result = repo._parse_cursor_sort_value(iso, "updated_at")
-    assert isinstance(result, datetime)
-    assert result == datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
-
-
-def test_created_at_also_parsed_as_datetime():
-    repo = make_repo()
-    iso = "2025-01-15T08:30:00+00:00"
-    result = repo._parse_cursor_sort_value(iso, "created_at")
-    assert isinstance(result, datetime)
+    def test_descending_with_none_sort_value(self):
+        repo, _ = _make_repo()
+        result = repo._build_cursor_condition("created_at", None, "last-id", ascending=False)
+        assert result == {"created_at": None, "_id": {"$lt": "last-id"}}
 
 
-def test_non_datetime_field_returned_as_is():
-    repo = make_repo()
-    result = repo._parse_cursor_sort_value(0.95, "current_placement.confidence_score")
-    assert result == 0.95
+class TestExtractSortValue:
+    def test_confidence_score_field(self):
+        repo, _ = _make_repo()
+        decision = DecisionFactory.build()
+        result = repo._extract_sort_value(decision, "current_placement.confidence_score")
+        assert result == decision.current_placement.confidence_score
+
+    def test_created_at_field(self):
+        repo, _ = _make_repo()
+        decision = DecisionFactory.build()
+        result = repo._extract_sort_value(decision, "created_at")
+        assert result == decision.created_at
+
+    def test_updated_at_field(self):
+        repo, _ = _make_repo()
+        dt = datetime.now(UTC)
+        decision = DecisionFactory.build(updated_at=dt)
+        result = repo._extract_sort_value(decision, "updated_at")
+        assert result == dt
+
+    def test_unknown_field_returns_none(self):
+        repo, _ = _make_repo()
+        decision = DecisionFactory.build()
+        result = repo._extract_sort_value(decision, "unknown_field")
+        assert result is None
 
 
-def test_none_value_returned_as_none():
-    repo = make_repo()
-    result = repo._parse_cursor_sort_value(None, "updated_at")
-    assert result is None
+class TestParseCursorSortValue:
+    def test_none_value_returns_none(self):
+        repo, _ = _make_repo()
+        assert repo._parse_cursor_sort_value(None, "created_at") is None
+
+    def test_datetime_field_parses_isoformat(self):
+        repo, _ = _make_repo()
+        iso = "2024-06-15T10:30:00"
+        result = repo._parse_cursor_sort_value(iso, "created_at")
+        assert result == datetime.fromisoformat(iso)
+
+    def test_updated_at_field_parses_isoformat(self):
+        repo, _ = _make_repo()
+        iso = "2024-06-15T10:30:00"
+        result = repo._parse_cursor_sort_value(iso, "updated_at")
+        assert result == datetime.fromisoformat(iso)
+
+    def test_numeric_field_returns_value_unchanged(self):
+        repo, _ = _make_repo()
+        result = repo._parse_cursor_sort_value(0.85, "current_placement.confidence_score")
+        assert result == 0.85
+
+
+class TestFindWithFilters:
+    async def test_count_documents_called_when_filters_provided(self):
+        """count is populated from count_documents in curation (filtered) mode."""
+        repo, col = _make_repo()
+        col.count_documents = AsyncMock(return_value=42)
+
+        result = await repo.find_with_filters(
+            filters=DecisionFilters(), cursor_params=CursorParams()
+        )
+
+        assert result.count == 42
+        col.count_documents.assert_awaited_once()
+
+    async def test_count_not_called_in_bulk_sync_mode(self):
+        """count_documents is skipped (count=0) in unfiltered bulk sync mode."""
+        repo, col = _make_repo()
+        col.count_documents = AsyncMock(return_value=99)
+
+        result = await repo.find_with_filters(filters=None)
+
+        assert result.count == 0
+        col.count_documents.assert_not_awaited()
+
+
+class TestFindMentionIdsByCluster:
+    async def test_returns_entity_mention_identifiers(self):
+        repo, col = _make_repo()
+        mention = EntityMentionIdentifierFactory.build()
+        mention_doc = mention.model_dump(mode="python")
+        col.find = MagicMock(return_value=_MockAsyncCursor([{"about_entity_mention": mention_doc}]))
+
+        result = await repo.find_mention_ids_by_cluster("cluster-1", limit=10)
+
+        assert len(result) == 1
+        assert isinstance(result[0], EntityMentionIdentifier)
+        col.find.assert_called_once_with(
+            {"current_placement.cluster_id": "cluster-1"},
+            projection={"about_entity_mention": 1, "_id": 0},
+        )
+
+
+class TestCountDistinctClusters:
+    async def test_returns_count(self):
+        repo, col = _make_repo()
+        col.distinct.return_value = ["cluster-1", "cluster-2", "cluster-3"]
+
+        result = await repo.count_distinct_clusters()
+
+        assert result == 3
+        col.distinct.assert_awaited_once_with("current_placement.cluster_id")
+
+
+class TestAverageClusterSize:
+    async def test_returns_average(self):
+        repo, col = _make_repo()
+        mock_cursor = AsyncMock()
+        mock_cursor.to_list.return_value = [{"_id": None, "avg": 2.5}]
+        col.aggregate.return_value = mock_cursor
+
+        result = await repo.average_cluster_size()
+
+        assert result == 2.5
+
+    async def test_empty_collection_returns_zero(self):
+        repo, col = _make_repo()
+        mock_cursor = AsyncMock()
+        mock_cursor.to_list.return_value = []
+        col.aggregate.return_value = mock_cursor
+
+        result = await repo.average_cluster_size()
+
+        assert result == 0.0

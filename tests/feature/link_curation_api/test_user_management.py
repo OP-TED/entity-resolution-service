@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 from pytest_bdd import given, parsers, scenario, then, when
 from starlette.testclient import TestClient
 
-from ers.commons.domain.data_transfer_objects import PaginatedResult
+from ers.commons.domain.data_transfer_objects import CursorPage, PaginatedResult
 from tests.unit.factories import UserActionFactory, UserFactory
 
 FEATURE = str(Path(__file__).resolve().parent / "user_management.feature")
@@ -148,8 +148,7 @@ def user_has_curation_actions(
     user_action_repository: AsyncMock,
 ) -> None:
     actions = [UserActionFactory.build(actor="u-1") for _ in range(3)]
-    user_action_repository.find_paginated.return_value = PaginatedResult(
-        count=len(actions),
+    user_action_repository.find_with_cursor.return_value = CursorPage(
         results=actions,
     )
     ctx["user_has_actions"] = True
@@ -367,8 +366,8 @@ def past_actions_visible(
     ctx: dict[str, Any],
     user_action_repository: AsyncMock,
 ) -> None:
-    paginated = user_action_repository.find_paginated.return_value
-    assert paginated.count == ctx["expected_action_count"]
+    paginated = user_action_repository.find_with_cursor.return_value
+    assert len(paginated.results) == ctx["expected_action_count"]
 
 
 @then("each action is still attributable to the deactivated user")
@@ -377,7 +376,7 @@ def actions_attributable(
     ctx: dict[str, Any],
     user_action_repository: AsyncMock,
 ) -> None:
-    paginated = user_action_repository.find_paginated.return_value
+    paginated = user_action_repository.find_with_cursor.return_value
     for action in paginated.results:
         assert action.actor == "u-1"
 

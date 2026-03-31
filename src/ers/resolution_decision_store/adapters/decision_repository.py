@@ -260,6 +260,8 @@ class MongoDecisionRepository(
         if cursor_params is None:
             cursor_params = CursorParams()
 
+        count = 0
+
         # Unfiltered bulk sync mode (Decision Store)
         if filters is None:
             query: dict[str, Any] = {}
@@ -280,6 +282,8 @@ class MongoDecisionRepository(
                     for mi in mention_identifiers
                 ]
                 query[_FIELD_ABOUT_ENTITY_MENTION] = {"$in": id_docs}
+
+            count = await self._collection.count_documents(query)
 
             sort_field, ascending = self._get_sort_info(filters.ordering)
             sort = self._build_sort(filters.ordering)
@@ -313,7 +317,7 @@ class MongoDecisionRepository(
             )
             next_cursor = encode_cursor(sort_value, last.id)
 
-        return CursorPage(results=results, next_cursor=next_cursor)
+        return CursorPage(results=results, count=count, next_cursor=next_cursor)
 
     async def find_mention_ids_by_cluster(
         self,

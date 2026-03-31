@@ -2,14 +2,18 @@ from abc import abstractmethod
 
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 
-from ers.commons.adapters.entity_mention_repository import (
-    EntityMentionRepository,
-    MongoEntityMentionRepository,
+from ers.request_registry.adapters.records_repository import (
+    MongoResolutionRequestRepository,
+    ResolutionRequestRepository,
 )
 
 
-class EntityMentionCurationRepository(EntityMentionRepository):
-    """Read-only repository for entity mention retrieval."""
+class EntityMentionCurationRepository(ResolutionRequestRepository):
+    """Repository for entity mention retrieval in curation.
+
+    Extends ``ResolutionRequestRepository`` with batch-fetch and full-text
+    search capabilities needed by curation services.
+    """
 
     @abstractmethod
     async def find_by_identifiers(
@@ -28,16 +32,15 @@ class EntityMentionCurationRepository(EntityMentionRepository):
 
 
 class MongoEntityMentionCurationRepository(
-    MongoEntityMentionRepository,
-    EntityMentionCurationRepository,
+    EntityMentionCurationRepository, MongoResolutionRequestRepository
 ):
     async def find_by_identifiers(
         self,
         identifiers: list[EntityMentionIdentifier],
         limit: int | None = None,
     ) -> list[EntityMention]:
-        id_docs = [i.model_dump() for i in identifiers]
-        cursor = self._collection.find({"_id": {"$in": id_docs}})
+        triad_ids = [self._triad_id(i) for i in identifiers]
+        cursor = self._collection.find({"_id": {"$in": triad_ids}})
         if limit is not None:
             cursor = cursor.limit(limit)
         return [self._from_document(doc) async for doc in cursor]
@@ -48,6 +51,6 @@ class MongoEntityMentionCurationRepository(
     ) -> list[EntityMentionIdentifier]:
         cursor = self._collection.find(
             {"$text": {"$search": text}},
-            projection={"_id": 1},
+            projection={"identifiedBy": 1, "_id": 0},
         )
-        return [EntityMentionIdentifier.model_validate(doc["_id"]) async for doc in cursor]
+        return [EntityMentionIdentifier.model_validate(doc["identifiedBy"]) async for doc in cursor]

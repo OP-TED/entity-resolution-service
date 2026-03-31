@@ -82,6 +82,7 @@ class CursorPage[T](FrozenDTO):
     """Cursor-paginated query result."""
 
     results: list[T]
+    count: int = 0
     next_cursor: str | None = None
 
 

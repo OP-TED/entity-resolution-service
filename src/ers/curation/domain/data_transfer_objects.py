@@ -19,7 +19,37 @@ BULK_ACTION_MAX_SIZE = 200
 __all__ = [
     "DecisionFilters",
     "DecisionOrdering",
+    "BaseOrdering",
 ]
+
+class BaseOrdering(StrEnum):
+    """Base ordering options available to all entity listings."""
+
+    CREATED_AT_ASC = "created_at"
+    CREATED_AT_DESC = "-created_at"
+
+
+class DecisionOrdering(StrEnum):
+    """Allowed ordering options for decision listing."""
+
+    CONFIDENCE_ASC = "confidence_score"
+    CONFIDENCE_DESC = "-confidence_score"
+    CREATED_AT_ASC = "created_at"
+    CREATED_AT_DESC = "-created_at"
+    UPDATED_AT_ASC = "updated_at"
+    UPDATED_AT_DESC = "-updated_at"
+
+
+class DecisionFilters(FrozenDTO):
+    """Filtering criteria for decision queries."""
+
+    entity_type: str | None = None
+    confidence_min: float | None = None
+    confidence_max: float | None = None
+    similarity_min: float | None = None
+    similarity_max: float | None = None
+    search: str | None = None
+    ordering: DecisionOrdering | None = None
 
 
 class StatisticsFilters(FrozenDTO):
@@ -37,6 +67,7 @@ class UserActionFilters(FrozenDTO):
     actor: str | None = None
     time_range_start: datetime | None = None
     time_range_end: datetime | None = None
+    ordering: BaseOrdering | None = None
 
 
 class EntityMentionPreview(FrozenDTO):

@@ -28,8 +28,13 @@ Feature: Access control
     When the user attempts to list all users
     Then the request is rejected with a forbidden error
 
-  Scenario: Non-admin user cannot view user action trail
-    Given a verified user is authenticated but is not an administrator
+  Scenario: Verified user can view user action trail
+    Given a verified user is authenticated
+    When the user requests the user action trail
+    Then the action trail is returned successfully
+
+  Scenario: Unverified user cannot view user action trail
+    Given a user is authenticated but not verified
     When the user attempts to view the user action trail
     Then the request is rejected with a forbidden error
 
