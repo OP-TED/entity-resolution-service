@@ -122,8 +122,7 @@ def admin_client(
         count=0,
         results=[],
     )
-    user_action_repository.find_paginated.return_value = PaginatedResult(
-        count=0,
+    user_action_repository.find_with_cursor.return_value = CursorPage(
         results=[],
     )
     return make_client_with_user(app, ADMIN_USER)

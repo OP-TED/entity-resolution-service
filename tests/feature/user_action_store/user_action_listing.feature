@@ -13,8 +13,7 @@ Feature: User action listing
     Given 25 user actions have been recorded
     When the action listing is requested for page 1 with 10 items per page
     Then 10 actions are returned
-    And the total count is 25
-    And a next page indicator points to page 2
+    And a next page indicator is present
 
   Scenario: Last page of user actions
     Given 25 user actions have been recorded
@@ -26,7 +25,6 @@ Feature: User action listing
     Given no user actions have been recorded
     When the action listing is requested
     Then the result contains 0 actions
-    And the total count is 0
 
   Scenario: User actions are enriched with entity mention previews
     Given a user action exists for an entity mention with a parsed representation

@@ -74,7 +74,7 @@ def _setup_cluster_mentions(
     entity_mention_repository: AsyncMock,
     n_mentions: int = 3,
 ) -> None:
-    """Wire repository mocks so _build_canonical_entity_preview works."""
+    """Wire repository mocks so build_cluster_preview works."""
     identifiers = EntityMentionIdentifierFactory.batch(n_mentions)
     mentions = [EntityMentionFactory.build(identifiedBy=eid) for eid in identifiers]
     decision_repository.find_mention_ids_by_cluster.return_value = identifiers

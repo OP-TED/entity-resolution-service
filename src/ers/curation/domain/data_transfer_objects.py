@@ -15,6 +15,13 @@ T = TypeVar("T")
 BULK_ACTION_MAX_SIZE = 200
 
 
+class BaseOrdering(StrEnum):
+    """Base ordering options available to all entity listings."""
+
+    CREATED_AT_ASC = "created_at"
+    CREATED_AT_DESC = "-created_at"
+
+
 class DecisionOrdering(StrEnum):
     """Allowed ordering options for decision listing."""
 
@@ -53,6 +60,7 @@ class UserActionFilters(FrozenDTO):
     actor: str | None = None
     time_range_start: datetime | None = None
     time_range_end: datetime | None = None
+    ordering: BaseOrdering | None = None
 
 
 class EntityMentionPreview(FrozenDTO):

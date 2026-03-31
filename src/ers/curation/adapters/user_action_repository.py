@@ -1,5 +1,6 @@
 from abc import abstractmethod
 from datetime import datetime
+from typing import Any
 
 from erspec.models.core import EntityMentionIdentifier, UserAction
 
@@ -7,20 +8,21 @@ from ers.commons.adapters.user_action_repository import (
     MongoUserActionRepository,
     UserActionRepository,
 )
-from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
-from ers.curation.domain.data_transfer_objects import UserActionFilters
+from ers.commons.domain.cursor import decode_cursor, encode_cursor
+from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
+from ers.curation.domain.data_transfer_objects import BaseOrdering, UserActionFilters
 
 
 class UserActionCurationRepository(UserActionRepository):
     """Repository for persisting user action (curation) entries."""
 
     @abstractmethod
-    async def find_paginated(
+    async def find_with_cursor(
         self,
-        pagination: PaginationParams,
+        cursor_params: CursorParams,
         filters: UserActionFilters | None = None,
-    ) -> PaginatedResult[UserAction]:
-        """Return paginated user actions ordered by latest first."""
+    ) -> CursorPage[UserAction]:
+        """Return cursor-paginated user actions with optional filtering."""
 
     @abstractmethod
     async def has_current_action(
@@ -38,30 +40,61 @@ class MongoUserActionCurationRepository(
     _model_class = UserAction
     _id_field = "id"
 
-    async def find_paginated(
+    _SORT_FIELD_MAP: dict[BaseOrdering, tuple[str, bool]] = {
+        BaseOrdering.CREATED_AT_ASC: ("created_at", True),
+        BaseOrdering.CREATED_AT_DESC: ("created_at", False),
+    }
+
+    def _get_sort_info(self, filters: UserActionFilters | None) -> tuple[str, bool]:
+        ordering = filters.ordering if filters is not None else None
+        if ordering is None:
+            return "created_at", False
+        return self._SORT_FIELD_MAP[ordering]
+
+    def _build_cursor_condition(
         self,
-        pagination: PaginationParams,
+        sort_value: Any,
+        last_id: str,
+        ascending: bool,
+    ) -> dict[str, Any]:
+        id_op = "$gt" if ascending else "$lt"
+        val_op = "$gt" if ascending else "$lt"
+        if sort_value is None:
+            return {"created_at": None, "_id": {id_op: last_id}}
+        return {
+            "$or": [
+                {"created_at": {val_op: sort_value}},
+                {"created_at": sort_value, "_id": {id_op: last_id}},
+            ]
+        }
+
+    async def find_with_cursor(
+        self,
+        cursor_params: CursorParams,
         filters: UserActionFilters | None = None,
-    ) -> PaginatedResult[UserAction]:
+    ) -> CursorPage[UserAction]:
         query = self._build_filter_query(filters)
-        skip = (pagination.page - 1) * pagination.per_page
-        count = await self._collection.count_documents(query)
-        cursor = (
-            self._collection.find(query)
-            .sort([("created_at", -1)])
-            .skip(skip)
-            .limit(pagination.per_page)
-        )
+        sort_field, ascending = self._get_sort_info(filters)
+        direction = 1 if ascending else -1
+        sort = [(sort_field, direction), ("_id", direction)]
+
+        if cursor_params.cursor is not None:
+            raw_value, last_id = decode_cursor(cursor_params.cursor)
+            sort_value = datetime.fromisoformat(raw_value) if raw_value is not None else None
+            cursor_condition = self._build_cursor_condition(sort_value, last_id, ascending)
+            query = {"$and": [query, cursor_condition]}
+
+        fetch_limit = cursor_params.limit + 1
+        cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
         results = [self._from_document(doc) async for doc in cursor]
 
-        total_pages = (count + pagination.per_page - 1) // pagination.per_page if count > 0 else 0
+        next_cursor = None
+        if len(results) > cursor_params.limit:
+            results = results[: cursor_params.limit]
+            last = results[-1]
+            next_cursor = encode_cursor(last.created_at, last.id)
 
-        return PaginatedResult(
-            count=count,
-            previous=pagination.page - 1 if pagination.page > 1 else None,
-            next=pagination.page + 1 if pagination.page < total_pages else None,
-            results=results,
-        )
+        return CursorPage(results=results, next_cursor=next_cursor)
 
     async def has_current_action(
         self,
