@@ -35,14 +35,15 @@ class ResolveService:
                 result = await self._coordinator.resolve(item.mention)
                 results.append(result)
             except Exception:
+                identifier = item.mention.identifiedBy
                 results.append(
                     EntityMentionResolutionResult(
-                        identified_by=item.mention.identified_by,
+                        identified_by=identifier,
                         error=ErrorResponse(
                             error_code=ErrorCode.SERVICE_ERROR,
-                            detail=f"Failed to resolve mention ({item.mention.identified_by.source_id}, "
-                            f"{item.mention.identified_by.request_id}, "
-                            f"{item.mention.identified_by.entity_type})",
+                            detail=f"Failed to resolve mention ({identifier.source_id}, "
+                            f"{identifier.request_id}, "
+                            f"{identifier.entity_type})",
                         ),
                     )
                 )
