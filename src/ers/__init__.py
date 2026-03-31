@@ -165,6 +165,25 @@ class ObservabilityConfig:
         return config_value
 
 
+class ResolutionCoordinatorConfig:
+    @env_property(default_value="30")
+    def ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET(self, config_value: str) -> float:
+        """Maximum time budget for a single-mention resolution response.
+
+        Also serves as the ERE wait window — if ERE does not respond within
+        this budget, a provisional identifier is issued and returned to the client.
+        """
+        return float(config_value)
+
+    @env_property(default_value="120")
+    def ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET(self, config_value: str) -> float:
+        """Maximum time budget for a bulk resolution response (all mentions combined).
+
+        Each mention waits up to SINGLE_REQUEST_TIME_BUDGET for ERE internally.
+        """
+        return float(config_value)
+
+
 class ERSConfigResolver(
     CurationAppConfig,
     JWTConfig,
@@ -177,6 +196,7 @@ class ERSConfigResolver(
     EREConfig,
     DecisionStoreConfig,
     ObservabilityConfig,
+    ResolutionCoordinatorConfig,
 ):
     """Aggregates all ERS configuration.
 
