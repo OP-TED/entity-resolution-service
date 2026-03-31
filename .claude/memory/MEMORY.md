@@ -24,7 +24,7 @@
 | [ERS-EPIC-03](epics/ers-epic-03-ere-contract-client/EPIC.md) | ERE Contract Client | 9.8 | Gherkin Complete |
 | [ERS-EPIC-04](epics/ers-epic-04-resolution-decision-store/EPIC.md) | Decision Store | 9.8 | Gherkin Complete |
 | [ERS-EPIC-05](epics/ers-epic-05-ere-result-integrator/EPIC.md) | ERE Result Integrator | 9.2 | Gherkin Complete |
-| [ERS-EPIC-06](epics/ers-epic-06-resolution-coordinator/EPIC.md) | Resolution Coordinator | 9.8 | Gherkin Complete |
+| [ERS-EPIC-06](epics/ers-epic-06-resolution-coordinator/EPIC.md) | Resolution Coordinator | 9.8 | T6.1–T6.3 implemented, T6.4–T6.7 remaining |
 | [ERS-EPIC-07](epics/ers-epic-07-ere-rest-api/EPIC.md) | ERS REST API | 9.8 | Gherkin Complete |
 | ERS-EPIC-08 | User Action Store | — | Pending |
 | ERS-EPIC-09 | Link Curation REST API | — | Pending |
@@ -32,13 +32,12 @@
 
 ## Current Phase
 
-- Branch: `feature/ERS1-144-task13` — EPIC-01 Tasks 13 + 14 (OTel + Public API)
-- **[2026-03-19] Task 1.1 complete** — domain models + `SHA256ContentHasher`
-- **[2026-03-20] Tasks 1.2–1.3 complete** — Mongo repositories + `RequestRegistryService` + BDD features
-- **[2026-03-20] Task 1.1 revised** — models simplified to compose with erspec; dropped `JSONRepresentation`, `LookupRequestType`, repository ABCs. 51 request_registry tests pass.
-- **[2026-03-21] PR review + refactoring** — addressed PR #19/20/22 comments; 302 unit + 200 feature tests green. PR created → `develop`.
-- **[2026-03-21] Task 13 complete** — OTel tracing foundation: real SDK, `configure_tracing()`, `trace_function`, extractor registry, span extractors for `EntityMention`, `EntityMentionIdentifier`, `ResolutionRequestRecord`.
-- **[2026-03-21] Task 14 complete** — Public API module-level functions, RDF parsing integration, terminology cleanup, unit + BDD tests updated. 327 unit + 200 feature tests green.
+- Branch: `feature/ERS1-145` — EPIC-06 Resolution Coordinator implementation
+- **[2026-03-31] T6.1 complete** — Exception hierarchy (CoordinatorException → 3 subclasses) + ResolutionCoordinatorConfig (single/bulk time budgets).
+- **[2026-03-31] T6.2 complete** — AsyncResolutionWaiter using WeakValueDictionary (no lock, no ref-counting). 12 async tests.
+- **[2026-03-31] T6.3 complete** — ResolutionCoordinatorService: resolve_single, resolve_bulk, _issue_provisional. Simplified flow (no EnginePublishFailedException as control flow). 21 tests, 96% coverage.
+- **[2026-03-31] Code review fixes** — derive_provisional_cluster_id moved to ers.commons.adapters, resolve_bulk return type widened, exception chain preserved, ABC removal fallout fixed across ResolveService + dependencies.
+- **Next:** T6.4 (Decision Store delta) + T6.5 (BulkRefreshCoordinator) are independent — can be parallelized.
 
 ## Project Automation
 

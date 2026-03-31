@@ -332,9 +332,9 @@ Each task is a PR-sized unit of work. Unit tests are written alongside the code 
 | T6.7 — ERS REST API Wiring | `task67-ers-rest-api-wiring.md` | T6.3, T6.5 |
 
 ## Roadmap
-- [ ] T6.1: Foundation — Exceptions + Config
-- [ ] T6.2: AsyncResolutionWaiter
-- [ ] T6.3: ResolutionCoordinatorService (Spines A+B)
+- [x] T6.1: Foundation — Exceptions + Config
+- [x] T6.2: AsyncResolutionWaiter
+- [x] T6.3: ResolutionCoordinatorService (Spines A+B)
 - [ ] T6.4: DecisionStoreService Delta Extension
 - [ ] T6.5: BulkRefreshCoordinatorService (Spine C)
 - [ ] T6.6: Integration + Feature Tests
