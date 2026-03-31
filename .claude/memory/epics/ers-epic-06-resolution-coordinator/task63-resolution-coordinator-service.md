@@ -59,123 +59,82 @@ if config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET <= 0:
 
 #### Method: `resolve_single(entity_mention: EntityMention) -> Decision`
 
-Full algorithm — refer to EPIC §5.1 for the Mermaid flowchart. Precise implementation:
+Simplified algorithm (compared to original spec — see Design Changes below):
 
 ```
-_inner() coroutine:
-
-1. PARSE + REGISTER
+1. REGISTER
    try:
-       record = await registry_service.register_resolution_request(entity_mention)
-   except (MalformedRDFError, ContentTooLargeError, UnsupportedEntityTypeError,
-           EntityTypeMismatchError, MultipleEntitiesFoundError, EmptyExtractionError) as e:
+       await registry_service.register_resolution_request(entity_mention)
+   except (ValueError, MalformedRDFError, ContentTooLargeError,
+           UnsupportedEntityTypeError, EntityTypeMismatchError,
+           MultipleEntitiesFoundError, EmptyExtractionError) as e:
        raise ParsingFailedException(str(e), cause=e)
    # IdempotencyConflictError propagates directly (do not catch or wrap)
 
-2. IDEMPOTENT REPLAY CHECK
+2. CHECK EXISTING DECISION
    identifier = entity_mention.identifiedBy
-   triad_key  = f"{identifier.source_id}{identifier.request_id}{identifier.entity_type}"
+   existing = await decision_store_service.get_decision_by_triad(identifier)
+   if existing is not None:
+       return existing
+   # No waiter created, no publish — instant return for replays with decisions.
 
-   if record is an idempotent replay (detect via: the record was already in the registry,
-   i.e. record.received_at predates this call — simplest: check if a decision already
-   exists in the store):
-       existing = await decision_store_service.get_decision_by_triad(identifier)
-       if existing is not None:
-           return existing
-       # No decision yet → fall through to step 4 (share existing event, skip publish)
-       skip_publish = True
-   else:
-       skip_publish = False
-
-   NOTE on detecting replay vs new:
-   `register_resolution_request` does not return a flag distinguishing new vs replay.
-   Use the registry record's `received_at` vs `datetime.now(UTC)` is fragile.
-   Better approach: attempt the Decision Store lookup unconditionally for replay path.
-   See "Idempotency Detection" design note below.
-
-3. PUBLISH TO ERE (skip if skip_publish)
-   if not skip_publish:
-       try:
-           request = EntityMentionResolutionRequest(entity_mention=entity_mention)
-           await ere_publish_service.publish_request(request)
-       except RedisConnectionError as e:
-           raise EnginePublishFailedException(str(e), cause=e)
-
-4. WAIT FOR ERE RESPONSE
+3+4+5. WAITER LIFECYCLE: PUBLISH → WAIT → PROVISIONAL FALLBACK
+   triad_key = f"{identifier.source_id}{identifier.request_id}{identifier.entity_type}"
    event = await waiter.get_or_create(triad_key)
    try:
        try:
+           request = EntityMentionResolutionRequest(
+               entity_mention=entity_mention, ere_request_id="",
+           )  # ere_request_id auto-populated by EREPublishService._enrich_metadata
+           await ere_publish_service.publish_request(request)
            await asyncio.wait_for(
                asyncio.shield(event.wait()),
                timeout=config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET,
            )
-           # Event fired — read authoritative decision
            decision = await decision_store_service.get_decision_by_triad(identifier)
-           return decision
-       except asyncio.TimeoutError:
-           pass   # fall through to provisional
+           if decision is not None:
+               return decision
+           # decision vanished between ERE write and our read — fall through to provisional
+       except (RedisConnectionError, ChannelUnavailableError, asyncio.TimeoutError):
+           pass   # all three → provisional fallback
 
-5. ISSUE PROVISIONAL (reached from: EnginePublishFailedException OR ERE timeout)
-   provisional_id = derive_provisional_cluster_id(identifier)
-   cluster_ref    = ClusterReference(cluster_id=provisional_id,
-                                     confidence_score=1.0, similarity_score=1.0)
-   try:
-       decision = await decision_store_service.store_decision(
-           identifier=identifier,
-           current=cluster_ref,
-           candidates=[cluster_ref],
-           updated_at=datetime.now(UTC),
-       )
-   except StaleOutcomeError:
-       # ERE already wrote a newer decision before we could write provisional
-       decision = await decision_store_service.get_decision_by_triad(identifier)
-   return decision
-
-   finally (always, even on exception or cancellation):
+       return await self._issue_provisional(identifier)
+   finally:
        try:
            await asyncio.shield(waiter.release(triad_key))
        except (asyncio.CancelledError, Exception):
-           pass   # release scheduled via shield; don't suppress outer cancellation
-
-   NOTE: There is no separate outer wrap for `resolve_single`. The
-   `SINGLE_REQUEST_TIME_BUDGET` is consumed entirely by the ERE wait in step 4.
-   If step 4 times out → provisional is issued and returned (not a fatal exception).
-   `ResolutionTimeoutException` is raised only if the provisional write itself fails
-   (e.g. MongoDB unavailable in step 5).
+           pass
 ```
 
-#### Idempotency Detection Design Note
+#### Private method: `_issue_provisional(identifier: EntityMentionIdentifier) -> Decision`
 
-`RequestRegistryService.register_resolution_request` returns the existing
-`ResolutionRequestRecord` on idempotent replay (same triad + same hash) without
-raising. The coordinator cannot distinguish "new record" from "existing record"
-from the return value alone since both return a `ResolutionRequestRecord`.
+Extracted for readability and SRP:
 
-**Decision:** The coordinator always attempts `get_decision_by_triad` after registration.
-- If a decision exists → return it (works for both new and replay cases where ERE was fast)
-- If no decision → proceed to publish + wait
-- For true replays where ERE has not responded yet, `get_or_create` will find the
-  existing Event (created by the first request's `resolve_single`) and increment its
-  count — the publish is skipped only if we can confirm the record already existed.
-
-**Simplest correct approach**: always call `get_decision_by_triad` first; if found, return
-immediately; if not, always publish (ERE is idempotent on the triad key — duplicate
-publishes are safe per EPIC §10 constraint 4).
-
-This avoids the "detect replay vs new" complexity entirely:
-
-```
-1. register_resolution_request(mention)   → record (or raise)
-2. existing = get_decision_by_triad(id)
-   if existing: return existing
-3. publish_request(...)                   → (ERE is idempotent; safe to re-publish)
-4. wait on Event → canonical or provisional
+```python
+async def _issue_provisional(self, identifier: EntityMentionIdentifier) -> Decision:
+    provisional_id = derive_provisional_cluster_id(identifier)
+    cluster_ref = ClusterReference(
+        cluster_id=provisional_id, confidence_score=1.0, similarity_score=1.0,
+    )
+    try:
+        return await self._decision_store_service.store_decision(
+            identifier=identifier,
+            current=cluster_ref,
+            candidates=[cluster_ref],
+            updated_at=datetime.now(UTC),
+        )
+    except StaleOutcomeError:
+        return await self._decision_store_service.get_decision_by_triad(identifier)
+    except RepositoryConnectionError as e:
+        raise ResolutionTimeoutException(
+            f"Cannot persist provisional decision: {e}"
+        ) from None
 ```
 
 #### Method: `resolve_bulk(entity_mentions: list[EntityMention]) -> list[Decision | CoordinatorException]`
 
 ```python
-async def resolve_bulk(...):
+async def resolve_bulk(self, entity_mentions: list[EntityMention]) -> list[Decision | CoordinatorException]:
     if not entity_mentions:
         return []
     tasks = [self.resolve_single(mention) for mention in entity_mentions]
@@ -186,13 +145,10 @@ async def resolve_bulk(...):
         )
         return list(results)
     except asyncio.TimeoutError:
-        raise ResolutionTimeoutException("Bulk resolution exceeded client time budget")
+        raise ResolutionTimeoutException(
+            "Bulk resolution exceeded client time budget"
+        )
 ```
-
-`asyncio.gather` with `return_exceptions=True` returns when **all N tasks complete**.
-Since each `resolve_single` handles its own ERE timeout internally (issuing provisional
-on timeout), the gather returns naturally when every mention has a result. If the bulk
-budget fires before all complete, `ResolutionTimeoutException` is raised.
 
 #### Public module-level API (OTel tracing)
 
@@ -226,6 +182,57 @@ async def resolve_bulk(
 
 ---
 
+## Design Changes from Original Spec
+
+### 1. `EnginePublishFailedException` removed as internal control flow
+
+**Original**: Step 3 raised `EnginePublishFailedException` internally, caught in an outer
+`try/except` to reach the provisional path. Three levels of nesting.
+
+**Changed**: Catch `RedisConnectionError` and `ChannelUnavailableError` directly alongside
+`asyncio.TimeoutError` — all three lead to the same provisional fallback. One `except`
+clause, one level of nesting.
+
+**Why**: Using exceptions as goto creates structural complexity for no benefit. The
+exception never reached the caller — it was purely internal control flow.
+`EnginePublishFailedException` stays in the hierarchy (T6.1) for potential future use
+by EPIC-07 exception handlers, but is not raised in `resolve_single`.
+
+### 2. `ChannelUnavailableError` caught alongside `RedisConnectionError`
+
+**Original**: Only `RedisConnectionError` triggered the provisional path.
+
+**Changed**: `ChannelUnavailableError` (Redis up but ERE not subscribed, or channel
+timeout) is functionally equivalent — ERE won't process the request. Both trigger
+provisional.
+
+### 3. `get_or_create` moved before publish
+
+**Original**: `get_or_create` was in step 4 (after publish). If publish failed, waiter
+was never touched.
+
+**Changed**: `get_or_create` before publish. With `WeakValueDictionary` (T6.2), creating
+then immediately releasing an event has zero cost. This collapses the entire post-register
+flow into a single `try/finally` block for the waiter lifecycle.
+
+### 4. `_issue_provisional` extracted as private method
+
+**Original**: Provisional logic inline in `resolve_single` (10+ lines).
+
+**Changed**: Extracted to `_issue_provisional(identifier)`. Keeps `resolve_single`
+readable and the `RepositoryConnectionError → ResolutionTimeoutException` mapping
+testable.
+
+### 5. `ValueError` added to parsing catch list
+
+**Original**: Catch list missed `ValueError`.
+
+**Changed**: `RequestRegistryService.register_resolution_request` raises `ValueError`
+for empty content. This is a parsing-adjacent failure that should be wrapped in
+`ParsingFailedException`.
+
+---
+
 ## asyncio Cancellation Safety in `finally`
 
 When `resolve_bulk`'s budget expires, Python sends `CancelledError` to each running
@@ -250,30 +257,31 @@ the outer `await`). The release still completes in the background.
 ## Imports to Use
 
 ```python
+import asyncio
+from datetime import UTC, datetime
+
 from erspec.models.core import ClusterReference, Decision, EntityMention, EntityMentionIdentifier
 from erspec.models.ere import EntityMentionResolutionRequest
+
 from ers import config
 from ers.commons.adapters.tracing import trace_function
-from ers.ere_contract_client.domain.errors import RedisConnectionError
+from ers.ere_contract_client.domain.errors import ChannelUnavailableError, RedisConnectionError
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
-from ers.request_registry.services.request_registry_service import RequestRegistryService
-from ers.request_registry.services.exceptions import IdempotencyConflictError
 from ers.rdf_mention_parser.domain.exceptions import (
     ContentTooLargeError, EmptyExtractionError, EntityTypeMismatchError,
     MalformedRDFError, MultipleEntitiesFoundError, UnsupportedEntityTypeError,
 )
-from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
-from ers.resolution_decision_store.domain.errors import StaleOutcomeError
-from ers.resolution_decision_store.adapters.provisional_id import derive_provisional_cluster_id
+from ers.request_registry.services.request_registry_service import RequestRegistryService
 from ers.resolution_coordinator.domain.exceptions import (
-    CoordinatorException, EnginePublishFailedException,
-    ParsingFailedException, ResolutionTimeoutException,
+    CoordinatorException, ParsingFailedException, ResolutionTimeoutException,
 )
 from ers.resolution_coordinator.services.async_resolution_waiter import AsyncResolutionWaiter
+from ers.resolution_decision_store.adapters.provisional_id import derive_provisional_cluster_id
+from ers.resolution_decision_store.domain.errors import (
+    RepositoryConnectionError, StaleOutcomeError,
+)
+from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
 ```
-
-Verify each import path exists before using it. Run
-`poetry run python -c "from <path> import <name>"` for any uncertain ones.
 
 ---
 
@@ -325,22 +333,22 @@ def coordinator(registry_svc, publish_svc, decision_svc, waiter):
 | TC-002 | Happy path — ERE responds in time | Real `AsyncResolutionWaiter`; `notify` fired before budget | `Decision` with ERE cluster ID |
 | TC-003 | ERE budget timeout → provisional | Event never fires; `SINGLE_REQUEST_TIME_BUDGET` monkeypatched to 0.05s | Provisional `Decision`; `store_decision` called |
 | TC-004 | Redis down → provisional | `publish_svc.publish_request` raises `RedisConnectionError` | Provisional `Decision`; no event wait |
+| TC-004b | Channel unavailable → provisional | `publish_svc.publish_request` raises `ChannelUnavailableError` | Provisional `Decision`; no event wait |
 | TC-005 | Idempotent — decision exists | `decision_svc.get_decision_by_triad` returns existing Decision | Existing `Decision`; `publish_request` NOT called; `waiter.get_or_create` NOT called |
 | TC-006 | Idempotent — no decision yet | `get_decision_by_triad` returns None; ERE responds in time | Canonical Decision; `publish_request` called once |
 | TC-007 | Idempotency conflict | `registry_svc.register_resolution_request` raises `IdempotencyConflictError` | `IdempotencyConflictError` propagated; `store_decision` NOT called |
 | TC-008 | Parse failure — MalformedRDF | `register_resolution_request` raises `MalformedRDFError` | `ParsingFailedException` raised; `publish_request` NOT called |
-| TC-009 | Parse failure — ContentTooLarge | `register_resolution_request` raises `ContentTooLargeError` | `ParsingFailedException` raised |
+| TC-009 | Parse failure — ValueError (empty content) | `register_resolution_request` raises `ValueError` | `ParsingFailedException` raised |
 | TC-010 | Decision Store unavailable on provisional write | `store_decision` raises `RepositoryConnectionError` | `ResolutionTimeoutException` raised |
 | TC-011 | Stale provisional write | `store_decision` raises `StaleOutcomeError`; `get_decision_by_triad` returns ERE decision | ERE `Decision` returned; no exception |
 | TC-012 | Bulk — all succeed | 3 mentions; all ERE respond in time | List of 3 canonical Decisions in input order |
 | TC-013 | Bulk — partial parse failure | 3 mentions; mention 2 malformed | List: [Decision, ParsingFailedException, Decision] |
-| TC-014 | Bulk — partial ERE timeout | 3 mentions; mention 3 budget expires | List: [Decision, Decision, provisional Decision] |
-| TC-015 | Bulk — empty input | `resolve_bulk([])` | Returns `[]` |
-| TC-016 | Bulk — bulk budget exceeded | `BULK_REQUEST_TIME_BUDGET` monkeypatched to 0.01s; all mentions hang | `ResolutionTimeoutException` raised |
-| TC-017 | `waiter.release` called on success | Happy path | `waiter.release` called exactly once |
-| TC-018 | `waiter.release` called on ERE timeout | Budget expires path | `waiter.release` called exactly once |
-| TC-019 | `waiter.release` called on Redis failure | Redis down path | `waiter.release` called exactly once |
-| TC-020 | No waiter call on instant decision return | `get_decision_by_triad` returns decision immediately | `waiter.get_or_create` NOT called |
+| TC-014 | Bulk — empty input | `resolve_bulk([])` | Returns `[]` |
+| TC-015 | Bulk — bulk budget exceeded | `BULK_REQUEST_TIME_BUDGET` monkeypatched to 0.01s; all mentions hang | `ResolutionTimeoutException` raised |
+| TC-016 | `waiter.release` called on success | Happy path | `waiter.release` called exactly once |
+| TC-017 | `waiter.release` called on ERE timeout | Budget expires path | `waiter.release` called exactly once |
+| TC-018 | `waiter.release` called on Redis failure | Redis down path | `waiter.release` called exactly once |
+| TC-019 | No waiter call on instant decision return | `get_decision_by_triad` returns decision immediately | `waiter.get_or_create` NOT called |
 
 For TC-002 (real event firing), use a real `AsyncResolutionWaiter` and schedule `notify`
 with `asyncio.create_task`:
@@ -369,7 +377,7 @@ async def test_happy_path_ere_responds(registry_svc, publish_svc, decision_svc):
 ## Definition of Done
 
 - [ ] Temp ABC removed; `resolution_coordinator_service.py` contains only `ResolutionCoordinatorService` and two public functions
-- [ ] All 20 unit tests pass: `poetry run pytest tests/unit/resolution_coordinator/services/test_resolution_coordinator_service.py -v`
-- [ ] `waiter.release` always called in `finally` (verified by TC-017, TC-018, TC-019)
+- [ ] All unit tests pass: `poetry run pytest tests/unit/resolution_coordinator/services/test_resolution_coordinator_service.py -v`
+- [ ] `waiter.release` always called in `finally` (verified by TC-016, TC-017, TC-018)
 - [ ] `poetry run pylint src/ers/resolution_coordinator/services/resolution_coordinator_service.py` — no errors
 - [ ] `poetry run pytest tests/unit/resolution_coordinator/ -v --cov=src/ers/resolution_coordinator --cov-report=term-missing` — coverage ≥ 90%
