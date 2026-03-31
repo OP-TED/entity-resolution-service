@@ -75,6 +75,7 @@ class DecisionCurationService:
 
         return CursorPage(
             results=decision_summaries,
+            count=page.count,
             next_cursor=page.next_cursor,
         )
 

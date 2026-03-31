@@ -1,16 +1,16 @@
 """Utilities for parsing raw message bytes into domain model instances."""
 
 import json
-from typing import Mapping
+from collections.abc import Mapping
 
 from erspec.models.ere import (
     EntityMentionResolutionRequest,
     EntityMentionResolutionResponse,
     EREErrorResponse,
+    EREMessage,
     # FullRebuildRequest,  # Not yet implemented in erspec.models.ere
     # FullRebuildResponse,  # Not yet implemented in erspec.models.ere
     ERERequest,
-    EREMessage,
     EREResponse,
 )
 
@@ -18,7 +18,8 @@ from erspec.models.ere import (
 # dynamic discovery: simpler, more transparent, and sufficient for current needs.
 # If new message types become frequent, consider a plugin registry then.
 SUPPORTED_REQUEST_CLASSES = {
-    cls.__name__: cls for cls in [EntityMentionResolutionRequest]
+    cls.__name__: cls
+    for cls in [EntityMentionResolutionRequest]
     # FullRebuildRequest,  # Add when erspec implements it
 }
 
@@ -67,15 +68,11 @@ def get_message_object(
     return message_class.model_validate_json(msg_str)
 
 
-def get_response_from_message(
-    raw_msg: bytes, encoding: str = "utf-8"
-) -> EREResponse:
+def get_response_from_message(raw_msg: bytes, encoding: str = "utf-8") -> EREResponse:
     """Parse raw message bytes into a response domain model instance."""
     return get_message_object(raw_msg, SUPPORTED_RESPONSE_CLASSES, encoding)
 
 
-def get_request_from_message(
-    raw_msg: bytes, encoding: str = "utf-8"
-) -> ERERequest:
+def get_request_from_message(raw_msg: bytes, encoding: str = "utf-8") -> ERERequest:
     """Parse raw message bytes into a request domain model instance."""
     return get_message_object(raw_msg, SUPPORTED_REQUEST_CLASSES, encoding)

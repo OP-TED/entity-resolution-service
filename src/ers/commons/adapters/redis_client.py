@@ -2,10 +2,10 @@ import logging
 from abc import ABC, abstractmethod
 
 import redis.asyncio as aioredis
+from erspec.models.ere import ERERequest, EREResponse
 from redis.exceptions import ConnectionError as _RedisLibConnectionError
 
 from ers.commons.adapters.redis_messages import get_response_from_message
-from erspec.models.ere import ERERequest, EREResponse
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +31,9 @@ class RedisConnectionConfig:
         return cls(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)
 
     def __str__(self) -> str:
-        return f'RedisConnectionConfig ( host: "{self.host}", port: "{self.port}", db: "{self.db}" )'
+        return (
+            f'RedisConnectionConfig ( host: "{self.host}", port: "{self.port}", db: "{self.db}" )'
+        )
 
 
 class AbstractClient(ABC):

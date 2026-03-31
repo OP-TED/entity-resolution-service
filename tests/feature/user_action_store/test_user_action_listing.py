@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 from erspec.models.core import UserAction
 from pytest_bdd import given, parsers, scenario, then, when
 
-from ers.commons.domain.data_transfer_objects import PaginatedResult, PaginationParams
+from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.curation.domain.data_transfer_objects import UserActionSummary
 from ers.curation.services import UserActionService
 from tests.unit.factories import EntityMentionFactory, UserActionFactory
@@ -87,11 +87,9 @@ def n_actions_at_different_times(
     entity_mention_repository: MagicMock,
 ) -> list[UserAction]:
     actions = _build_actions(count)
-    user_action_repository.find_paginated.return_value = PaginatedResult(
-        count=count,
-        previous=None,
-        next=None,
+    user_action_repository.find_with_cursor.return_value = CursorPage(
         results=actions,
+        next_cursor=None,
     )
     entity_mention_repository.find_by_identifiers.return_value = []
     return actions
@@ -117,11 +115,9 @@ def no_actions(
     user_action_repository: MagicMock,
     entity_mention_repository: MagicMock,
 ) -> None:
-    user_action_repository.find_paginated.return_value = PaginatedResult(
-        count=0,
-        previous=None,
-        next=None,
+    user_action_repository.find_with_cursor.return_value = CursorPage(
         results=[],
+        next_cursor=None,
     )
     entity_mention_repository.find_by_identifiers.return_value = []
 
@@ -136,11 +132,9 @@ def action_with_parsed_mention(
     mention = EntityMentionFactory.build(
         identifiedBy=action.about_entity_mention,
     )
-    user_action_repository.find_paginated.return_value = PaginatedResult(
-        count=1,
-        previous=None,
-        next=None,
+    user_action_repository.find_with_cursor.return_value = CursorPage(
         results=[action],
+        next_cursor=None,
     )
     entity_mention_repository.find_by_identifiers.return_value = [mention]
     ctx["action"] = action
@@ -154,11 +148,9 @@ def action_with_missing_mention(
     entity_mention_repository: MagicMock,
 ) -> None:
     action = UserActionFactory.build()
-    user_action_repository.find_paginated.return_value = PaginatedResult(
-        count=1,
-        previous=None,
-        next=None,
+    user_action_repository.find_with_cursor.return_value = CursorPage(
         results=[action],
+        next_cursor=None,
     )
     entity_mention_repository.find_by_identifiers.return_value = []
     ctx["action"] = action
@@ -175,9 +167,9 @@ def action_with_missing_mention(
 )
 def request_page_1(
     user_action_service: UserActionService,
-) -> PaginatedResult[UserActionSummary]:
+) -> CursorPage[UserActionSummary]:
     return asyncio.run(
-        user_action_service.list_user_actions(PaginationParams(page=1)),
+        user_action_service.list_user_actions(CursorParams()),
     )
 
 
@@ -192,22 +184,20 @@ def request_page_with_size(
     per_page: int,
     user_action_service: UserActionService,
     user_action_repository: MagicMock,
-) -> PaginatedResult[UserActionSummary]:
+) -> CursorPage[UserActionSummary]:
     if hasattr(user_action_repository, "_all_actions"):
         all_actions = user_action_repository._all_actions
         total = len(all_actions)
         start = (page - 1) * per_page
         page_items = all_actions[start : start + per_page]
-        total_pages = (total + per_page - 1) // per_page if total > 0 else 0
-        user_action_repository.find_paginated.return_value = PaginatedResult(
-            count=total,
-            previous=page - 1 if page > 1 else None,
-            next=page + 1 if page < total_pages else None,
+        has_more = start + per_page < total
+        user_action_repository.find_with_cursor.return_value = CursorPage(
             results=page_items,
+            next_cursor="next" if has_more else None,
         )
     return asyncio.run(
         user_action_service.list_user_actions(
-            PaginationParams(page=page, per_page=per_page),
+            CursorParams(limit=per_page),
         ),
     )
 
@@ -218,9 +208,9 @@ def request_page_with_size(
 )
 def request_listing(
     user_action_service: UserActionService,
-) -> PaginatedResult[UserActionSummary]:
+) -> CursorPage[UserActionSummary]:
     return asyncio.run(
-        user_action_service.list_user_actions(PaginationParams()),
+        user_action_service.list_user_actions(CursorParams()),
     )
 
 
@@ -230,48 +220,43 @@ def request_listing(
 
 
 @then("the actions are returned in reverse chronological order")
-def actions_in_reverse_order(listing_result: PaginatedResult[UserActionSummary]) -> None:
+def actions_in_reverse_order(listing_result: CursorPage[UserActionSummary]) -> None:
     timestamps = [r.created_at for r in listing_result.results]
     assert timestamps == sorted(timestamps, reverse=True)
 
 
 @then("the most recent action appears first")
-def most_recent_first(listing_result: PaginatedResult[UserActionSummary]) -> None:
+def most_recent_first(listing_result: CursorPage[UserActionSummary]) -> None:
     results = listing_result.results
     if len(results) > 1:
         assert results[0].created_at >= results[1].created_at
 
 
 @then(parsers.parse("{count:d} actions are returned"))
-def n_actions_returned(listing_result: PaginatedResult[UserActionSummary], count: int) -> None:
+def n_actions_returned(listing_result: CursorPage[UserActionSummary], count: int) -> None:
     assert len(listing_result.results) == count
 
 
-@then(parsers.parse("the total count is {count:d}"))
-def total_count_is(listing_result: PaginatedResult[UserActionSummary], count: int) -> None:
-    assert listing_result.count == count
-
-
-@then(parsers.parse("a next page indicator points to page {page:d}"))
-def next_page_points_to(listing_result: PaginatedResult[UserActionSummary], page: int) -> None:
-    assert listing_result.next == page
+@then("a next page indicator is present")
+def next_page_present(listing_result: CursorPage[UserActionSummary]) -> None:
+    assert listing_result.next_cursor is not None
 
 
 @then("there is no next page indicator")
-def no_next_page(listing_result: PaginatedResult[UserActionSummary]) -> None:
-    assert listing_result.next is None
+def no_next_page(listing_result: CursorPage[UserActionSummary]) -> None:
+    assert listing_result.next_cursor is None
 
 
 @then(parsers.parse("the result contains {count:d} actions"))
 def result_contains_n_actions(
-    listing_result: PaginatedResult[UserActionSummary],
+    listing_result: CursorPage[UserActionSummary],
     count: int,
 ) -> None:
     assert len(listing_result.results) == count
 
 
 @then("each action summary includes the entity mention preview")
-def action_has_preview(listing_result: PaginatedResult[UserActionSummary]) -> None:
+def action_has_preview(listing_result: CursorPage[UserActionSummary]) -> None:
     for summary in listing_result.results:
         assert summary.about_entity_mention is not None
         assert summary.about_entity_mention.identified_by is not None
@@ -279,21 +264,21 @@ def action_has_preview(listing_result: PaginatedResult[UserActionSummary]) -> No
 
 @then("the preview contains the parsed representation when available")
 def preview_has_parsed_representation(
-    listing_result: PaginatedResult[UserActionSummary],
+    listing_result: CursorPage[UserActionSummary],
 ) -> None:
     for summary in listing_result.results:
         assert summary.about_entity_mention.parsed_representation is not None
 
 
 @then("the action summary includes the entity mention identifier")
-def action_has_identifier(listing_result: PaginatedResult[UserActionSummary]) -> None:
+def action_has_identifier(listing_result: CursorPage[UserActionSummary]) -> None:
     for summary in listing_result.results:
         assert summary.about_entity_mention.identified_by is not None
 
 
 @then("the parsed representation is empty")
 def parsed_representation_is_empty(
-    listing_result: PaginatedResult[UserActionSummary],
+    listing_result: CursorPage[UserActionSummary],
 ) -> None:
     for summary in listing_result.results:
         assert summary.about_entity_mention.parsed_representation is None
@@ -330,7 +315,7 @@ def diverse_actions_recorded(
     ctx["accept_action"] = accept_action
     ctx["reject_action"] = reject_action
 
-    def side_effect_paginated(pagination, filters=None):
+    def side_effect_with_cursor(cursor_params, filters=None):
         from ers.curation.domain.data_transfer_objects import UserActionFilters
 
         if filters is None:
@@ -347,14 +332,12 @@ def diverse_actions_recorded(
                 actions = [a for a in actions if a.created_at <= filters.time_range_end]
         else:
             actions = ctx["all_actions"]
-        return PaginatedResult(
-            count=len(actions),
-            previous=None,
-            next=None,
+        return CursorPage(
             results=actions,
+            next_cursor=None,
         )
 
-    user_action_repository.find_paginated.side_effect = side_effect_paginated
+    user_action_repository.find_with_cursor.side_effect = side_effect_with_cursor
     entity_mention_repository.find_by_identifiers.return_value = []
 
 
@@ -367,7 +350,7 @@ def filter_action_listing(
     criterion: str,
     value: str,
     user_action_service: UserActionService,
-) -> PaginatedResult[UserActionSummary]:
+) -> CursorPage[UserActionSummary]:
     from erspec.models.core import UserActionType
 
     from ers.curation.domain.data_transfer_objects import UserActionFilters
@@ -398,22 +381,21 @@ def filter_action_listing(
     ctx["applied_filter_value"] = value
 
     return asyncio.run(
-        user_action_service.list_user_actions(PaginationParams(), filters),
+        user_action_service.list_user_actions(CursorParams(), filters),
     )
 
 
 @then(parsers.parse("only actions matching {value} are returned"))
 def only_matching_actions(
-    listing_result: PaginatedResult[UserActionSummary],
+    listing_result: CursorPage[UserActionSummary],
     value: str,
 ) -> None:
-    assert listing_result.count > 0
     assert len(listing_result.results) > 0
 
 
 @then("actions that do not match are excluded")
 def non_matching_excluded(
     ctx: dict[str, Any],
-    listing_result: PaginatedResult[UserActionSummary],
+    listing_result: CursorPage[UserActionSummary],
 ) -> None:
-    assert listing_result.count < len(ctx["all_actions"])
+    assert len(listing_result.results) < len(ctx["all_actions"])

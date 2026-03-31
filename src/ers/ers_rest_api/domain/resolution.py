@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from erspec.models.core import EntityMentionIdentifier, EntityMention
+from erspec.models.core import EntityMention, EntityMentionIdentifier
 from pydantic import Field, model_validator
 
 from ers.commons.domain.data_transfer_objects import ERSRequest, ERSResponse, ResolutionOutcome
 from ers.ers_rest_api.domain.errors import ErrorResponse
-
 
 # ---------------------------------------------------------------------------
 # Single resolve
@@ -35,20 +34,24 @@ class EntityMentionResolutionResult(ERSResponse):
     """
 
     identified_by: EntityMentionIdentifier = Field(
-        ..., description="Triad identifying the entity mention this result refers to.",
+        ...,
+        description="Triad identifying the entity mention this result refers to.",
     )
 
     # Success fields (present when resolution succeeded)
     canonical_entity_id: str | None = Field(
-        default=None, description="Cluster identifier assigned to the mention.",
+        default=None,
+        description="Cluster identifier assigned to the mention.",
     )
     status: ResolutionOutcome | None = Field(
-        default=None, description="Whether the resolution is canonical or provisional.",
+        default=None,
+        description="Whether the resolution is canonical or provisional.",
     )
 
     # Error fields (present when the mention failed — bulk context only)
     error: ErrorResponse | None = Field(
-        default=None, description="Error response with a code a description.",
+        default=None,
+        description="Error response with a code a description.",
     )
 
     @model_validator(mode="after")

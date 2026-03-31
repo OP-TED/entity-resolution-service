@@ -38,7 +38,7 @@ class CanonicalEntityService:
         if decision is None:
             raise NotFoundError("Decision", decision_id)
 
-        return await self._build_canonical_entity_preview(
+        return await self.build_cluster_preview(
             cluster_id=decision.current_placement.cluster_id,
             confidence_score=decision.current_placement.confidence_score,
             similarity_score=decision.current_placement.similarity_score,
@@ -67,7 +67,7 @@ class CanonicalEntityService:
         page_items = alternatives[start : start + pagination.per_page]
 
         previews = [
-            await self._build_canonical_entity_preview(
+            await self.build_cluster_preview(
                 cluster_id=candidate.cluster_id,
                 confidence_score=candidate.confidence_score,
                 similarity_score=candidate.similarity_score,
@@ -82,7 +82,7 @@ class CanonicalEntityService:
             results=previews,
         )
 
-    async def _build_canonical_entity_preview(
+    async def build_cluster_preview(
         self,
         cluster_id: str,
         confidence_score: float,

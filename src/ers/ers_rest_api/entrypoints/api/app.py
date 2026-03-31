@@ -65,4 +65,21 @@ def create_app() -> FastAPI:
 
     app.openapi = lambda: _custom_openapi(app)  # type: ignore[assignment]
 
+    # --- Temporary mock overrides (remove when real services are implemented) ---
+    if config.USE_MOCK_SERVICES:
+        from ers.ers_rest_api.entrypoints.api.dependencies import (
+            get_lookup_service,
+            get_refresh_bulk_service,
+            get_resolve_service,
+        )
+        from tests.mock.ers_rest_api.mock_services import (
+            MockLookupService,
+            MockRefreshBulkService,
+            MockResolveService,
+        )
+
+        app.dependency_overrides[get_resolve_service] = MockResolveService
+        app.dependency_overrides[get_lookup_service] = MockLookupService
+        app.dependency_overrides[get_refresh_bulk_service] = MockRefreshBulkService
+
     return app
