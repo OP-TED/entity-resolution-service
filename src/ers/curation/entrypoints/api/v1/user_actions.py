@@ -11,7 +11,7 @@ from ers.curation.domain.data_transfer_objects import (
     UserActionFilters,
     UserActionSummary,
 )
-from ers.curation.entrypoints.api.auth import AdminUser
+from ers.curation.entrypoints.api.auth import VerifiedUser
 from ers.curation.entrypoints.api.dependencies import (
     get_canonical_entity_service,
     get_user_action_service,
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/user-actions", tags=["User Actions"])
 )
 async def list_user_actions(
     cursor_params: CursorPagination,
-    _admin: AdminUser,
+    _user: VerifiedUser,
     service: Annotated[UserActionService, Depends(get_user_action_service)],
     action_type: Annotated[UserActionType | None, Query()] = None,
     actor: Annotated[str | None, Query()] = None,
@@ -36,7 +36,7 @@ async def list_user_actions(
     time_range_end: Annotated[datetime | None, Query()] = None,
     ordering: Annotated[BaseOrdering | None, Query()] = None,
 ) -> CursorPage[UserActionSummary]:
-    """List cursor-paginated user actions with optional filtering (admin only)."""
+    """List cursor-paginated user actions with optional filtering."""
     filters = None
     if any(v is not None for v in (action_type, actor, time_range_start, time_range_end, ordering)):
         filters = UserActionFilters(
@@ -58,11 +58,11 @@ async def list_user_actions(
 )
 async def get_selected_cluster(
     action_id: str,
-    _admin: AdminUser,
+    _user: VerifiedUser,
     service: Annotated[UserActionService, Depends(get_user_action_service)],
     canonical_service: Annotated[CanonicalEntityService, Depends(get_canonical_entity_service)],
 ) -> CanonicalEntityPreview | None:
-    """Get the selected cluster preview with top entity mentions (admin only)."""
+    """Get the selected cluster preview with top entity mentions."""
     return await service.get_selected_cluster_preview(action_id, canonical_service)
 
 
@@ -76,9 +76,9 @@ async def get_selected_cluster(
 async def get_candidates(
     action_id: str,
     pagination: Pagination,
-    _admin: AdminUser,
+    _user: VerifiedUser,
     service: Annotated[UserActionService, Depends(get_user_action_service)],
     canonical_service: Annotated[CanonicalEntityService, Depends(get_canonical_entity_service)],
 ) -> PaginatedResult[CanonicalEntityPreview]:
-    """Get paginated candidate cluster previews with top entity mentions (admin only)."""
+    """Get paginated candidate cluster previews with top entity mentions."""
     return await service.get_candidate_previews(action_id, pagination, canonical_service)

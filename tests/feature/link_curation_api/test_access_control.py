@@ -54,8 +54,13 @@ def test_non_admin_user_management():
     pass
 
 
-@scenario(FEATURE, "Non-admin user cannot view user action trail")
-def test_non_admin_action_trail():
+@scenario(FEATURE, "Verified user can view user action trail")
+def test_verified_action_trail():
+    pass
+
+
+@scenario(FEATURE, "Unverified user cannot view user action trail")
+def test_unverified_action_trail():
     pass
 
 
@@ -146,6 +151,7 @@ def verified_client(
     app: FastAPI,
     decision_repository: AsyncMock,
     statistics_repository: AsyncMock,
+    user_action_repository: AsyncMock,
 ) -> TestClient:
     from ers.curation.domain.data_transfer_objects import (
         CurationStatistics,
@@ -167,6 +173,9 @@ def verified_client(
         total_canonical_entities=0,
         average_cluster_size=0.0,
         resolution_requests=0,
+    )
+    user_action_repository.find_with_cursor.return_value = CursorPage(
+        results=[],
     )
     return make_client_with_user(app, VERIFIED_USER)
 
@@ -202,6 +211,11 @@ def user_lists_users(test_client: TestClient) -> Any:
 
 @when("the user attempts to view the user action trail", target_fixture="response")
 def user_views_actions(test_client: TestClient) -> Any:
+    return test_client.get(USER_ACTIONS_URL)
+
+
+@when("the user requests the user action trail", target_fixture="response")
+def user_requests_actions(test_client: TestClient) -> Any:
     return test_client.get(USER_ACTIONS_URL)
 
 

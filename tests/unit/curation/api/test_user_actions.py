@@ -82,9 +82,10 @@ class TestListUserActions:
         assert filters.actor == "curator@test.com"
         assert filters.ordering is not None
 
-    async def test_non_admin_gets_403(
+    async def test_verified_non_admin_can_access(
         self,
         app: FastAPI,
+        user_action_service: AsyncMock,
     ) -> None:
         regular_user = UserContext(
             id="u-2",
@@ -94,6 +95,29 @@ class TestListUserActions:
             is_verified=True,
         )
         app.dependency_overrides[get_current_user] = lambda: regular_user
+        user_action_service.list_user_actions.return_value = CursorPage(
+            results=[], next_cursor=None
+        )
+
+        from httpx import ASGITransport, AsyncClient
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            response = await c.get(USER_ACTIONS_URL)
+
+        assert response.status_code == 200
+
+    async def test_unverified_gets_403(
+        self,
+        app: FastAPI,
+    ) -> None:
+        unverified_user = UserContext(
+            id="u-3",
+            email="unverified@example.com",
+            is_active=True,
+            is_superuser=False,
+            is_verified=False,
+        )
+        app.dependency_overrides[get_current_user] = lambda: unverified_user
 
         from httpx import ASGITransport, AsyncClient
 
@@ -152,9 +176,11 @@ class TestGetSelectedCluster:
         assert response.status_code == 200
         assert response.json() is None
 
-    async def test_non_admin_gets_403(
+    async def test_verified_non_admin_can_access(
         self,
         app: FastAPI,
+        user_action_service: AsyncMock,
+        canonical_entity_service: AsyncMock,
     ) -> None:
         regular_user = UserContext(
             id="u-2",
@@ -164,6 +190,27 @@ class TestGetSelectedCluster:
             is_verified=True,
         )
         app.dependency_overrides[get_current_user] = lambda: regular_user
+        user_action_service.get_selected_cluster_preview.return_value = None
+
+        from httpx import ASGITransport, AsyncClient
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            response = await c.get(f"{USER_ACTIONS_URL}/action-1/selected-cluster")
+
+        assert response.status_code == 200
+
+    async def test_unverified_gets_403(
+        self,
+        app: FastAPI,
+    ) -> None:
+        unverified_user = UserContext(
+            id="u-3",
+            email="unverified@example.com",
+            is_active=True,
+            is_superuser=False,
+            is_verified=False,
+        )
+        app.dependency_overrides[get_current_user] = lambda: unverified_user
 
         from httpx import ASGITransport, AsyncClient
 
@@ -218,9 +265,11 @@ class TestGetCandidates:
 
         assert response.status_code == 404
 
-    async def test_non_admin_gets_403(
+    async def test_verified_non_admin_can_access(
         self,
         app: FastAPI,
+        user_action_service: AsyncMock,
+        canonical_entity_service: AsyncMock,
     ) -> None:
         regular_user = UserContext(
             id="u-2",
@@ -230,6 +279,29 @@ class TestGetCandidates:
             is_verified=True,
         )
         app.dependency_overrides[get_current_user] = lambda: regular_user
+        user_action_service.get_candidate_previews.return_value = PaginatedResult(
+            count=0, previous=None, next=None, results=[]
+        )
+
+        from httpx import ASGITransport, AsyncClient
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            response = await c.get(f"{USER_ACTIONS_URL}/action-1/candidates")
+
+        assert response.status_code == 200
+
+    async def test_unverified_gets_403(
+        self,
+        app: FastAPI,
+    ) -> None:
+        unverified_user = UserContext(
+            id="u-3",
+            email="unverified@example.com",
+            is_active=True,
+            is_superuser=False,
+            is_verified=False,
+        )
+        app.dependency_overrides[get_current_user] = lambda: unverified_user
 
         from httpx import ASGITransport, AsyncClient
 
