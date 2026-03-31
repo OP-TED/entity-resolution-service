@@ -15,12 +15,6 @@
 - Methodology: stream-coding (documentation-first), Cosmic Python (layered architecture).
 - Memory: auto-memory (this file) + epic/task memory under `epics/`.
 
-## Planning Roadmap
-
-- [planning-roadmap.md](planning-roadmap.md) — Master roadmap for 10 ERS epic specifications
-- 3 phases: Foundation (EPIC-01 to 04), Core Flows (EPIC-05 to 07), Curation (EPIC-08 to 09) + cross-cutting (EPIC-X)
-- Status: Epics 1-7 written, all Gherkin features complete (component + UC-level + E2E)
-
 ## Epic Status
 
 | Epic | Component | Score | Status |
