@@ -2,7 +2,7 @@ import pytest
 
 from ers import (
     AdminConfig,
-    AppConfig,
+    CurationAppConfig,
     CurationConfig,
     JWTConfig,
     MongoDBConfig,
@@ -15,23 +15,23 @@ from ers import (
 class TestAppConfig:
     def test_app_name_default(self, monkeypatch):
         monkeypatch.delenv("APP_NAME", raising=False)
-        assert AppConfig().APP_NAME == "Entity Resolution Service"
+        assert CurationAppConfig().APP_NAME == "Curation REST API"
 
     def test_debug_default_is_false(self, monkeypatch):
         monkeypatch.delenv("DEBUG", raising=False)
-        assert AppConfig().DEBUG is False
+        assert CurationAppConfig().DEBUG is False
 
     def test_debug_true_from_env(self, monkeypatch):
         monkeypatch.setenv("DEBUG", "true")
-        assert AppConfig().DEBUG is True
+        assert CurationAppConfig().DEBUG is True
 
     def test_cors_origins_default_is_list(self, monkeypatch):
         monkeypatch.delenv("CORS_ORIGINS", raising=False)
-        assert AppConfig().CORS_ORIGINS == ["*"]
+        assert CurationAppConfig().CORS_ORIGINS == ["*"]
 
     def test_cors_origins_from_env(self, monkeypatch):
         monkeypatch.setenv("CORS_ORIGINS", '["https://a.com","https://b.com"]')
-        assert AppConfig().CORS_ORIGINS == ["https://a.com", "https://b.com"]
+        assert CurationAppConfig().CORS_ORIGINS == ["https://a.com", "https://b.com"]
 
 
 class TestJWTConfig:

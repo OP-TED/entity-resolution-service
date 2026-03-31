@@ -7,8 +7,8 @@ from ers.commons.adapters.config_resolver import env_property
 load_dotenv()
 
 
-class AppConfig:
-    @env_property(default_value="Entity Resolution Service")
+class CurationAppConfig:
+    @env_property(default_value="Curation REST API")
     def APP_NAME(self, config_value: str) -> str:
         return config_value
 
@@ -137,7 +137,7 @@ class ObservabilityConfig:
 
 
 class ERSConfigResolver(
-    AppConfig,
+    CurationAppConfig,
     JWTConfig,
     AdminConfig,
     CurationConfig,
