@@ -39,6 +39,7 @@ def _async_iter(items: list):
 def collection() -> AsyncMock:
     col = AsyncMock()
     col.find = MagicMock(return_value=_async_iter([]))
+    col.count_documents.return_value = 0
     return col
 
 
@@ -160,13 +161,16 @@ class TestFindWithCursor:
         doc = action.model_dump(exclude={"object_description"})
         doc["_id"] = doc.pop("id")
         collection.find.return_value = _async_iter([doc])
+        collection.count_documents.return_value = 1
 
         result = await repo.find_with_cursor(CursorParams(limit=10))
 
         assert len(result.results) == 1
         assert result.results[0].id == action.id
+        assert result.count == 1
         assert result.next_cursor is None
         collection.find.assert_called_once()
+        collection.count_documents.assert_called_once_with({})
 
     async def test_returns_next_cursor_when_more_results(
         self,
@@ -180,10 +184,12 @@ class TestFindWithCursor:
             d["_id"] = d.pop("id")
             docs.append(d)
         collection.find.return_value = _async_iter(docs)
+        collection.count_documents.return_value = 10
 
         result = await repo.find_with_cursor(CursorParams(limit=2))
 
         assert len(result.results) == 2
+        assert result.count == 10
         assert result.next_cursor is not None
 
     async def test_no_next_cursor_on_exact_page(
@@ -237,12 +243,15 @@ class TestFindWithCursor:
         collection: AsyncMock,
     ) -> None:
         collection.find.return_value = _async_iter([])
+        collection.count_documents.return_value = 5
         filters = UserActionFilters(actor="curator@test.com")
 
-        await repo.find_with_cursor(CursorParams(limit=10), filters)
+        result = await repo.find_with_cursor(CursorParams(limit=10), filters)
 
         query = collection.find.call_args[0][0]
         assert query["actor"] == "curator@test.com"
+        collection.count_documents.assert_called_once_with({"actor": "curator@test.com"})
+        assert result.count == 5
 
     async def test_with_ordering_asc(
         self,
@@ -263,8 +272,10 @@ class TestFindWithCursor:
         collection: AsyncMock,
     ) -> None:
         collection.find.return_value = _async_iter([])
+        collection.count_documents.return_value = 0
 
         result = await repo.find_with_cursor(CursorParams(limit=10))
 
         assert result.results == []
+        assert result.count == 0
         assert result.next_cursor is None

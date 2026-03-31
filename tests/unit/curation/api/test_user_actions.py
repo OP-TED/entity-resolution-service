@@ -42,6 +42,7 @@ class TestListUserActions:
                     metadata=action.metadata,
                 )
             ],
+            count=1,
             next_cursor=None,
         )
 
@@ -49,6 +50,7 @@ class TestListUserActions:
 
         assert response.status_code == 200
         data = response.json()
+        assert data["count"] == 1
         assert data["results"][0]["id"] == action.id
         assert data["results"][0]["about_entity_mention"]["identified_by"] == (
             action.about_entity_mention.model_dump(mode="json")

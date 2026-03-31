@@ -171,6 +171,8 @@ class MongoDecisionCurationRepository(
             ]
             query["about_entity_mention"] = {"$in": id_docs}
 
+        count = await self._collection.count_documents(query)
+
         sort_field, ascending = self._get_sort_info(filters.ordering)
         sort = self._build_sort(filters.ordering)
 
@@ -192,7 +194,7 @@ class MongoDecisionCurationRepository(
             last = results[-1]
             next_cursor = encode_cursor(self._extract_sort_value(last, sort_field), last.id)
 
-        return CursorPage(results=results, next_cursor=next_cursor)
+        return CursorPage(results=results, count=count, next_cursor=next_cursor)
 
     async def find_mention_ids_by_cluster(
         self,

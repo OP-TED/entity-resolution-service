@@ -74,6 +74,7 @@ class MongoUserActionCurationRepository(
         filters: UserActionFilters | None = None,
     ) -> CursorPage[UserAction]:
         query = self._build_filter_query(filters)
+        count = await self._collection.count_documents(query)
         sort_field, ascending = self._get_sort_info(filters)
         direction = 1 if ascending else -1
         sort = [(sort_field, direction), ("_id", direction)]
@@ -94,7 +95,7 @@ class MongoUserActionCurationRepository(
             last = results[-1]
             next_cursor = encode_cursor(last.created_at, last.id)
 
-        return CursorPage(results=results, next_cursor=next_cursor)
+        return CursorPage(results=results, count=count, next_cursor=next_cursor)
 
     async def has_current_action(
         self,

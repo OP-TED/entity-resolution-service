@@ -106,7 +106,7 @@ class TestListUserActions:
         entity_mention = EntityMentionFactory.build(
             identifiedBy=action.about_entity_mention,
         )
-        expected = CursorPage(results=[action], next_cursor=None)
+        expected = CursorPage(results=[action], count=1, next_cursor=None)
         cursor_params = CursorParams(cursor=None, limit=5)
         user_action_repository.find_with_cursor.return_value = expected
         entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
@@ -114,6 +114,7 @@ class TestListUserActions:
         result = await user_action_service.list_user_actions(cursor_params)
 
         assert len(result.results) == 1
+        assert result.count == 1
         assert result.results[0].id == action.id
         assert result.results[0].about_entity_mention.identified_by == action.about_entity_mention
         assert result.results[0].about_entity_mention.parsed_representation == json.loads(

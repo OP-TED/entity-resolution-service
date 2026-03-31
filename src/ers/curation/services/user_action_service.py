@@ -58,6 +58,7 @@ class UserActionService:
 
         return CursorPage(
             results=[self._to_user_action_summary(action, mention_map) for action in page.results],
+            count=page.count,
             next_cursor=page.next_cursor,
         )
 
