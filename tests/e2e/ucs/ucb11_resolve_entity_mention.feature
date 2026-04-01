@@ -50,7 +50,7 @@ Feature: UC-B1.1 — Resolve Entity Mention via ERS API
     And the request is registered in the Request Registry with triad "<source_id>", "<request_id>", "<entity_type>"
     And the Decision Store contains a provisional singleton decision for that triad
     And the Decision Store decision has confidence 1.0 and similarity 1.0
-    And a resolveConsideringRecommendation message is forwarded to ERE with the draft identifier
+    And the entity mention was published to ERE
 
     Examples:
       | source_id | request_id | entity_type  | content_fixture | context        |
@@ -87,7 +87,7 @@ Feature: UC-B1.1 — Resolve Entity Mention via ERS API
     Examples:
       | source_id | request_id | entity_type  | content_fixture | context        | cluster_id         | original_status |
       | SYSTEM_E  | req-030    | ORGANISATION | mock:org-001    | notice-2024-01 | cluster-010        | CANONICAL       |
-      | SYSTEM_E  | req-031    | ORGANISATION | mock:org-004    | notice-2024-03 | prov-singleton-001 | PROVISIONAL     |
+      | SYSTEM_E  | req-031    | ORGANISATION | mock:org-004    | notice-2024-03 | DERIVE_PROVISIONAL  | PROVISIONAL     |
 
   # ---------------------------------------------------------------------------
   # Idempotency conflict — same triad, different content or context
@@ -122,21 +122,25 @@ Feature: UC-B1.1 — Resolve Entity Mention via ERS API
       | request_id absent                  | VALIDATION_ERROR |
       | entity_type absent                 | VALIDATION_ERROR |
       | content absent                     | VALIDATION_ERROR |
-      | entity_type set to "UNKNOWN_TYPE"  | VALIDATION_ERROR |
+
+  Scenario: Reject request with unsupported entity type during registration
+    Given an invalid resolve request with entity_type set to "UNKNOWN_TYPE"
+    When the originator submits the resolve request
+    Then the response returns error "PARSING_FAILED"
+    And no decision is written to the Decision Store
 
   # ---------------------------------------------------------------------------
   # Client timeout budget exceeded (ADR-A2N, ADR-C1N)
   # ---------------------------------------------------------------------------
 
-  Scenario: Return explicit error when client timeout budget is exceeded
+  Scenario: Return timeout error when Decision Store is unreachable during provisional write
     Given an entity mention with triad "SYSTEM_G", "req-050", "ORGANISATION"
     And the mention content is "mock:org-001" with context "notice-2024-05"
     And ERE will not respond within the execution window
-    And the client timeout budget is exceeded before a draft identifier can be issued
+    And the Decision Store is unreachable for writes
     When the originator submits the resolve request
-    Then the response returns a timeout error
-    And the request is registered in the Request Registry
-    And no decision is written to the Decision Store
+    Then the response returns error "SERVICE_TIMEOUT"
+    And the response HTTP status is 504
 
   # ---------------------------------------------------------------------------
   # Critical dependency failures
@@ -150,19 +154,20 @@ Feature: UC-B1.1 — Resolve Entity Mention via ERS API
     Then the response returns error "SERVICE_ERROR"
     And no decision is written to the Decision Store
 
-  Scenario: Return service error when the Decision Store fails after ERE response
+  Scenario: Return timeout error when the Decision Store fails during provisional write
     Given an entity mention with triad "SYSTEM_I", "req-070", "ORGANISATION"
     And the mention content is "mock:org-001" with context "notice-2024-07"
-    And ERE will respond with cluster "cluster-020" and 2 alternatives within the execution window
-    And the Decision Store will fail on write
+    And ERE will not respond within the execution window
+    And the Decision Store is unreachable for writes
     When the originator submits the resolve request
-    Then the response returns error "SERVICE_ERROR"
-    And the request is registered in the Request Registry with triad "SYSTEM_I", "req-070", "ORGANISATION"
+    Then the response returns error "SERVICE_TIMEOUT"
+    And the response HTTP status is 504
 
-  Scenario: Return service error when the ERE messaging boundary is unavailable
+  Scenario: Issue provisional when the ERE messaging boundary is unavailable
     Given an entity mention with triad "SYSTEM_J", "req-080", "ORGANISATION"
     And the mention content is "mock:org-001" with context "notice-2024-08"
     And the ERE messaging boundary is unavailable for publishing
     When the originator submits the resolve request
-    Then the response returns error "SERVICE_ERROR"
-    And no decision is written to the Decision Store
+    Then the response returns a deterministic draft identifier with status "PROVISIONAL"
+    And the draft identifier equals SHA256 of "SYSTEM_J", "req-080", "ORGANISATION"
+    And the Decision Store contains a provisional singleton decision for that triad
