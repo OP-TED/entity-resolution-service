@@ -22,7 +22,7 @@ COV_FLAGS = --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml --
 #-----------------------------------------------------------------------------
 # Dev commands
 #-----------------------------------------------------------------------------
-.PHONY: help install-poetry install lock build seed-db
+.PHONY: help install-poetry install lock build seed-db openapi
 
 help: ## Display available targets
 	@ echo -e "$(BUILD_PRINT)Available targets:$(END_BUILD_PRINT)"
@@ -32,6 +32,7 @@ help: ## Display available targets
 	@ echo "    lock                 - Update poetry.lock"
 	@ echo "    build                - Build the package distribution"
 	@ echo "    seed-db              - Seed the database with mock data"
+	@ echo "    openapi              - Generate OpenAPI schemas into /resources folder"
 	@ echo ""
 	@ echo -e "  $(BUILD_PRINT)Code Quality (mutating):$(END_BUILD_PRINT)"
 	@ echo "    format               - Format code with Ruff"
@@ -100,6 +101,11 @@ seed-db: ## Seed the database with mock data (needs running database and config)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Seeding database with mock data$(END_BUILD_PRINT)"
 	@ poetry run python -m scripts.seed_db
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Database seeding complete$(END_BUILD_PRINT)"
+
+openapi: ## Generate OpenAPI schema into resources/
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Generating OpenAPI schemas$(END_BUILD_PRINT)"
+	@ poetry run python -m scripts.export_openapi
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) OpenAPI schemas generated$(END_BUILD_PRINT)"
 
 #-----------------------------------------------------------------------------
 # Code quality — mutating targets
