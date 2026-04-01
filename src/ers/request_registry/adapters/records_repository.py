@@ -41,6 +41,10 @@ class ResolutionRequestRepository(
     ) -> list[ResolutionRequestRecord]:
         """Return a paginated list of records for a given source_id."""
 
+    @abstractmethod
+    async def exists_by_source(self, source_id: str) -> bool:
+        """Return True if at least one resolution request exists for the given source."""
+
 
 class MongoResolutionRequestRepository(
     BaseMongoRepository[ResolutionRequestRecord, str],
@@ -98,6 +102,14 @@ class MongoResolutionRequestRepository(
             self._collection.find({"identifiedBy.source_id": source_id}).skip(offset).limit(limit)
         )
         return [self._from_document(doc) async for doc in cursor]
+
+    async def exists_by_source(self, source_id: str) -> bool:
+        """Return True if at least one resolution request exists for the given source."""
+        doc = await self._collection.find_one(
+            {"identifiedBy.source_id": source_id},
+            projection={"_id": 1},
+        )
+        return doc is not None
 
 
 class MongoLookupStateRepository(BaseMongoRepository[LookupRequestRecord, str]):

@@ -3,6 +3,7 @@
 import asyncio
 from datetime import UTC, datetime
 
+from opentelemetry import trace
 from erspec.models.core import (
     ClusterReference,
     Decision,
@@ -254,4 +255,7 @@ async def resolve_bulk(
     service: ResolutionCoordinatorService,
 ) -> list[Decision | Exception]:
     """Traced entry point for bulk resolution."""
+    trace.get_current_span().set_attribute(
+        "entity_mention.bulk_count", len(entity_mentions)
+    )
     return await service.resolve_bulk(entity_mentions)

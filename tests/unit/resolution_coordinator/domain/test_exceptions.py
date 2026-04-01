@@ -8,6 +8,7 @@ from ers.resolution_coordinator.domain.exceptions import (
     EnginePublishFailedException,
     ParsingFailedException,
     ResolutionTimeoutException,
+    SourceNotFoundException,
 )
 
 ALL_SIMPLE_EXCEPTIONS = [ResolutionTimeoutException]
@@ -86,6 +87,23 @@ class TestEnginePublishFailedException:
     def test_message_accessible(self):
         exc = EnginePublishFailedException("engine publish failed", ConnectionError("x"))
         assert exc.message == "engine publish failed"
+
+
+class TestSourceNotFoundException:
+    def test_stores_source_id_attribute(self):
+        exc = SourceNotFoundException("SRC_X")
+        assert exc.source_id == "SRC_X"
+
+    def test_is_coordinator_exception(self):
+        assert issubclass(SourceNotFoundException, CoordinatorException)
+
+    def test_message_includes_source_id(self):
+        exc = SourceNotFoundException("SRC_X")
+        assert "SRC_X" in str(exc)
+
+    def test_can_be_raised_and_caught(self):
+        with pytest.raises(SourceNotFoundException):
+            raise SourceNotFoundException("SRC_X")
 
 
 class TestCoordinatorConfig:

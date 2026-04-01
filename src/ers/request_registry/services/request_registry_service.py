@@ -97,6 +97,17 @@ class RequestRegistryService:
         """
         return await self._resolution_repo.find_by_triad(identifier)
 
+    async def source_has_requests(self, source_id: str) -> bool:
+        """Return True if at least one resolution request exists for the given source.
+
+        Args:
+            source_id: The source system identifier.
+
+        Returns:
+            True if any record with this source_id exists in the registry.
+        """
+        return await self._resolution_repo.exists_by_source(source_id)
+
     async def get_lookup_state(self, source_id: str) -> LookupRequestRecord | None:
         """Return the current snapshot state for a source, or None if unknown.
 
@@ -186,6 +197,23 @@ async def get_resolution_request(
         The matching ResolutionRequestRecord, or None.
     """
     return await service.get_resolution_request(identifier)
+
+
+@trace_function(span_name="request_registry.source_has_requests")
+async def source_has_requests(
+    source_id: str,
+    service: RequestRegistryService,
+) -> bool:
+    """Return True if at least one resolution request exists for the given source.
+
+    Args:
+        source_id: The source system identifier.
+        service: The RequestRegistryService instance.
+
+    Returns:
+        True if any record with this source_id exists in the registry.
+    """
+    return await service.source_has_requests(source_id)
 
 
 @trace_function(span_name="request_registry.get_lookup_state")

@@ -33,6 +33,18 @@ class ParsingFailedException(CoordinatorException):
         super().__init__(message)
 
 
+class SourceNotFoundException(CoordinatorException):
+    """Raised when the requested source has no resolution requests in the Registry.
+
+    Args:
+        source_id: The source identifier that was not found.
+    """
+
+    def __init__(self, source_id: str) -> None:
+        self.source_id = source_id
+        super().__init__(f"Source not found in registry: {source_id!r}")
+
+
 class EnginePublishFailedException(CoordinatorException):
     """Raised when the ERE Contract Client cannot publish the request to Redis.
 

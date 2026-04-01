@@ -232,6 +232,36 @@ class TestRegisterResolutionRequest:
 
 
 # ---------------------------------------------------------------------------
+# source_has_requests
+# ---------------------------------------------------------------------------
+
+
+class TestSourceHasRequests:
+    async def test_returns_true_when_source_exists(
+        self,
+        service: RequestRegistryService,
+        resolution_repo: AsyncMock,
+    ) -> None:
+        resolution_repo.exists_by_source.return_value = True
+
+        result = await service.source_has_requests(SOURCE_ID)
+
+        assert result is True
+        resolution_repo.exists_by_source.assert_awaited_once_with(SOURCE_ID)
+
+    async def test_returns_false_when_source_absent(
+        self,
+        service: RequestRegistryService,
+        resolution_repo: AsyncMock,
+    ) -> None:
+        resolution_repo.exists_by_source.return_value = False
+
+        result = await service.source_has_requests("unknown-source")
+
+        assert result is False
+
+
+# ---------------------------------------------------------------------------
 # advance_snapshot
 # ---------------------------------------------------------------------------
 
