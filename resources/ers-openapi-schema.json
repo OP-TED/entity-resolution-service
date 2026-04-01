@@ -1,913 +1,913 @@
 {
-    "openapi": "3.1.0",
-    "info": {
-        "title": "ERS REST API",
-        "version": "0.1.0-dev2119f781"
-    },
-    "paths": {
-        "/health": {
-            "get": {
-                "tags": [
-                    "Health"
-                ],
-                "summary": "Health",
-                "operationId": "health_health_get",
-                "responses": {
-                    "200": {
-                        "description": "Successful Response",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "additionalProperties": {
-                                        "type": "string"
-                                    },
-                                    "type": "object",
-                                    "title": "Response Health Health Get"
-                                }
-                            }
-                        }
-                    }
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ERS REST API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
                 }
+              }
             }
-        },
-        "/api/v1/resolve": {
-            "post": {
-                "tags": [
-                    "Resolution"
-                ],
-                "summary": "Resolve",
-                "description": "Resolve an entity mention and return canonical or provisional cluster ID.",
-                "operationId": "resolve_api_v1_resolve_post",
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/EntityMentionResolutionRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "200": {
-                        "description": "Canonical resolution",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/EntityMentionResolutionResult"
-                                }
-                            }
-                        }
-                    },
-                    "202": {
-                        "description": "Provisional resolution"
-                    },
-                    "400": {
-                        "description": "Validation error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/resolve-bulk": {
-            "post": {
-                "tags": [
-                    "Resolution"
-                ],
-                "summary": "Resolve Bulk",
-                "description": "Resolve multiple entity mentions in a single batch.",
-                "operationId": "resolve_bulk_api_v1_resolve_bulk_post",
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/BulkResolveRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "200": {
-                        "description": "Successful Response",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/BulkResolveResponse"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Validation error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/lookup": {
-            "get": {
-                "tags": [
-                    "Lookup"
-                ],
-                "summary": "Lookup",
-                "description": "Retrieve current cluster assignment for a mention triad.",
-                "operationId": "lookup_api_v1_lookup_get",
-                "parameters": [
-                    {
-                        "name": "source_id",
-                        "in": "query",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "Source system identifier",
-                            "title": "Source Id"
-                        },
-                        "description": "Source system identifier"
-                    },
-                    {
-                        "name": "request_id",
-                        "in": "query",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "Request identifier",
-                            "title": "Request Id"
-                        },
-                        "description": "Request identifier"
-                    },
-                    {
-                        "name": "entity_type",
-                        "in": "query",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "Entity type",
-                            "title": "Entity Type"
-                        },
-                        "description": "Entity type"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successful Response",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/LookupResponse"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Validation error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Mention not found",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/lookup-bulk": {
-            "post": {
-                "tags": [
-                    "Lookup"
-                ],
-                "summary": "Lookup Bulk",
-                "description": "Look up cluster assignments for multiple entity mentions in a single batch.",
-                "operationId": "lookup_bulk_api_v1_lookup_bulk_post",
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/BulkLookupRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "200": {
-                        "description": "Successful Response",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/BulkLookupResponse"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Validation error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/refresh-bulk": {
-            "post": {
-                "tags": [
-                    "Lookup"
-                ],
-                "summary": "Refresh Bulk",
-                "description": "Retrieve delta of changed assignments since last synchronisation.",
-                "operationId": "refresh_bulk_api_v1_refresh_bulk_post",
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/RefreshBulkRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "200": {
-                        "description": "Successful Response",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/RefreshBulkResponse"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Validation error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+          }
         }
+      }
     },
-    "components": {
-        "schemas": {
-            "BulkLookupRequest": {
-                "properties": {
-                    "mentions": {
-                        "items": {
-                            "$ref": "#/components/schemas/LookupRequest"
-                        },
-                        "type": "array",
-                        "minItems": 1,
-                        "title": "Mentions",
-                        "description": "One or more mention triads to look up in a single batch."
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "mentions"
-                ],
-                "title": "BulkLookupRequest",
-                "description": "Request body for POST /lookup-bulk."
-            },
-            "BulkLookupResponse": {
-                "properties": {
-                    "results": {
-                        "items": {
-                            "$ref": "#/components/schemas/BulkLookupResult"
-                        },
-                        "type": "array",
-                        "minItems": 1,
-                        "title": "Results",
-                        "description": "Per-mention results, one for each item in the request."
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "results"
-                ],
-                "title": "BulkLookupResponse",
-                "description": "Response body for POST /lookup-bulk."
-            },
-            "BulkLookupResult": {
-                "properties": {
-                    "identified_by": {
-                        "$ref": "#/components/schemas/EntityMentionIdentifier-Output",
-                        "description": "Triad identifying the entity mention this result refers to."
-                    },
-                    "cluster_reference": {
-                        "anyOf": [
-                            {
-                                "$ref": "#/components/schemas/ClusterReference"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "description": "Current canonical cluster assignment for the mention."
-                    },
-                    "last_updated": {
-                        "anyOf": [
-                            {
-                                "type": "string",
-                                "format": "date-time"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Last Updated",
-                        "description": "Timestamp of the most recent assignment update."
-                    },
-                    "error": {
-                        "anyOf": [
-                            {
-                                "$ref": "#/components/schemas/ErrorResponse"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "description": "Error response with a code and description."
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "identified_by"
-                ],
-                "title": "BulkLookupResult",
-                "description": "Result of looking up a single entity mention in a bulk batch.\n\nEach item is either a success (cluster_reference + last_updated present)\nor an error (error present), never both."
-            },
-            "BulkResolveRequest": {
-                "properties": {
-                    "mentions": {
-                        "items": {
-                            "$ref": "#/components/schemas/EntityMentionResolutionRequest"
-                        },
-                        "type": "array",
-                        "minItems": 1,
-                        "title": "Mentions",
-                        "description": "One or more entity mentions to resolve in a single batch."
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "mentions"
-                ],
-                "title": "BulkResolveRequest",
-                "description": "Request body for POST /resolveBulk."
-            },
-            "BulkResolveResponse": {
-                "properties": {
-                    "results": {
-                        "items": {
-                            "$ref": "#/components/schemas/EntityMentionResolutionResult"
-                        },
-                        "type": "array",
-                        "minItems": 1,
-                        "title": "Results",
-                        "description": "Per-mention results, one for each item in the request."
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "results"
-                ],
-                "title": "BulkResolveResponse",
-                "description": "Response body for POST /resolveBulk."
-            },
-            "ClusterReference": {
-                "properties": {
-                    "cluster_id": {
-                        "type": "string",
-                        "title": "Cluster Id",
-                        "description": "The identifier of the cluster/canonical entity that is considered equivalent to the\nsubject entity mention that an `EntityMentionResolutionResponse` refers to.\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "ClusterReference"
-                            ]
-                        }
-                    },
-                    "confidence_score": {
-                        "type": "number",
-                        "maximum": 1.0,
-                        "minimum": 0.0,
-                        "title": "Confidence Score",
-                        "description": "A 0-1 value of how confident the ERE is about the equivalence between the subject entity mention\nand the target canonical entity.\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "ClusterReference"
-                            ]
-                        }
-                    },
-                    "similarity_score": {
-                        "type": "number",
-                        "maximum": 1.0,
-                        "minimum": 0.0,
-                        "title": "Similarity Score",
-                        "description": "A 0-1 score representing the pairwise comparison between a mention and a cluster (likely\nbased on a representative representation).\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "ClusterReference"
-                            ]
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                    "cluster_id",
-                    "confidence_score",
-                    "similarity_score"
-                ],
-                "title": "ClusterReference",
-                "description": "A reference to a cluster to which an entity is deemed to belong, with an associated confidence and similarity scores.\n\nA cluster is a set of entity mentions that have been determined to refer to the same real-world entity.\nEach cluster has a unique clusterId.\n\nA cluster reference is used to report the association between an entity mention and a cluster \nof equivalence."
-            },
-            "EntityMention": {
-                "properties": {
-                    "object_description": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Object Description",
-                        "description": "Optional descriptive text for the model instance."
-                    },
-                    "identifiedBy": {
-                        "$ref": "#/components/schemas/EntityMentionIdentifier-Input",
-                        "description": "The identification triad of the entity mention.\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "EntityMention"
-                            ]
-                        }
-                    },
-                    "content_type": {
-                        "type": "string",
-                        "title": "Content Type",
-                        "description": "A string about the MIME format of `content` (e.g. text/turtle, application/ld+json)\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "EntityMention"
-                            ]
-                        }
-                    },
-                    "content": {
-                        "type": "string",
-                        "title": "Content",
-                        "description": "A code string representing the entity mention details (eg, RDF or XML description).\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "EntityMention"
-                            ]
-                        }
-                    },
-                    "parsed_representation": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Parsed Representation",
-                        "description": "JSON representation of the parsed entity data.\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "EntityMention"
-                            ]
-                        }
-                    },
-                    "context": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Context",
-                        "description": "Optional context reference (e.g. notice or document ID).\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "EntityMention"
-                            ]
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                    "identifiedBy",
-                    "content_type",
-                    "content"
-                ],
-                "title": "EntityMention",
-                "description": "An entity mention is a representation of a real-world entity, as provided by the ERS.\nIt contains the entity data, along with metadata like type and format."
-            },
-            "EntityMentionIdentifier-Input": {
-                "properties": {
-                    "object_description": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Object Description",
-                        "description": "Optional descriptive text for the model instance."
-                    },
-                    "source_id": {
-                        "type": "string",
-                        "title": "Source Id",
-                        "description": "The ID or URI of the ERS client that originated the request. This identifies an application or a \nperson accessing the ERS system.\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "EntityMentionIdentifier",
-                                "LookupState"
-                            ]
-                        }
-                    },
-                    "request_id": {
-                        "type": "string",
-                        "title": "Request Id",
-                        "description": "A string representing the unique ID of the request made to the ERS system. In general, this is unique\nonly within the scope of the source and the entity type, ie, within `sourceId` and `entityType`. \n\nMoreover, this is **not** the same as `ereRequestId`, which instead, is internal to the ERE and is \nused to match responses to requests.\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "EntityMentionIdentifier"
-                            ]
-                        }
-                    },
-                    "entity_type": {
-                        "type": "string",
-                        "title": "Entity Type",
-                        "description": "A string representing the entity type (based on CET). This is typically a URI.\n\nNote that this is at this level, and not at `EntityMention`, since, as said above, \nit's needed to identify the entity, even when its content is not present. For the same\nreason, it's used both for `EREResolutionRequest` and `EREResolutionResponse` messages.,\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "EntityMentionIdentifier"
-                            ]
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                    "source_id",
-                    "request_id",
-                    "entity_type"
-                ],
-                "title": "EntityMentionIdentifier",
-                "description": "A container that groups the attributes needed to identify an entity mention in a resolution request\nor response.\n\nAs per ERS architectural decision, in the whole ERS and ERE systems, there is always a deterministic\nmethod to build a canonical identifier from the combination of `sourceId`, `requestId` and `entityType`\n(eg, string concatenation plus some prefix). Similarly, a cluster ID (mentioned in various places in \nin this hereby ERE service schema) can be built from an entity that is initially the only cluster member."
-            },
-            "EntityMentionIdentifier-Output": {
-                "properties": {
-                    "source_id": {
-                        "type": "string",
-                        "title": "Source Id",
-                        "description": "The ID or URI of the ERS client that originated the request. This identifies an application or a \nperson accessing the ERS system.\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "EntityMentionIdentifier",
-                                "LookupState"
-                            ]
-                        }
-                    },
-                    "request_id": {
-                        "type": "string",
-                        "title": "Request Id",
-                        "description": "A string representing the unique ID of the request made to the ERS system. In general, this is unique\nonly within the scope of the source and the entity type, ie, within `sourceId` and `entityType`. \n\nMoreover, this is **not** the same as `ereRequestId`, which instead, is internal to the ERE and is \nused to match responses to requests.\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "EntityMentionIdentifier"
-                            ]
-                        }
-                    },
-                    "entity_type": {
-                        "type": "string",
-                        "title": "Entity Type",
-                        "description": "A string representing the entity type (based on CET). This is typically a URI.\n\nNote that this is at this level, and not at `EntityMention`, since, as said above, \nit's needed to identify the entity, even when its content is not present. For the same\nreason, it's used both for `EREResolutionRequest` and `EREResolutionResponse` messages.,\n",
-                        "linkml_meta": {
-                            "domain_of": [
-                                "EntityMentionIdentifier"
-                            ]
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                    "source_id",
-                    "request_id",
-                    "entity_type"
-                ],
-                "title": "EntityMentionIdentifier",
-                "description": "A container that groups the attributes needed to identify an entity mention in a resolution request\nor response.\n\nAs per ERS architectural decision, in the whole ERS and ERE systems, there is always a deterministic\nmethod to build a canonical identifier from the combination of `sourceId`, `requestId` and `entityType`\n(eg, string concatenation plus some prefix). Similarly, a cluster ID (mentioned in various places in \nin this hereby ERE service schema) can be built from an entity that is initially the only cluster member."
-            },
-            "EntityMentionResolutionRequest": {
-                "properties": {
-                    "mention": {
-                        "$ref": "#/components/schemas/EntityMention",
-                        "description": "The entity mention to resolve."
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "mention"
-                ],
-                "title": "EntityMentionResolutionRequest",
-                "description": "Request body for POST /resolve (and each item in a bulk batch)."
-            },
-            "EntityMentionResolutionResult": {
-                "properties": {
-                    "identified_by": {
-                        "$ref": "#/components/schemas/EntityMentionIdentifier-Output",
-                        "description": "Triad identifying the entity mention this result refers to."
-                    },
-                    "canonical_entity_id": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Canonical Entity Id",
-                        "description": "Cluster identifier assigned to the mention."
-                    },
-                    "status": {
-                        "anyOf": [
-                            {
-                                "$ref": "#/components/schemas/ResolutionOutcome"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "description": "Whether the resolution is canonical or provisional."
-                    },
-                    "error": {
-                        "anyOf": [
-                            {
-                                "$ref": "#/components/schemas/ErrorResponse"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "description": "Error response with a code a description."
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "identified_by"
-                ],
-                "title": "EntityMentionResolutionResult",
-                "description": "Result of resolving a single entity mention.\n\nUsed as the API response for POST /resolve, as the internal coordinator\nreturn value, and as the per-item result in bulk resolve responses.\n\nFor single /resolve, this is always a success (errors become ErrorResponse\nvia exception handlers).  In bulk context, individual items may carry\nerror_code + detail instead of success fields.\n\nIf the coordinator later needs to carry extra metadata, extract a\ndedicated internal model at that point."
-            },
-            "ErrorCode": {
-                "type": "string",
-                "enum": [
-                    "VALIDATION_ERROR",
-                    "IDEMPOTENCY_CONFLICT",
-                    "MENTION_NOT_FOUND",
-                    "SERVICE_ERROR"
-                ],
-                "title": "ErrorCode",
-                "description": "Machine-readable error codes returned in error responses."
-            },
-            "ErrorResponse": {
-                "properties": {
-                    "error_code": {
-                        "$ref": "#/components/schemas/ErrorCode"
-                    },
-                    "detail": {
-                        "type": "string",
-                        "title": "Detail"
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "error_code",
-                    "detail"
-                ],
-                "title": "ErrorResponse",
-                "description": "Standard error response body returned by all ERS REST API endpoints."
-            },
-            "HTTPValidationError": {
-                "properties": {
-                    "detail": {
-                        "items": {
-                            "$ref": "#/components/schemas/ValidationError"
-                        },
-                        "type": "array",
-                        "title": "Detail"
-                    }
-                },
-                "type": "object",
-                "title": "HTTPValidationError"
-            },
-            "LookupRequest": {
-                "properties": {
-                    "identified_by": {
-                        "$ref": "#/components/schemas/EntityMentionIdentifier-Input",
-                        "description": "Triad identifying the entity mention to look up."
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "identified_by"
-                ],
-                "title": "LookupRequest",
-                "description": "Query parameters for GET /lookup."
-            },
-            "LookupResponse": {
-                "properties": {
-                    "identified_by": {
-                        "$ref": "#/components/schemas/EntityMentionIdentifier-Output",
-                        "description": "Triad identifying the entity mention."
-                    },
-                    "cluster_reference": {
-                        "$ref": "#/components/schemas/ClusterReference",
-                        "description": "Current canonical cluster assignment for the mention."
-                    },
-                    "last_updated": {
-                        "type": "string",
-                        "format": "date-time",
-                        "title": "Last Updated",
-                        "description": "Timestamp of the most recent assignment update."
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "identified_by",
-                    "cluster_reference",
-                    "last_updated"
-                ],
-                "title": "LookupResponse",
-                "description": "Current cluster assignment for an entity mention.\n\nUsed as the response body for GET /lookup (single mention) and as\neach item inside RefreshBulkResponse (delta synchronisation)."
-            },
-            "RefreshBulkRequest": {
-                "properties": {
-                    "source_id": {
-                        "type": "string",
-                        "minLength": 1,
-                        "title": "Source Id",
-                        "description": "Source system whose deltas to retrieve."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "maximum": 1000.0,
-                        "exclusiveMinimum": 0.0,
-                        "title": "Limit",
-                        "description": "Maximum number of delta assignments to return per page.",
-                        "default": 1000
-                    },
-                    "continuation_cursor": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Continuation Cursor",
-                        "description": "Opaque cursor returned by a previous response for pagination."
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "source_id"
-                ],
-                "title": "RefreshBulkRequest",
-                "description": "Request body for POST /refreshBulk."
-            },
-            "RefreshBulkResponse": {
-                "properties": {
-                    "deltas": {
-                        "items": {
-                            "$ref": "#/components/schemas/LookupResponse"
-                        },
-                        "type": "array",
-                        "title": "Deltas",
-                        "description": "Changed assignments since the last synchronisation snapshot."
-                    },
-                    "has_more": {
-                        "type": "boolean",
-                        "title": "Has More",
-                        "description": "Whether additional pages of deltas are available."
-                    },
-                    "continuation_cursor": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Continuation Cursor",
-                        "description": "Cursor to pass in the next request to retrieve the next page."
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "has_more"
-                ],
-                "title": "RefreshBulkResponse",
-                "description": "Response body for POST /refreshBulk."
-            },
-            "ResolutionOutcome": {
-                "type": "string",
-                "enum": [
-                    "CANONICAL",
-                    "PROVISIONAL"
-                ],
-                "title": "ResolutionOutcome",
-                "description": "Possible outcomes of a single entity mention resolution.\n\nCANONICAL — the cluster ID was produced by the Entity Resolution Engine.\nPROVISIONAL — the cluster ID was derived deterministically (singleton)."
-            },
-            "ValidationError": {
-                "properties": {
-                    "loc": {
-                        "items": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "integer"
-                                }
-                            ]
-                        },
-                        "type": "array",
-                        "title": "Location"
-                    },
-                    "msg": {
-                        "type": "string",
-                        "title": "Message"
-                    },
-                    "type": {
-                        "type": "string",
-                        "title": "Error Type"
-                    },
-                    "input": {
-                        "title": "Input"
-                    },
-                    "ctx": {
-                        "type": "object",
-                        "title": "Context"
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "loc",
-                    "msg",
-                    "type"
-                ],
-                "title": "ValidationError"
+    "/api/v1/resolve": {
+      "post": {
+        "tags": [
+          "Resolution"
+        ],
+        "summary": "Resolve",
+        "description": "Resolve an entity mention and return canonical or provisional cluster ID.",
+        "operationId": "resolve_api_v1_resolve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntityMentionResolutionRequest"
+              }
             }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Canonical resolution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntityMentionResolutionResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Provisional resolution"
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
         }
+      }
+    },
+    "/api/v1/resolve-bulk": {
+      "post": {
+        "tags": [
+          "Resolution"
+        ],
+        "summary": "Resolve Bulk",
+        "description": "Resolve multiple entity mentions in a single batch.",
+        "operationId": "resolve_bulk_api_v1_resolve_bulk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkResolveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkResolveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lookup": {
+      "get": {
+        "tags": [
+          "Lookup"
+        ],
+        "summary": "Lookup",
+        "description": "Retrieve current cluster assignment for a mention triad.",
+        "operationId": "lookup_api_v1_lookup_get",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Source system identifier",
+              "title": "Source Id"
+            },
+            "description": "Source system identifier"
+          },
+          {
+            "name": "request_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Request identifier",
+              "title": "Request Id"
+            },
+            "description": "Request identifier"
+          },
+          {
+            "name": "entity_type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Entity type",
+              "title": "Entity Type"
+            },
+            "description": "Entity type"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Mention not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lookup-bulk": {
+      "post": {
+        "tags": [
+          "Lookup"
+        ],
+        "summary": "Lookup Bulk",
+        "description": "Look up cluster assignments for multiple entity mentions in a single batch.",
+        "operationId": "lookup_bulk_api_v1_lookup_bulk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkLookupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkLookupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/refresh-bulk": {
+      "post": {
+        "tags": [
+          "Lookup"
+        ],
+        "summary": "Refresh Bulk",
+        "description": "Retrieve delta of changed assignments since last synchronisation.",
+        "operationId": "refresh_bulk_api_v1_refresh_bulk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshBulkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshBulkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
+  },
+  "components": {
+    "schemas": {
+      "BulkLookupRequest": {
+        "properties": {
+          "mentions": {
+            "items": {
+              "$ref": "#/components/schemas/LookupRequest"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Mentions",
+            "description": "One or more mention triads to look up in a single batch."
+          }
+        },
+        "type": "object",
+        "required": [
+          "mentions"
+        ],
+        "title": "BulkLookupRequest",
+        "description": "Request body for POST /lookup-bulk."
+      },
+      "BulkLookupResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BulkLookupResult"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Results",
+            "description": "Per-mention results, one for each item in the request."
+          }
+        },
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "title": "BulkLookupResponse",
+        "description": "Response body for POST /lookup-bulk."
+      },
+      "BulkLookupResult": {
+        "properties": {
+          "identified_by": {
+            "$ref": "#/components/schemas/EntityMentionIdentifier-Output",
+            "description": "Triad identifying the entity mention this result refers to."
+          },
+          "cluster_reference": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClusterReference"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current canonical cluster assignment for the mention."
+          },
+          "last_updated": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Updated",
+            "description": "Timestamp of the most recent assignment update."
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Error response with a code and description."
+          }
+        },
+        "type": "object",
+        "required": [
+          "identified_by"
+        ],
+        "title": "BulkLookupResult",
+        "description": "Result of looking up a single entity mention in a bulk batch.\n\nEach item is either a success (cluster_reference + last_updated present)\nor an error (error present), never both."
+      },
+      "BulkResolveRequest": {
+        "properties": {
+          "mentions": {
+            "items": {
+              "$ref": "#/components/schemas/EntityMentionResolutionRequest"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Mentions",
+            "description": "One or more entity mentions to resolve in a single batch."
+          }
+        },
+        "type": "object",
+        "required": [
+          "mentions"
+        ],
+        "title": "BulkResolveRequest",
+        "description": "Request body for POST /resolveBulk."
+      },
+      "BulkResolveResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/EntityMentionResolutionResult"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Results",
+            "description": "Per-mention results, one for each item in the request."
+          }
+        },
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "title": "BulkResolveResponse",
+        "description": "Response body for POST /resolveBulk."
+      },
+      "ClusterReference": {
+        "properties": {
+          "cluster_id": {
+            "type": "string",
+            "title": "Cluster Id",
+            "description": "The identifier of the cluster/canonical entity that is considered equivalent to the\nsubject entity mention that an `EntityMentionResolutionResponse` refers to.\n",
+            "linkml_meta": {
+              "domain_of": [
+                "ClusterReference"
+              ]
+            }
+          },
+          "confidence_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence Score",
+            "description": "A 0-1 value of how confident the ERE is about the equivalence between the subject entity mention\nand the target canonical entity.\n",
+            "linkml_meta": {
+              "domain_of": [
+                "ClusterReference"
+              ]
+            }
+          },
+          "similarity_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Similarity Score",
+            "description": "A 0-1 score representing the pairwise comparison between a mention and a cluster (likely\nbased on a representative representation).\n",
+            "linkml_meta": {
+              "domain_of": [
+                "ClusterReference"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cluster_id",
+          "confidence_score",
+          "similarity_score"
+        ],
+        "title": "ClusterReference",
+        "description": "A reference to a cluster to which an entity is deemed to belong, with an associated confidence and similarity scores.\n\nA cluster is a set of entity mentions that have been determined to refer to the same real-world entity.\nEach cluster has a unique clusterId.\n\nA cluster reference is used to report the association between an entity mention and a cluster \nof equivalence."
+      },
+      "EntityMention": {
+        "properties": {
+          "object_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Description",
+            "description": "Optional descriptive text for the model instance."
+          },
+          "identifiedBy": {
+            "$ref": "#/components/schemas/EntityMentionIdentifier-Input",
+            "description": "The identification triad of the entity mention.\n",
+            "linkml_meta": {
+              "domain_of": [
+                "EntityMention"
+              ]
+            }
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type",
+            "description": "A string about the MIME format of `content` (e.g. text/turtle, application/ld+json)\n",
+            "linkml_meta": {
+              "domain_of": [
+                "EntityMention"
+              ]
+            }
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "A code string representing the entity mention details (eg, RDF or XML description).\n",
+            "linkml_meta": {
+              "domain_of": [
+                "EntityMention"
+              ]
+            }
+          },
+          "parsed_representation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parsed Representation",
+            "description": "JSON representation of the parsed entity data.\n",
+            "linkml_meta": {
+              "domain_of": [
+                "EntityMention"
+              ]
+            }
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context",
+            "description": "Optional context reference (e.g. notice or document ID).\n",
+            "linkml_meta": {
+              "domain_of": [
+                "EntityMention"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "identifiedBy",
+          "content_type",
+          "content"
+        ],
+        "title": "EntityMention",
+        "description": "An entity mention is a representation of a real-world entity, as provided by the ERS.\nIt contains the entity data, along with metadata like type and format."
+      },
+      "EntityMentionIdentifier-Input": {
+        "properties": {
+          "object_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Description",
+            "description": "Optional descriptive text for the model instance."
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id",
+            "description": "The ID or URI of the ERS client that originated the request. This identifies an application or a \nperson accessing the ERS system.\n",
+            "linkml_meta": {
+              "domain_of": [
+                "EntityMentionIdentifier",
+                "LookupState"
+              ]
+            }
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id",
+            "description": "A string representing the unique ID of the request made to the ERS system. In general, this is unique\nonly within the scope of the source and the entity type, ie, within `sourceId` and `entityType`. \n\nMoreover, this is **not** the same as `ereRequestId`, which instead, is internal to the ERE and is \nused to match responses to requests.\n",
+            "linkml_meta": {
+              "domain_of": [
+                "EntityMentionIdentifier"
+              ]
+            }
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type",
+            "description": "A string representing the entity type (based on CET). This is typically a URI.\n\nNote that this is at this level, and not at `EntityMention`, since, as said above, \nit's needed to identify the entity, even when its content is not present. For the same\nreason, it's used both for `EREResolutionRequest` and `EREResolutionResponse` messages.,\n",
+            "linkml_meta": {
+              "domain_of": [
+                "EntityMentionIdentifier"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "request_id",
+          "entity_type"
+        ],
+        "title": "EntityMentionIdentifier",
+        "description": "A container that groups the attributes needed to identify an entity mention in a resolution request\nor response.\n\nAs per ERS architectural decision, in the whole ERS and ERE systems, there is always a deterministic\nmethod to build a canonical identifier from the combination of `sourceId`, `requestId` and `entityType`\n(eg, string concatenation plus some prefix). Similarly, a cluster ID (mentioned in various places in \nin this hereby ERE service schema) can be built from an entity that is initially the only cluster member."
+      },
+      "EntityMentionIdentifier-Output": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id",
+            "description": "The ID or URI of the ERS client that originated the request. This identifies an application or a \nperson accessing the ERS system.\n",
+            "linkml_meta": {
+              "domain_of": [
+                "EntityMentionIdentifier",
+                "LookupState"
+              ]
+            }
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id",
+            "description": "A string representing the unique ID of the request made to the ERS system. In general, this is unique\nonly within the scope of the source and the entity type, ie, within `sourceId` and `entityType`. \n\nMoreover, this is **not** the same as `ereRequestId`, which instead, is internal to the ERE and is \nused to match responses to requests.\n",
+            "linkml_meta": {
+              "domain_of": [
+                "EntityMentionIdentifier"
+              ]
+            }
+          },
+          "entity_type": {
+            "type": "string",
+            "title": "Entity Type",
+            "description": "A string representing the entity type (based on CET). This is typically a URI.\n\nNote that this is at this level, and not at `EntityMention`, since, as said above, \nit's needed to identify the entity, even when its content is not present. For the same\nreason, it's used both for `EREResolutionRequest` and `EREResolutionResponse` messages.,\n",
+            "linkml_meta": {
+              "domain_of": [
+                "EntityMentionIdentifier"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "request_id",
+          "entity_type"
+        ],
+        "title": "EntityMentionIdentifier",
+        "description": "A container that groups the attributes needed to identify an entity mention in a resolution request\nor response.\n\nAs per ERS architectural decision, in the whole ERS and ERE systems, there is always a deterministic\nmethod to build a canonical identifier from the combination of `sourceId`, `requestId` and `entityType`\n(eg, string concatenation plus some prefix). Similarly, a cluster ID (mentioned in various places in \nin this hereby ERE service schema) can be built from an entity that is initially the only cluster member."
+      },
+      "EntityMentionResolutionRequest": {
+        "properties": {
+          "mention": {
+            "$ref": "#/components/schemas/EntityMention",
+            "description": "The entity mention to resolve."
+          }
+        },
+        "type": "object",
+        "required": [
+          "mention"
+        ],
+        "title": "EntityMentionResolutionRequest",
+        "description": "Request body for POST /resolve (and each item in a bulk batch)."
+      },
+      "EntityMentionResolutionResult": {
+        "properties": {
+          "identified_by": {
+            "$ref": "#/components/schemas/EntityMentionIdentifier-Output",
+            "description": "Triad identifying the entity mention this result refers to."
+          },
+          "canonical_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Entity Id",
+            "description": "Cluster identifier assigned to the mention."
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResolutionOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether the resolution is canonical or provisional."
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Error response with a code a description."
+          }
+        },
+        "type": "object",
+        "required": [
+          "identified_by"
+        ],
+        "title": "EntityMentionResolutionResult",
+        "description": "Result of resolving a single entity mention.\n\nUsed as the API response for POST /resolve, as the internal coordinator\nreturn value, and as the per-item result in bulk resolve responses.\n\nFor single /resolve, this is always a success (errors become ErrorResponse\nvia exception handlers).  In bulk context, individual items may carry\nerror_code + detail instead of success fields.\n\nIf the coordinator later needs to carry extra metadata, extract a\ndedicated internal model at that point."
+      },
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "VALIDATION_ERROR",
+          "IDEMPOTENCY_CONFLICT",
+          "MENTION_NOT_FOUND",
+          "SERVICE_ERROR"
+        ],
+        "title": "ErrorCode",
+        "description": "Machine-readable error codes returned in error responses."
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error_code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error_code",
+          "detail"
+        ],
+        "title": "ErrorResponse",
+        "description": "Standard error response body returned by all ERS REST API endpoints."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LookupRequest": {
+        "properties": {
+          "identified_by": {
+            "$ref": "#/components/schemas/EntityMentionIdentifier-Input",
+            "description": "Triad identifying the entity mention to look up."
+          }
+        },
+        "type": "object",
+        "required": [
+          "identified_by"
+        ],
+        "title": "LookupRequest",
+        "description": "Query parameters for GET /lookup."
+      },
+      "LookupResponse": {
+        "properties": {
+          "identified_by": {
+            "$ref": "#/components/schemas/EntityMentionIdentifier-Output",
+            "description": "Triad identifying the entity mention."
+          },
+          "cluster_reference": {
+            "$ref": "#/components/schemas/ClusterReference",
+            "description": "Current canonical cluster assignment for the mention."
+          },
+          "last_updated": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Updated",
+            "description": "Timestamp of the most recent assignment update."
+          }
+        },
+        "type": "object",
+        "required": [
+          "identified_by",
+          "cluster_reference",
+          "last_updated"
+        ],
+        "title": "LookupResponse",
+        "description": "Current cluster assignment for an entity mention.\n\nUsed as the response body for GET /lookup (single mention) and as\neach item inside RefreshBulkResponse (delta synchronisation)."
+      },
+      "RefreshBulkRequest": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source Id",
+            "description": "Source system whose deltas to retrieve."
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Limit",
+            "description": "Maximum number of delta assignments to return per page.",
+            "default": 1000
+          },
+          "continuation_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuation Cursor",
+            "description": "Opaque cursor returned by a previous response for pagination."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id"
+        ],
+        "title": "RefreshBulkRequest",
+        "description": "Request body for POST /refreshBulk."
+      },
+      "RefreshBulkResponse": {
+        "properties": {
+          "deltas": {
+            "items": {
+              "$ref": "#/components/schemas/LookupResponse"
+            },
+            "type": "array",
+            "title": "Deltas",
+            "description": "Changed assignments since the last synchronisation snapshot."
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "description": "Whether additional pages of deltas are available."
+          },
+          "continuation_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuation Cursor",
+            "description": "Cursor to pass in the next request to retrieve the next page."
+          }
+        },
+        "type": "object",
+        "required": [
+          "has_more"
+        ],
+        "title": "RefreshBulkResponse",
+        "description": "Response body for POST /refreshBulk."
+      },
+      "ResolutionOutcome": {
+        "type": "string",
+        "enum": [
+          "CANONICAL",
+          "PROVISIONAL"
+        ],
+        "title": "ResolutionOutcome",
+        "description": "Possible outcomes of a single entity mention resolution.\n\nCANONICAL \u2014 the cluster ID was produced by the Entity Resolution Engine.\nPROVISIONAL \u2014 the cluster ID was derived deterministically (singleton)."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
 }
