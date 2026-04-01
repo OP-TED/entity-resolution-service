@@ -1,6 +1,7 @@
 """Repository abstractions and MongoDB implementations for Request Registry records."""
 
 from abc import abstractmethod
+from datetime import UTC, datetime
 from typing import Any
 
 from erspec.models.core import EntityMentionIdentifier
@@ -121,6 +122,19 @@ class MongoLookupStateRepository(BaseMongoRepository[LookupRequestRecord, str]):
     _model_class = LookupRequestRecord
     _id_field = "source_id"
     _collection_name = "lookup_states"
+
+    def _from_document(self, doc: dict[str, Any]) -> LookupRequestRecord:
+        """Convert a MongoDB document to LookupRequestRecord, restoring UTC tzinfo.
+
+        PyMongo returns datetime objects as naive UTC. The LookupRequestRecord
+        validator requires timezone-aware datetimes, so we add UTC tzinfo here.
+        """
+        doc[self._id_field] = doc.pop("_id")
+        for field in ("last_snapshot", "updated_at"):
+            val = doc.get(field)
+            if isinstance(val, datetime) and val.tzinfo is None:
+                doc[field] = val.replace(tzinfo=UTC)
+        return self._model_class.model_validate(doc)
 
     async def get(self, source_id: str) -> LookupRequestRecord | None:
         """Return the snapshot state for a source. Returns None if not found."""

@@ -8,14 +8,18 @@ Feature: Async Resolution Waiter Coordination
     3. Signal with no registered waiters is a no-op.
     4. Event lifecycle on waiter release (partial vs full cleanup).
 
-  These steps operate directly on the AsyncResolutionWaiter.
+  These steps operate directly on a real AsyncResolutionWaiter.
   No external services required.
 """
 
+import asyncio
+import gc
 from pathlib import Path
 
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
+
+from ers.resolution_coordinator.services.async_resolution_waiter import AsyncResolutionWaiter
 
 # ---------------------------------------------------------------------------
 # Scenario bindings
@@ -56,8 +60,16 @@ def test_event_lifecycle():
 
 @pytest.fixture
 def ctx():
-    """Shared mutable context for passing state between step functions."""
     return {}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _triad_key(source_id: str, request_id: str, entity_type: str = "Organization") -> str:
+    return f"{source_id}{request_id}{entity_type}"
 
 
 # ---------------------------------------------------------------------------
@@ -67,12 +79,7 @@ def ctx():
 
 @given("the async resolution waiter is available")
 def waiter_available(ctx):
-    """
-    Instantiate a real AsyncResolutionWaiter.
-
-    TODO: ctx["waiter"] = AsyncResolutionWaiter()
-    """
-    ctx["waiter"] = None  # TODO: build real AsyncResolutionWaiter
+    ctx["waiter"] = AsyncResolutionWaiter()
 
 
 # ---------------------------------------------------------------------------
@@ -87,16 +94,17 @@ def waiter_available(ctx):
     )
 )
 def register_n_waiters(ctx, waiter_count, source_id, request_id):
-    """
-    Register N waiters for the given triad (shared Event).
+    triad_key = _triad_key(source_id, request_id)
+    ctx["triad_key"] = triad_key
 
-    TODO: triad_key = f"{source_id}|{request_id}|Organization"
-          ctx["events"] = [await ctx["waiter"].get_or_create(triad_key)
-                           for _ in range(waiter_count)]
-          ctx["triad_key"] = triad_key
-          ctx["waiter_count"] = waiter_count
-    """
-    ctx["triad_key"] = f"{source_id}|{request_id}|Organization"
+    async def _register():
+        events = []
+        for _ in range(waiter_count):
+            e = await ctx["waiter"].get_or_create(triad_key)
+            events.append(e)
+        return events
+
+    ctx["events"] = asyncio.run(_register())
     ctx["waiter_count"] = waiter_count
 
 
@@ -107,19 +115,21 @@ def register_n_waiters(ctx, waiter_count, source_id, request_id):
 
 @when("the ERE Result Integrator signals an outcome for that triad")
 def signal_outcome(ctx):
-    """
-    TODO: await ctx["waiter"].notify(ctx["triad_key"])
-    """
-    pass  # TODO: call real notify
+    asyncio.run(ctx["waiter"].notify(ctx["triad_key"]))
 
 
 @when("no signal arrives within the execution window")
 def no_signal_timeout(ctx):
-    """
-    TODO: await asyncio.wait_for(ctx["events"][0].wait(), timeout=0.1)
-          # expect timeout
-    """
-    pass  # TODO: implement real timeout
+    event = ctx["events"][0]
+
+    async def _wait_with_timeout():
+        try:
+            await asyncio.wait_for(event.wait(), timeout=0.05)
+            return False
+        except asyncio.TimeoutError:
+            return True
+
+    ctx["timed_out"] = asyncio.run(_wait_with_timeout())
 
 
 @when(
@@ -129,23 +139,27 @@ def no_signal_timeout(ctx):
     )
 )
 def signal_no_waiters(ctx, source_id, request_id):
-    """
-    Signal a triad that has no registered waiters.
-
-    TODO: await ctx["waiter"].notify(f"{source_id}|{request_id}|Organization")
-    """
-    ctx["triad_key"] = f"{source_id}|{request_id}|Organization"
+    triad_key = _triad_key(source_id, request_id)
+    ctx["triad_key"] = triad_key
+    try:
+        asyncio.run(ctx["waiter"].notify(triad_key))
+        ctx["raised_exception"] = None
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        ctx["raised_exception"] = exc
 
 
 @when(parsers.parse("{release_count:d} waiters release"))
 def release_n_waiters(ctx, release_count):
-    """
-    Release N waiters for the triad.
+    triad_key = ctx["triad_key"]
 
-    TODO: for _ in range(release_count):
-              await ctx["waiter"].release(ctx["triad_key"])
-    """
-    ctx["release_count"] = release_count
+    async def _release():
+        for _ in range(release_count):
+            await ctx["waiter"].release(triad_key)
+
+    asyncio.run(_release())
+    # Drop strong references so the WeakValueDictionary can evict the entry.
+    del ctx["events"][-release_count:]
+    gc.collect()
 
 
 # ---------------------------------------------------------------------------
@@ -155,46 +169,37 @@ def release_n_waiters(ctx, release_count):
 
 @then(parsers.parse("all {waiter_count:d} waiters are unblocked"))
 def all_n_unblocked(ctx, waiter_count):
-    """
-    TODO: for event in ctx["events"][:waiter_count]:
-              assert event.is_set()
-    """
-    assert True  # TODO: implement
+    events = ctx["events"][:waiter_count]
+    assert all(e.is_set() for e in events), (
+        f"Expected {waiter_count} events to be set; "
+        f"got {[e.is_set() for e in events]}"
+    )
 
 
 @then("the waiter is unblocked by timeout")
 def waiter_unblocked_by_timeout(ctx):
-    """
-    TODO: Assert the wait returned without the event being set.
-    """
-    assert True  # TODO: implement
+    assert ctx["timed_out"] is True
 
 
 @then("the event for that triad remains available for a late signal")
 def event_remains_available(ctx):
-    """
-    TODO: assert ctx["triad_key"] in ctx["waiter"]._events
-    """
-    assert True  # TODO: implement
+    assert ctx["triad_key"] in ctx["waiter"]._events
 
 
 @then("no error is raised")
 def no_error_raised(ctx):
-    """
-    TODO: assert ctx.get("raised_exception") is None
-    """
-    assert True  # TODO: implement
+    assert ctx.get("raised_exception") is None
 
 
-@then(parsers.parse("{event_state}"))
-def assert_event_state(ctx, event_state):
-    """
-    Assert event lifecycle state from Examples table.
+@then("the event for that triad is still retained")
+def event_state_retained(ctx):
+    assert ctx["triad_key"] in ctx["waiter"]._events, (
+        f"Expected event for {ctx['triad_key']!r} to be retained but it was evicted"
+    )
 
-    TODO:
-      if "still retained" in event_state:
-          assert ctx["triad_key"] in ctx["waiter"]._events
-      elif "is removed" in event_state:
-          assert ctx["triad_key"] not in ctx["waiter"]._events
-    """
-    assert True  # TODO: implement
+
+@then("the event for that triad is removed")
+def event_state_removed(ctx):
+    assert ctx["triad_key"] not in ctx["waiter"]._events, (
+        f"Expected event for {ctx['triad_key']!r} to be removed but it is still retained"
+    )

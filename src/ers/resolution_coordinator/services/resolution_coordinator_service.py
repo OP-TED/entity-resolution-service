@@ -27,6 +27,7 @@ from ers.rdf_mention_parser.domain.exceptions import (
     MultipleEntitiesFoundError,
     UnsupportedEntityTypeError,
 )
+from ers.request_registry.services.exceptions import DuplicateTriadError
 from ers.request_registry.services.request_registry_service import (
     RequestRegistryService,
 )
@@ -115,6 +116,8 @@ class ResolutionCoordinatorService:
             )
         except _PARSING_ERRORS as exc:
             raise ParsingFailedException(str(exc), cause=exc) from exc
+        except DuplicateTriadError:
+            pass  # Concurrent registration — another coroutine inserted first; proceed.
 
         # 2. Check existing decision — instant return for replays
         identifier = entity_mention.identifiedBy
