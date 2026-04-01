@@ -125,3 +125,16 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "detail": exc.message,
             },
         )
+
+    @app.exception_handler(Exception)
+    async def unhandled_error_handler(
+        request: Request,
+        exc: Exception,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error_code": ErrorCode.SERVICE_ERROR,
+                "detail": "Internal server error",
+            },
+        )

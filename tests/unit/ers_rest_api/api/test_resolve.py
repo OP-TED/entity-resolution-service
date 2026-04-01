@@ -4,7 +4,7 @@ from erspec.models.core import EntityMentionIdentifier
 from httpx import AsyncClient
 
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
-from ers.ers_rest_api.domain.errors import ErrorCode
+from ers.ers_rest_api.domain.errors import ErrorCode, ErrorResponse
 from ers.ers_rest_api.domain.resolution import (
     BulkResolveResponse,
     EntityMentionResolutionResult,
@@ -208,6 +208,147 @@ class TestResolveBulkEndpoint:
         body = response.json()
         assert len(body["results"]) == 1
         assert body["results"][0]["canonical_entity_id"] == "cluster-010"
+
+    async def test_all_provisional_returns_202(
+        self,
+        client: AsyncClient,
+        resolve_service: AsyncMock,
+    ) -> None:
+        resolve_service.handle_bulk_resolve.return_value = BulkResolveResponse(
+            results=[
+                EntityMentionResolutionResult(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYS_A",
+                        request_id=f"req-{i:03d}",
+                        entity_type="ORGANISATION",
+                    ),
+                    canonical_entity_id=f"prov-{i}",
+                    status=ResolutionOutcome.PROVISIONAL,
+                )
+                for i in range(2)
+            ],
+        )
+
+        payload = {
+            "mentions": [
+                {
+                    "mention": {
+                        "identifiedBy": {
+                            "source_id": "SYS_A",
+                            "request_id": f"req-{i:03d}",
+                            "entity_type": "ORGANISATION",
+                        },
+                        "content": '{"name": "X"}',
+                        "content_type": "application/ld+json",
+                    },
+                }
+                for i in range(2)
+            ],
+        }
+
+        response = await client.post("/api/v1/resolve-bulk", json=payload)
+
+        assert response.status_code == 202
+
+    async def test_mixed_outcomes_returns_207(
+        self,
+        client: AsyncClient,
+        resolve_service: AsyncMock,
+    ) -> None:
+        resolve_service.handle_bulk_resolve.return_value = BulkResolveResponse(
+            results=[
+                EntityMentionResolutionResult(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYS_A",
+                        request_id="req-001",
+                        entity_type="ORGANISATION",
+                    ),
+                    canonical_entity_id="cluster-010",
+                    status=ResolutionOutcome.CANONICAL,
+                ),
+                EntityMentionResolutionResult(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYS_A",
+                        request_id="req-002",
+                        entity_type="ORGANISATION",
+                    ),
+                    canonical_entity_id="prov-001",
+                    status=ResolutionOutcome.PROVISIONAL,
+                ),
+            ],
+        )
+
+        payload = {
+            "mentions": [
+                {
+                    "mention": {
+                        "identifiedBy": {
+                            "source_id": "SYS_A",
+                            "request_id": f"req-{i:03d}",
+                            "entity_type": "ORGANISATION",
+                        },
+                        "content": '{"name": "X"}',
+                        "content_type": "application/ld+json",
+                    },
+                }
+                for i in range(2)
+            ],
+        }
+
+        response = await client.post("/api/v1/resolve-bulk", json=payload)
+
+        assert response.status_code == 207
+
+    async def test_results_with_errors_returns_207(
+        self,
+        client: AsyncClient,
+        resolve_service: AsyncMock,
+    ) -> None:
+        resolve_service.handle_bulk_resolve.return_value = BulkResolveResponse(
+            results=[
+                EntityMentionResolutionResult(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYS_A",
+                        request_id="req-001",
+                        entity_type="ORGANISATION",
+                    ),
+                    canonical_entity_id="cluster-010",
+                    status=ResolutionOutcome.CANONICAL,
+                ),
+                EntityMentionResolutionResult(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYS_A",
+                        request_id="req-002",
+                        entity_type="ORGANISATION",
+                    ),
+                    error=ErrorResponse(
+                        error_code=ErrorCode.SERVICE_ERROR,
+                        detail="Failed",
+                    ),
+                ),
+            ],
+        )
+
+        payload = {
+            "mentions": [
+                {
+                    "mention": {
+                        "identifiedBy": {
+                            "source_id": "SYS_A",
+                            "request_id": f"req-{i:03d}",
+                            "entity_type": "ORGANISATION",
+                        },
+                        "content": '{"name": "X"}',
+                        "content_type": "application/ld+json",
+                    },
+                }
+                for i in range(2)
+            ],
+        }
+
+        response = await client.post("/api/v1/resolve-bulk", json=payload)
+
+        assert response.status_code == 207
 
     async def test_empty_mentions_returns_400(self, client: AsyncClient) -> None:
         response = await client.post("/api/v1/resolve-bulk", json={"mentions": []})

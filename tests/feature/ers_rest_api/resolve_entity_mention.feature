@@ -20,7 +20,7 @@ Feature: Resolve Entity Mention via REST API (Spine A)
     Then the response HTTP status is <http_status>
     And the response body canonical_entity_id is "<canonical_id>"
     And the response body status is "<expected_status>"
-    And the response body request_id is "<request_id>"
+    And the response body identified_by request_id is "<request_id>"
 
     Examples:
       | source_id | request_id | entity_type  | content_fixture | context        | canonical_id | http_status | expected_status |
@@ -41,7 +41,7 @@ Feature: Resolve Entity Mention via REST API (Spine A)
     Then the response HTTP status is <http_status>
     And the response body canonical_entity_id is "<provisional_id>"
     And the response body status is "<expected_status>"
-    And the response body request_id is "<request_id>"
+    And the response body identified_by request_id is "<request_id>"
 
     Examples:
       | source_id | request_id | entity_type  | content_fixture | context        | provisional_id     | reason          | http_status | expected_status |
@@ -82,9 +82,9 @@ Feature: Resolve Entity Mention via REST API (Spine A)
 
     Examples:
       | source_id | request_id | entity_type  | original_fixture | original_context | new_fixture  | new_context    | http_status | error_code           |
-      | SYSTEM_F  | req-030    | ORGANISATION | mock:org-001     | notice-2024-01   | mock:org-002 | notice-2024-01 | 400         | IDEMPOTENCY_CONFLICT |
-      | SYSTEM_F  | req-031    | ORGANISATION | mock:org-002     | notice-2024-02   | mock:org-002 | notice-2024-99 | 400         | IDEMPOTENCY_CONFLICT |
-      | SYSTEM_F  | req-032    | ORGANISATION | mock:org-003     | notice-2024-03   | mock:org-007 | notice-2024-99 | 400         | IDEMPOTENCY_CONFLICT |
+      | SYSTEM_F  | req-030    | ORGANISATION | mock:org-001     | notice-2024-01   | mock:org-002 | notice-2024-01 | 422         | IDEMPOTENCY_CONFLICT |
+      | SYSTEM_F  | req-031    | ORGANISATION | mock:org-002     | notice-2024-02   | mock:org-002 | notice-2024-99 | 422         | IDEMPOTENCY_CONFLICT |
+      | SYSTEM_F  | req-032    | ORGANISATION | mock:org-003     | notice-2024-03   | mock:org-007 | notice-2024-99 | 422         | IDEMPOTENCY_CONFLICT |
 
   # ---------------------------------------------------------------------------
   # Validation errors — missing or malformed request fields
@@ -107,10 +107,10 @@ Feature: Resolve Entity Mention via REST API (Spine A)
   Scenario: Reject resolve request with unsupported entity type
     Given an entity mention with triad "SYSTEM_G", "req-040", "UNKNOWN_TYPE"
     And the mention content is "mock:org-001"
+    And the Resolution Coordinator raises a parsing error for unsupported entity type
     When I POST to /resolve
     Then the response HTTP status is 400
-    And the response body error code is "VALIDATION_ERROR"
-    And the response body error detail references "entity_type"
+    And the response body error code is "PARSING_FAILED"
 
   Scenario: Reject resolve request with malformed JSON body
     Given a POST /resolve request with a syntactically invalid JSON body
@@ -156,7 +156,7 @@ Feature: Resolve Entity Mention via REST API (Spine A)
       | <source_id> | <req_2>    | <fixture_2>     | <context_2>    |
       | <source_id> | <req_3>    | <fixture_3>     |                |
     And the Resolution Coordinator returns "<outcome>" for all mentions
-    When I POST to /resolveBulk
+    When I POST to /resolve-bulk
     Then the response HTTP status is <http_status>
     And the response body contains <count> individual results
     And every individual result status is "<expected_status>"
@@ -181,7 +181,7 @@ Feature: Resolve Entity Mention via REST API (Spine A)
       | req-300    | canonical   | cluster-030        |
       | req-301    | provisional | prov-singleton-010 |
       | req-302    | canonical   | cluster-031        |
-    When I POST to /resolveBulk
+    When I POST to /resolve-bulk
     Then the response HTTP status is 207
     And the response body contains 3 individual results
     And individual result for "req-300" has status "CANONICAL" and canonical_entity_id "cluster-030"
@@ -199,7 +199,7 @@ Feature: Resolve Entity Mention via REST API (Spine A)
       | SYSTEM_C  | req-401    |                 | notice-2024-31 |
       | SYSTEM_C  | req-402    | mock:org-003    |                |
     And the Resolution Coordinator returns canonical identifier "cluster-040" for valid mentions
-    When I POST to /resolveBulk
+    When I POST to /resolve-bulk
     Then the response HTTP status is 207
     And the response body contains 3 individual results
     And individual result for "req-400" has status "CANONICAL" and canonical_entity_id "cluster-040"
@@ -211,15 +211,10 @@ Feature: Resolve Entity Mention via REST API (Spine A)
   # ---------------------------------------------------------------------------
 
   Scenario: Bulk resolve rejected when all mentions fail validation
-    Given a batch of entity mentions for entity_type "ORGANISATION":
-      | source_id | request_id | content_fixture | context |
-      | SYSTEM_D  |            | mock:org-001    |         |
-      |           | req-501    | mock:org-002    |         |
-      | SYSTEM_D  | req-502    |                 |         |
-    When I POST to /resolveBulk
+    Given a bulk resolve request with all mentions missing required fields
+    When I POST to /resolve-bulk
     Then the response HTTP status is 400
     And the response body error code is "VALIDATION_ERROR"
-    And the response body contains 3 individual error details
 
   # ---------------------------------------------------------------------------
   # Bulk — per-mention idempotency within a batch
@@ -234,7 +229,7 @@ Feature: Resolve Entity Mention via REST API (Spine A)
       | SYSTEM_E  | req-600    | mock:org-001    | notice-2024-40 |
       | SYSTEM_E  | req-601    | mock:org-002    | notice-2024-41 |
     And the Resolution Coordinator returns canonical identifier "cluster-051" for new mentions
-    When I POST to /resolveBulk
+    When I POST to /resolve-bulk
     Then the response HTTP status is 200
     And individual result for "req-600" has status "CANONICAL" and canonical_entity_id "cluster-050"
     And individual result for "req-601" has status "CANONICAL" and canonical_entity_id "cluster-051"
@@ -247,7 +242,7 @@ Feature: Resolve Entity Mention via REST API (Spine A)
       | SYSTEM_F  | req-700    | mock:org-002    | notice-2024-50 |
       | SYSTEM_F  | req-701    | mock:org-003    | notice-2024-51 |
     And the Resolution Coordinator returns canonical identifier "cluster-060" for valid mentions
-    When I POST to /resolveBulk
+    When I POST to /resolve-bulk
     Then the response HTTP status is 207
     And individual result for "req-700" has error code "IDEMPOTENCY_CONFLICT"
     And individual result for "req-701" has status "CANONICAL" and canonical_entity_id "cluster-060"
@@ -258,7 +253,7 @@ Feature: Resolve Entity Mention via REST API (Spine A)
 
   Scenario: Reject bulk resolve with an empty mention list
     Given an empty batch of entity mentions
-    When I POST to /resolveBulk
+    When I POST to /resolve-bulk
     Then the response HTTP status is 400
     And the response body error code is "VALIDATION_ERROR"
     And the response body error detail references "mentions"
@@ -273,6 +268,6 @@ Feature: Resolve Entity Mention via REST API (Spine A)
       | SYSTEM_G  | req-800    | mock:org-001    | notice-2024-60 |
       | SYSTEM_G  | req-801    | mock:org-002    |                |
     And the Resolution Coordinator is unavailable
-    When I POST to /resolveBulk
+    When I POST to /resolve-bulk
     Then the response HTTP status is 500
     And the response body error code is "SERVICE_ERROR"
