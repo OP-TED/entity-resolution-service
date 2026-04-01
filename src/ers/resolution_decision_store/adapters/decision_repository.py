@@ -3,9 +3,8 @@ from datetime import datetime
 from typing import Any
 
 import pymongo
-from pymongo.errors import ConnectionFailure, DuplicateKeyError, OperationFailure
-
 from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
+from pymongo.errors import ConnectionFailure, DuplicateKeyError, OperationFailure
 
 from ers.commons.adapters.decision_repository import (
     BaseDecisionRepository,
@@ -13,12 +12,10 @@ from ers.commons.adapters.decision_repository import (
 )
 from ers.commons.domain.cursor import decode_cursor, encode_cursor
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
-
 from ers.commons.domain.data_transfer_objects import (
     DecisionFilters,
     DecisionOrdering,
 )
-
 from ers.resolution_decision_store.adapters.provisional_id import (
     derive_provisional_cluster_id,
 )
@@ -29,6 +26,7 @@ from ers.resolution_decision_store.domain.errors import (
 )
 
 # MongoDB document field paths
+_FIELD_SOURCE_ID = "about_entity_mention.source_id"
 _FIELD_ENTITY_TYPE = "about_entity_mention.entity_type"
 _FIELD_CONFIDENCE = "current_placement.confidence_score"
 _FIELD_SIMILARITY = "current_placement.similarity_score"
@@ -43,10 +41,10 @@ class DecisionRepository(BaseDecisionRepository):
 
     @abstractmethod
     async def find_with_filters(
-        self,
-        filters: DecisionFilters | None = None,
-        cursor_params: CursorParams | None = None,
-        mention_identifiers: list[EntityMentionIdentifier] | None = None,
+            self,
+            filters: DecisionFilters | None = None,
+            cursor_params: CursorParams | None = None,
+            mention_identifiers: list[EntityMentionIdentifier] | None = None,
     ) -> CursorPage[Decision]:
         """Find decisions with optional filtering and cursor-based pagination.
 
@@ -63,9 +61,9 @@ class DecisionRepository(BaseDecisionRepository):
 
     @abstractmethod
     async def find_mention_ids_by_cluster(
-        self,
-        cluster_id: str,
-        limit: int,
+            self,
+            cluster_id: str,
+            limit: int,
     ) -> list[EntityMentionIdentifier]:
         """Return entity mention identifiers for decisions placed in a cluster."""
 
@@ -95,6 +93,12 @@ class MongoDecisionRepository(
 
     def _build_query(self, filters: DecisionFilters) -> dict[str, Any]:
         query: dict[str, Any] = {}
+
+        if filters.source_id is not None:
+            query[_FIELD_SOURCE_ID] = filters.source_id
+
+        if filters.updated_since is not None:
+            query[_FIELD_UPDATED_AT] = {"$gt": filters.updated_since}
 
         if filters.entity_type is not None:
             query[_FIELD_ENTITY_TYPE] = filters.entity_type
@@ -132,13 +136,12 @@ class MongoDecisionRepository(
             return decision.updated_at
         return None
 
-
     async def upsert_decision(
-        self,
-        identifier: EntityMentionIdentifier,
-        current: ClusterReference,
-        candidates: list[ClusterReference],
-        updated_at: datetime,
+            self,
+            identifier: EntityMentionIdentifier,
+            current: ClusterReference,
+            candidates: list[ClusterReference],
+            updated_at: datetime,
     ) -> Decision:
         """Atomically store or replace a decision, rejecting stale updates.
 
@@ -235,10 +238,10 @@ class MongoDecisionRepository(
         return await self.find_by_id(triad_hash)
 
     async def find_with_filters(
-        self,
-        filters: DecisionFilters | None = None,
-        cursor_params: CursorParams | None = None,
-        mention_identifiers: list[EntityMentionIdentifier] | None = None,
+            self,
+            filters: DecisionFilters | None = None,
+            cursor_params: CursorParams | None = None,
+            mention_identifiers: list[EntityMentionIdentifier] | None = None,
     ) -> CursorPage[Decision]:
         """Cursor-paginated query over decisions with optional filtering.
 
@@ -320,9 +323,9 @@ class MongoDecisionRepository(
         return CursorPage(results=results, count=count, next_cursor=next_cursor)
 
     async def find_mention_ids_by_cluster(
-        self,
-        cluster_id: str,
-        limit: int,
+            self,
+            cluster_id: str,
+            limit: int,
     ) -> list[EntityMentionIdentifier]:
         cursor = self._collection.find(
             {_FIELD_CLUSTER_ID: cluster_id},

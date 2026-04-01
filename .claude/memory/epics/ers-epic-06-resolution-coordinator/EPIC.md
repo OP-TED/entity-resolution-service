@@ -335,7 +335,7 @@ Each task is a PR-sized unit of work. Unit tests are written alongside the code 
 - [x] T6.1: Foundation — Exceptions + Config
 - [x] T6.2: AsyncResolutionWaiter
 - [x] T6.3: ResolutionCoordinatorService (Spines A+B)
-- [ ] T6.4: DecisionStoreService Delta Extension
+- [x] T6.4: DecisionStoreService Delta Extension
 - [ ] T6.5: BulkRefreshCoordinatorService (Spine C)
 - [ ] T6.6: Integration + Feature Tests
 - [ ] T6.7: ERS REST API Wiring
