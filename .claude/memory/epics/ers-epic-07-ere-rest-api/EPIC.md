@@ -425,5 +425,8 @@ This EPIC synthesizes requirements from:
 4. ✅ **EPIC-05 and EPIC-06 wired** — T6.7 wired all services, lifespan, and coordinator gateway
 5. ✅ **Open concerns resolved** — All 4 concerns in `concerns.md` resolved (2026-04-01)
 6. ✅ **Dead code removed** — `ResolutionDecisionStoreServiceABC`, `DeltaPage`, `USE_MOCK_SERVICES` deleted
-7. **Pending:** Wire BDD feature test stubs (`test_resolve_entity_mention.py`, `test_lookup_cluster_assignment.py`)
-8. **Pending:** Wire E2E test scaffolds (see `task7x-e2e-wiring.md`)
+7. ✅ **BDD feature tests wired** — 51 scenarios across `test_resolve_entity_mention.py` + `test_lookup_cluster_assignment.py`
+8. ✅ **E2E UC-B1.1 wired** — 19 scenarios in `test_ucb11_resolve_entity_mention.py` (task 6X)
+9. **Deferred:** E2E resolution cycle (`test_e2e_resolution_cycle.py`) — requires cross-endpoint state coordination; feature file updated, skip marker added
+10. **Deferred:** E2E curation tests (`test_ucb21`, `test_ucb22`) — requires curation API (future EPIC, Spine D)
+11. **Deferred:** E2E statistics test (`test_ucw4`) — requires statistics endpoint (future EPIC)

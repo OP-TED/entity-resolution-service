@@ -29,13 +29,11 @@ and `OutcomeIntegrationWorker` (EPIC-05) are all wired in the lifespan.
 | `tests/e2e/ucs/test_ucb22_bulk_curator_reevaluation.py` | UC-B2.2 - requires curation API (may be later EPIC) |
 | `tests/e2e/ucs/test_ucw4_consult_resolution_statistics.py` | UC-W4 - stats endpoint (may be later EPIC) |
 
-## Priority Order
+## Priority Order & Status
 
-Wire in this order (dependencies flow downward):
-
-1. **`test_ucb11_resolve_entity_mention.py`** - core Spine A; uses `POST /resolve`
-2. **`test_e2e_resolution_cycle.py`** - full demo cycle; combines Spine A + B + C
-3. `test_ucb21`, `test_ucb22`, `test_ucw4` - depend on curation/stats endpoints (later epics)
+1. ✅ **`test_ucb11_resolve_entity_mention.py`** — 19 scenarios wired (2026-04-01, task 6X)
+2. ⏸️ **`test_e2e_resolution_cycle.py`** — deferred (cross-endpoint state coordination); feature file updated, skip marker added
+3. ⏸️ `test_ucb21`, `test_ucb22`, `test_ucw4` — blocked on future EPICs; skip markers added
 
 ---
 

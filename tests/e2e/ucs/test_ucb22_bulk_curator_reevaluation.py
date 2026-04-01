@@ -23,6 +23,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
 
+pytestmark = pytest.mark.skip(
+    reason="Deferred: requires curation API endpoints (future EPIC — Spine D)"
+)
+
 # ---------------------------------------------------------------------------
 # Scenario bindings
 # ---------------------------------------------------------------------------

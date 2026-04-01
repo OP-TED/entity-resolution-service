@@ -21,6 +21,10 @@ from pathlib import Path
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
 
+pytestmark = pytest.mark.skip(
+    reason="Deferred: requires statistics endpoint (future EPIC)"
+)
+
 # ---------------------------------------------------------------------------
 # Scenario bindings
 # ---------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 # Task 6X: Wire E2E Step Definitions for UC-B1.1 (post-implementation)
 
+**Status:** ✅ Complete (2026-04-01)
+
 ## Context
 
 After EPIC-06 implementation is complete, the e2e test scaffold for UC-B1.1 must be
