@@ -88,6 +88,24 @@ class ResolutionCoordinatorService:
         self._decision_store_service = decision_store_service
         self._waiter = waiter
 
+    async def lookup_by_triad(
+        self, identifier: EntityMentionIdentifier
+    ) -> Decision | None:
+        """Look up the current decision for a triad.
+
+        Thin gateway so the REST API accesses the Decision Store only
+        through the Coordinator.
+
+        Args:
+            identifier: The entity mention triad.
+
+        Returns:
+            The matching Decision, or None.
+        """
+        return await self._decision_store_service.get_decision_by_triad(
+            identifier
+        )
+
     async def resolve_single(
         self, entity_mention: EntityMention
     ) -> Decision:
@@ -241,6 +259,15 @@ class ResolutionCoordinatorService:
             raise ResolutionTimeoutException(
                 f"Cannot persist provisional decision: {exc}"
             ) from None
+
+
+@trace_function(span_name="resolution_coordinator.lookup_by_triad")
+async def lookup_by_triad(
+    identifier: EntityMentionIdentifier,
+    service: ResolutionCoordinatorService,
+) -> Decision | None:
+    """Traced entry point for single-mention lookup."""
+    return await service.lookup_by_triad(identifier)
 
 
 @trace_function(span_name="resolution_coordinator.resolve_single")

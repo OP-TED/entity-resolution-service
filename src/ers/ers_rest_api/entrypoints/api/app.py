@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -7,21 +8,107 @@ from fastapi.openapi.utils import get_openapi
 
 from ers import config
 from ers.commons.adapters.mongo_client import MongoClientManager
+from ers.commons.adapters.redis_client import RedisConnectionConfig, RedisEREClient
 from ers.ers_rest_api.entrypoints.api.exception_handlers import register_exception_handlers
 from ers.ers_rest_api.entrypoints.api.health import router as health_router
 from ers.ers_rest_api.entrypoints.api.v1.router import v1_router
 
+_log = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Manage MongoDB client lifecycle for the ERS REST API."""
+    """Manage MongoDB, Redis, AsyncResolutionWaiter and EPIC-05 worker lifecycle."""
+    # --- MongoDB ---
     manager = MongoClientManager(config.MONGO_URI, config.MONGO_DATABASE_NAME)
     await manager.connect()
     await manager.ensure_indexes()
     app.state.mongo_db = manager.get_database()
+
+    # --- Redis client (shared by ERE publish + outcome listener) ---
+    redis_config = RedisConnectionConfig.from_settings(config)
+    redis_client = RedisEREClient(
+        config_or_client=redis_config,
+        request_channel=config.ERE_REQUEST_CHANNEL,
+        response_channel=config.ERE_RESPONSE_CHANNEL,
+    )
+    app.state.redis_client = redis_client
+
+    # --- RDF config (loaded once, shared via app.state) ---
+    from ers.rdf_mention_parser.adapter.rdf_mapping_config_reader import RDFConfigReader
+
+    app.state.rdf_config = RDFConfigReader.from_file(config.RDF_MENTION_CONFIG_FILE)
+
+    # --- AsyncResolutionWaiter (process-scoped singleton) ---
+    from ers.resolution_coordinator.services.async_resolution_waiter import (
+        AsyncResolutionWaiter,
+    )
+
+    waiter = AsyncResolutionWaiter()
+    app.state.waiter = waiter
+
+    # --- EPIC-05: Outcome Integration Worker ---
+    from ers.ere_result_integrator.adapters.redis_outcome_listener import (
+        RedisOutcomeListener,
+    )
+    from ers.ere_result_integrator.entrypoints.outcome_integration_worker import (
+        OutcomeIntegrationWorker,
+    )
+    from ers.ere_result_integrator.services.outcome_integration_service import (
+        OutcomeIntegrationService,
+    )
+    from ers.request_registry.adapters.records_repository import (
+        MongoLookupStateRepository,
+        MongoResolutionRequestRepository,
+    )
+    from ers.request_registry.services.request_registry_service import (
+        RequestRegistryService,
+    )
+    from ers.resolution_decision_store.adapters.decision_repository import (
+        MongoDecisionRepository,
+    )
+    from ers.resolution_decision_store.services.decision_store_service import (
+        DecisionStoreService,
+    )
+    from ers.commons.adapters.hasher import SHA256ContentHasher
+
+    db = app.state.mongo_db
+    rdf_config = app.state.rdf_config
+
+    registry_service = RequestRegistryService(
+        resolution_repo=MongoResolutionRequestRepository(db),
+        lookup_repo=MongoLookupStateRepository(db),
+        hasher=SHA256ContentHasher(),
+        rdf_config=rdf_config,
+    )
+    decision_service = DecisionStoreService(
+        repository=MongoDecisionRepository(db),
+    )
+
+    outcome_service = OutcomeIntegrationService(
+        registry_service=registry_service,
+        decision_service=decision_service,
+        on_outcome_stored=waiter.notify,
+    )
+
+    # Separate Redis client for the listener (needs its own BRPOP connection)
+    listener_client = RedisEREClient(
+        config_or_client=redis_config,
+        request_channel=config.ERE_REQUEST_CHANNEL,
+        response_channel=config.ERE_RESPONSE_CHANNEL,
+    )
+    listener = RedisOutcomeListener(client=listener_client)
+    worker = OutcomeIntegrationWorker(listener=listener, service=outcome_service)
+    worker.start()
+    _log.info("OutcomeIntegrationWorker started in lifespan")
+
     try:
         yield
     finally:
+        await worker.stop()
+        _log.info("OutcomeIntegrationWorker stopped")
+        await redis_client.close()
+        await listener_client.close()
         await manager.close()
 
 
@@ -64,22 +151,5 @@ def create_app() -> FastAPI:
     app.include_router(v1_router, prefix=config.ERS_API_PREFIX)
 
     app.openapi = lambda: _custom_openapi(app)  # type: ignore[assignment]
-
-    # --- Temporary mock overrides (remove when real services are implemented) ---
-    if config.USE_MOCK_SERVICES:
-        from ers.ers_rest_api.entrypoints.api.dependencies import (
-            get_lookup_service,
-            get_refresh_bulk_service,
-            get_resolve_service,
-        )
-        from tests.mock.ers_rest_api.mock_services import (
-            MockLookupService,
-            MockRefreshBulkService,
-            MockResolveService,
-        )
-
-        app.dependency_overrides[get_resolve_service] = MockResolveService
-        app.dependency_overrides[get_lookup_service] = MockLookupService
-        app.dependency_overrides[get_refresh_bulk_service] = MockRefreshBulkService
 
     return app

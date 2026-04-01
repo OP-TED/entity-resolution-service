@@ -338,7 +338,7 @@ Each task is a PR-sized unit of work. Unit tests are written alongside the code 
 - [x] T6.4: DecisionStoreService Delta Extension
 - [x] T6.5: BulkRefreshCoordinatorService (Spine C)
 - [x] T6.6: Integration + Feature Tests
-- [ ] T6.7: ERS REST API Wiring
+- [x] T6.7: ERS REST API Wiring
 
 ---
 

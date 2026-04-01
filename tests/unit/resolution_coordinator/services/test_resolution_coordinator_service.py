@@ -470,3 +470,29 @@ class TestWaiterLifecycle:
 
         await coordinator.resolve_single(make_entity_mention())
         waiter.get_or_create.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# lookup_by_triad
+# ---------------------------------------------------------------------------
+
+class TestLookupByTriad:
+    async def test_returns_decision_when_found(
+        self, coordinator, decision_svc
+    ):
+        expected = make_decision("cl-lookup")
+        decision_svc.get_decision_by_triad.return_value = expected
+
+        result = await coordinator.lookup_by_triad(make_identifier())
+
+        assert result is expected
+        decision_svc.get_decision_by_triad.assert_awaited_once_with(make_identifier())
+
+    async def test_returns_none_when_not_found(
+        self, coordinator, decision_svc
+    ):
+        decision_svc.get_decision_by_triad.return_value = None
+
+        result = await coordinator.lookup_by_triad(make_identifier())
+
+        assert result is None

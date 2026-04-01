@@ -1,3 +1,5 @@
+"""Unit tests for RefreshBulkService — BulkRefreshCoordinatorService delegation."""
+
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, create_autospec
 
@@ -6,14 +8,13 @@ from erspec.models.core import (
     ClusterReference,
     Decision,
     EntityMentionIdentifier,
-    LookupState,
 )
 
+from ers.commons.domain.data_transfer_objects import CursorPage
 from ers.ers_rest_api.domain.lookup import RefreshBulkRequest
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
-from ers.resolution_decision_store.domain.data_transfer_objects import DeltaPage
-from ers.resolution_decision_store.services.resolution_decision_store_service import (
-    ResolutionDecisionStoreServiceABC,
+from ers.resolution_coordinator.services.bulk_refresh_coordinator_service import (
+    BulkRefreshCoordinatorService,
 )
 
 
@@ -39,36 +40,26 @@ def _make_decision(
 
 
 @pytest.fixture
-def decision_store() -> AsyncMock:
-    return create_autospec(ResolutionDecisionStoreServiceABC, instance=True)
+def bulk_coordinator() -> AsyncMock:
+    return create_autospec(BulkRefreshCoordinatorService, instance=True)
 
 
 @pytest.fixture
-def service(decision_store: AsyncMock) -> RefreshBulkService:
-    return RefreshBulkService(decision_store=decision_store)
+def service(bulk_coordinator: AsyncMock) -> RefreshBulkService:
+    return RefreshBulkService(bulk_coordinator=bulk_coordinator)
 
 
 class TestRefreshBulkService:
-    async def test_returns_deltas_and_advances_snapshot(
-        self,
-        service: RefreshBulkService,
-        decision_store: AsyncMock,
+    async def test_returns_deltas(
+        self, service: RefreshBulkService, bulk_coordinator: AsyncMock
     ) -> None:
-        decision_store.get_lookup_state.return_value = LookupState(
-            source_id="SYSTEM_C",
-            last_snapshot=datetime(2026, 3, 10, tzinfo=UTC),
-        )
-        decision_store.get_delta_for_source.return_value = DeltaPage(
-            deltas=[
-                _make_decision(
-                    "SYSTEM_C", "req-001", "cluster-010", datetime(2026, 3, 15, tzinfo=UTC)
-                ),
-                _make_decision(
-                    "SYSTEM_C", "req-002", "cluster-011", datetime(2026, 3, 15, tzinfo=UTC)
-                ),
+        bulk_coordinator.refresh_bulk.return_value = CursorPage(
+            results=[
+                _make_decision("SYSTEM_C", "req-001", "cluster-010", datetime(2026, 3, 15, tzinfo=UTC)),
+                _make_decision("SYSTEM_C", "req-002", "cluster-011", datetime(2026, 3, 15, tzinfo=UTC)),
             ],
-            continuation_cursor=None,
-            has_more=False,
+            count=2,
+            next_cursor=None,
         )
 
         result = await service.handle_refresh_bulk(
@@ -79,48 +70,34 @@ class TestRefreshBulkService:
         assert result.deltas[0].cluster_reference.cluster_id == "cluster-010"
         assert result.deltas[1].identified_by.request_id == "req-002"
         assert result.has_more is False
-        decision_store.advance_snapshot.assert_called_once()
 
-    async def test_first_call_passes_none_snapshot(
-        self,
-        service: RefreshBulkService,
-        decision_store: AsyncMock,
+    async def test_first_call_passes_none_cursor(
+        self, service: RefreshBulkService, bulk_coordinator: AsyncMock
     ) -> None:
-        decision_store.get_lookup_state.return_value = None
-        decision_store.get_delta_for_source.return_value = DeltaPage(
-            deltas=[],
-            continuation_cursor=None,
-            has_more=False,
+        bulk_coordinator.refresh_bulk.return_value = CursorPage(
+            results=[], count=0, next_cursor=None
         )
 
         await service.handle_refresh_bulk(
             RefreshBulkRequest(source_id="SYSTEM_NEW", limit=1000),
         )
 
-        call_args = decision_store.get_delta_for_source.call_args
-        assert call_args.kwargs["last_snapshot"] is None
+        call_args = bulk_coordinator.refresh_bulk.call_args
+        assert call_args.kwargs["cursor"] is None
 
     async def test_paginated_response_passes_cursor(
-        self,
-        service: RefreshBulkService,
-        decision_store: AsyncMock,
+        self, service: RefreshBulkService, bulk_coordinator: AsyncMock
     ) -> None:
-        decision_store.get_lookup_state.return_value = LookupState(
-            source_id="SYSTEM_D",
-            last_snapshot=datetime(2026, 3, 10, tzinfo=UTC),
-        )
-        decision_store.get_delta_for_source.return_value = DeltaPage(
-            deltas=[
+        bulk_coordinator.refresh_bulk.return_value = CursorPage(
+            results=[
                 _make_decision(
-                    "SYSTEM_D",
-                    f"req-{i:03d}",
-                    f"cluster-{i:03d}",
+                    "SYSTEM_D", f"req-{i:03d}", f"cluster-{i:03d}",
                     datetime(2026, 3, 15, tzinfo=UTC),
                 )
                 for i in range(50)
             ],
-            continuation_cursor="cursor-page-2",
-            has_more=True,
+            count=50,
+            next_cursor="cursor-page-2",
         )
 
         result = await service.handle_refresh_bulk(
@@ -131,19 +108,11 @@ class TestRefreshBulkService:
         assert result.has_more is True
         assert result.continuation_cursor == "cursor-page-2"
 
-    async def test_forwards_continuation_cursor_to_store(
-        self,
-        service: RefreshBulkService,
-        decision_store: AsyncMock,
+    async def test_forwards_continuation_cursor_to_coordinator(
+        self, service: RefreshBulkService, bulk_coordinator: AsyncMock
     ) -> None:
-        decision_store.get_lookup_state.return_value = LookupState(
-            source_id="SYSTEM_E",
-            last_snapshot=datetime(2026, 3, 10, tzinfo=UTC),
-        )
-        decision_store.get_delta_for_source.return_value = DeltaPage(
-            deltas=[],
-            continuation_cursor=None,
-            has_more=False,
+        bulk_coordinator.refresh_bulk.return_value = CursorPage(
+            results=[], count=0, next_cursor=None
         )
 
         await service.handle_refresh_bulk(
@@ -154,22 +123,14 @@ class TestRefreshBulkService:
             ),
         )
 
-        call_args = decision_store.get_delta_for_source.call_args
-        assert call_args.kwargs["continuation_cursor"] == "cursor-existing"
+        call_args = bulk_coordinator.refresh_bulk.call_args
+        assert call_args.kwargs["cursor"] == "cursor-existing"
 
-    async def test_empty_delta_still_advances_snapshot(
-        self,
-        service: RefreshBulkService,
-        decision_store: AsyncMock,
+    async def test_empty_delta(
+        self, service: RefreshBulkService, bulk_coordinator: AsyncMock
     ) -> None:
-        decision_store.get_lookup_state.return_value = LookupState(
-            source_id="SYSTEM_C",
-            last_snapshot=datetime(2026, 3, 10, tzinfo=UTC),
-        )
-        decision_store.get_delta_for_source.return_value = DeltaPage(
-            deltas=[],
-            continuation_cursor=None,
-            has_more=False,
+        bulk_coordinator.refresh_bulk.return_value = CursorPage(
+            results=[], count=0, next_cursor=None
         )
 
         result = await service.handle_refresh_bulk(
@@ -177,14 +138,12 @@ class TestRefreshBulkService:
         )
 
         assert len(result.deltas) == 0
-        decision_store.advance_snapshot.assert_called_once()
+        assert result.has_more is False
 
-    async def test_propagates_store_exception(
-        self,
-        service: RefreshBulkService,
-        decision_store: AsyncMock,
+    async def test_propagates_coordinator_exception(
+        self, service: RefreshBulkService, bulk_coordinator: AsyncMock
     ) -> None:
-        decision_store.get_lookup_state.side_effect = RuntimeError("store error")
+        bulk_coordinator.refresh_bulk.side_effect = RuntimeError("store error")
 
         with pytest.raises(RuntimeError, match="store error"):
             await service.handle_refresh_bulk(
