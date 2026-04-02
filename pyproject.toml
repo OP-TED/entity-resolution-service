@@ -1,5 +1,5 @@
 [project]
-name = "entity-resolution-service"
+name = "ers-core"
 version = "0.4.0"
 description = "Core Python backend service for entity resolution — REST API, decision persistence, and ERE orchestration via Redis."
 authors = [
