@@ -41,11 +41,11 @@ from ers.curation.services import (
     StatisticsService,
     UserActionService,
 )
+from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.data_transfer_objects import UserContext
 from ers.users.services import AuthService, UserManagementService
 from ers.users.services.token_service import TokenService
-from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 
 ADMIN_USER = UserContext(
     id="admin-user-id",

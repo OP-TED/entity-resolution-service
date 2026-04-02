@@ -9,7 +9,6 @@ Feature: Resolve a Single Entity Mention (Spine A Intake)
 """
 
 import asyncio
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, create_autospec, patch
@@ -24,14 +23,14 @@ from erspec.models.core import (
 from pytest_bdd import given, parsers, scenario, then, when
 
 from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
-from ers.ere_contract_client.domain.errors import ChannelUnavailableError, RedisConnectionError
+from ers.ere_contract_client.domain.errors import ChannelUnavailableError
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.rdf_mention_parser.domain.exceptions import MalformedRDFError
 from ers.request_registry.services.exceptions import IdempotencyConflictError
 from ers.request_registry.services.request_registry_service import RequestRegistryService
 from ers.resolution_coordinator.domain.exceptions import (
-    ParsingFailedException,
-    ResolutionTimeoutException,
+    ParsingFailedError,
+    ResolutionTimeoutError,
 )
 from ers.resolution_coordinator.services.async_resolution_waiter import AsyncResolutionWaiter
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
@@ -464,8 +463,8 @@ def decision_store_not_modified(ctx):
 
 @then("a parsing failure error is raised")
 def parsing_failure_error(ctx):
-    assert isinstance(ctx["raised_exception"], ParsingFailedException), (
-        f"Expected ParsingFailedException, got {type(ctx['raised_exception']).__name__}"
+    assert isinstance(ctx["raised_exception"], ParsingFailedError), (
+        f"Expected ParsingFailedError, got {type(ctx['raised_exception']).__name__}"
     )
 
 
@@ -482,6 +481,6 @@ def no_publish(ctx):
 
 @then("a resolution timeout error is raised")
 def resolution_timeout_error(ctx):
-    assert isinstance(ctx["raised_exception"], ResolutionTimeoutException), (
-        f"Expected ResolutionTimeoutException, got {type(ctx['raised_exception']).__name__}"
+    assert isinstance(ctx["raised_exception"], ResolutionTimeoutError), (
+        f"Expected ResolutionTimeoutError, got {type(ctx['raised_exception']).__name__}"
     )

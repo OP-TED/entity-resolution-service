@@ -48,6 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.waiter = waiter
 
     # --- EPIC-05: Outcome Integration Worker ---
+    from ers.commons.adapters.hasher import SHA256ContentHasher
     from ers.ere_result_integrator.adapters.redis_outcome_listener import (
         RedisOutcomeListener,
     )
@@ -56,6 +57,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     from ers.ere_result_integrator.services.outcome_integration_service import (
         OutcomeIntegrationService,
+    )
+    from ers.rdf_mention_parser.services.mention_parser_service import (
+        parse_entity_mention,
     )
     from ers.request_registry.adapters.records_repository import (
         MongoLookupStateRepository,
@@ -70,7 +74,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from ers.resolution_decision_store.services.decision_store_service import (
         DecisionStoreService,
     )
-    from ers.commons.adapters.hasher import SHA256ContentHasher
 
     db = app.state.mongo_db
     rdf_config = app.state.rdf_config
@@ -79,7 +82,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         resolution_repo=MongoResolutionRequestRepository(db),
         lookup_repo=MongoLookupStateRepository(db),
         hasher=SHA256ContentHasher(),
-        rdf_config=rdf_config,
+        mention_parser=lambda em: parse_entity_mention(em, rdf_config),
     )
     decision_service = DecisionStoreService(
         repository=MongoDecisionRepository(db),
@@ -138,7 +141,10 @@ def create_app() -> FastAPI:
     # Register OTel span attribute extractors. Must be imported here (not at module
     # level) so they are registered after the module graph is fully loaded.
     import ers.commons.adapters.span_extractors
-    import ers.request_registry.adapters.span_extractors  # noqa: F401
+    import ers.ere_contract_client.adapters.span_extractors
+    import ers.ere_result_integrator.adapters.span_extractors
+    import ers.request_registry.adapters.span_extractors
+    import ers.resolution_decision_store.adapters.span_extractors  # noqa: F401
 
     app = FastAPI(
         title=config.ERS_API_NAME,
@@ -150,6 +156,6 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(v1_router, prefix=config.ERS_API_PREFIX)
 
-    app.openapi = lambda: _custom_openapi(app)  # type: ignore[assignment]
+    app.openapi = lambda: _custom_openapi(app)  # type: ignore[method-assign]
 
     return app

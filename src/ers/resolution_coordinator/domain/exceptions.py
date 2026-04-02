@@ -3,11 +3,11 @@
 from ers.commons.services.exceptions import ApplicationError
 
 
-class CoordinatorException(ApplicationError):
+class CoordinatorError(ApplicationError):
     """Base exception for all Resolution Coordinator errors."""
 
 
-class ResolutionTimeoutException(CoordinatorException):
+class ResolutionTimeoutError(CoordinatorError):
     """Raised when a fatal timeout occurs in the resolution pipeline.
 
     Covers two scenarios:
@@ -18,7 +18,7 @@ class ResolutionTimeoutException(CoordinatorException):
     """
 
 
-class ParsingFailedException(CoordinatorException):
+class ParsingFailedError(CoordinatorError):
     """Raised when RequestRegistryService fails to parse the incoming entity mention.
 
     The request is NOT registered in the Request Registry when this is raised.
@@ -33,7 +33,7 @@ class ParsingFailedException(CoordinatorException):
         super().__init__(message)
 
 
-class SourceNotFoundException(CoordinatorException):
+class SourceNotFoundError(CoordinatorError):
     """Raised when the requested source has no resolution requests in the Registry.
 
     Args:
@@ -45,7 +45,7 @@ class SourceNotFoundException(CoordinatorException):
         super().__init__(f"Source not found in registry: {source_id!r}")
 
 
-class EnginePublishFailedException(CoordinatorException):
+class EnginePublishFailedError(CoordinatorError):
     """Raised when the ERE Contract Client cannot publish the request to Redis.
 
     Signals a RedisConnectionError at the publish boundary. The coordinator

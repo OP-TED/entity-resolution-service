@@ -35,7 +35,6 @@ import pytest
 from erspec.models.core import (
     ClusterReference,
     Decision,
-    EntityMention,
     EntityMentionIdentifier,
 )
 from fastapi import FastAPI

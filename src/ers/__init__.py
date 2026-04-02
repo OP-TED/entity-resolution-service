@@ -1,4 +1,5 @@
 import json
+from typing import cast
 
 from dotenv import load_dotenv
 
@@ -22,7 +23,7 @@ class CurationAppConfig:
 
     @env_property(default_value='["*"]')
     def CORS_ORIGINS(self, config_value: str) -> list[str]:
-        return json.loads(config_value)
+        return cast(list[str], json.loads(config_value))
 
 
 class JWTConfig:

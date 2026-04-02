@@ -1,6 +1,6 @@
 """Unit tests for Request Registry domain records."""
 
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from erspec.models.core import EntityMentionIdentifier

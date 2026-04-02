@@ -244,7 +244,7 @@ def snapshot_includes_candidates_with_scores(ctx: dict[str, Any]) -> None:
     snapshot_candidates = ctx["user_action"].candidates
     decision_candidates = ctx["decision"].candidates
     assert len(snapshot_candidates) == len(decision_candidates)
-    for snap, orig in zip(snapshot_candidates, decision_candidates):
+    for snap, orig in zip(snapshot_candidates, decision_candidates, strict=True):
         assert snap.cluster_id == orig.cluster_id
         assert snap.confidence_score == orig.confidence_score
         assert snap.similarity_score == orig.similarity_score

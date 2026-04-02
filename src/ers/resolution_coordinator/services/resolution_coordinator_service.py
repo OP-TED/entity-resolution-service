@@ -1,9 +1,9 @@
 """Resolution Coordinator Service — orchestrator for Spines A + B."""
 
 import asyncio
+import contextlib
 from datetime import UTC, datetime
 
-from opentelemetry import trace
 from erspec.models.core import (
     ClusterReference,
     Decision,
@@ -11,8 +11,10 @@ from erspec.models.core import (
     EntityMentionIdentifier,
 )
 from erspec.models.ere import EntityMentionResolutionRequest
+from opentelemetry import trace
 
 from ers import config
+from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.commons.adapters.tracing import trace_function
 from ers.ere_contract_client.domain.errors import (
     ChannelUnavailableError,
@@ -27,18 +29,17 @@ from ers.rdf_mention_parser.domain.exceptions import (
     MultipleEntitiesFoundError,
     UnsupportedEntityTypeError,
 )
-from ers.request_registry.services.exceptions import DuplicateTriadError
+from ers.request_registry.domain.errors import DuplicateTriadError
 from ers.request_registry.services.request_registry_service import (
     RequestRegistryService,
 )
 from ers.resolution_coordinator.domain.exceptions import (
-    ParsingFailedException,
-    ResolutionTimeoutException,
+    ParsingFailedError,
+    ResolutionTimeoutError,
 )
 from ers.resolution_coordinator.services.async_resolution_waiter import (
     AsyncResolutionWaiter,
 )
-from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.resolution_decision_store.domain.errors import (
     RepositoryConnectionError,
     StaleOutcomeError,
@@ -122,9 +123,9 @@ class ResolutionCoordinatorService:
             A Decision with a canonical or provisional cluster assignment.
 
         Raises:
-            ParsingFailedException: If registration fails due to invalid content.
+            ParsingFailedError: If registration fails due to invalid content.
             IdempotencyConflictError: If the triad exists with different content.
-            ResolutionTimeoutException: If the Decision Store is unreachable
+            ResolutionTimeoutError: If the Decision Store is unreachable
                 during provisional write.
         """
         # 1. Register (embeds RDF parsing)
@@ -133,7 +134,7 @@ class ResolutionCoordinatorService:
                 entity_mention
             )
         except _PARSING_ERRORS as exc:
-            raise ParsingFailedException(str(exc), cause=exc) from exc
+            raise ParsingFailedError(str(exc), cause=exc) from exc
         except DuplicateTriadError:
             pass  # Concurrent registration — another coroutine inserted first; proceed.
 
@@ -168,19 +169,13 @@ class ResolutionCoordinatorService:
                 )
                 if decision is not None:
                     return decision
-            except (
-                RedisConnectionError,
-                ChannelUnavailableError,
-                asyncio.TimeoutError,
-            ):
+            except (TimeoutError, RedisConnectionError, ChannelUnavailableError):
                 pass
 
             return await self._issue_provisional(identifier)
         finally:
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await asyncio.shield(self._waiter.release(triad_key))
-            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-exception-caught
-                pass
 
     async def resolve_bulk(
         self, entity_mentions: list[EntityMention]
@@ -194,7 +189,7 @@ class ResolutionCoordinatorService:
         Note:
             The result list may contain any exception type raised by
             ``resolve_single``, including ``IdempotencyConflictError``
-            (which is not a ``CoordinatorException``).
+            (which is not a ``CoordinatorError``).
 
         Args:
             entity_mentions: The list of entity mentions to resolve.
@@ -203,7 +198,7 @@ class ResolutionCoordinatorService:
             A list of Decision or Exception in input order.
 
         Raises:
-            ResolutionTimeoutException: If the bulk time budget is exceeded.
+            ResolutionTimeoutError: If the bulk time budget is exceeded.
         """
         if not entity_mentions:
             return []
@@ -214,8 +209,8 @@ class ResolutionCoordinatorService:
                 timeout=config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET,
             )
             return list(results)
-        except asyncio.TimeoutError as exc:
-            raise ResolutionTimeoutException(
+        except TimeoutError as exc:
+            raise ResolutionTimeoutError(
                 "Bulk resolution exceeded client time budget"
             ) from exc
 
@@ -231,7 +226,7 @@ class ResolutionCoordinatorService:
             The persisted provisional Decision.
 
         Raises:
-            ResolutionTimeoutException: If the Decision Store is unreachable.
+            ResolutionTimeoutError: If the Decision Store is unreachable.
         """
         provisional_id = derive_provisional_cluster_id(identifier)
         cluster_ref = ClusterReference(
@@ -251,12 +246,12 @@ class ResolutionCoordinatorService:
                 identifier
             )
             if decision is None:  # pragma: no cover — ERE wrote it moments ago
-                raise ResolutionTimeoutException(
+                raise ResolutionTimeoutError(
                     "Decision vanished after StaleOutcomeError"
                 ) from exc
             return decision
         except RepositoryConnectionError as exc:
-            raise ResolutionTimeoutException(
+            raise ResolutionTimeoutError(
                 f"Cannot persist provisional decision: {exc}"
             ) from None
 

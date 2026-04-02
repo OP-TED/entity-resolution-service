@@ -19,7 +19,7 @@ from ers.resolution_coordinator.services.resolution_coordinator_service import (
 def _is_provisional(decision: Decision) -> bool:
     """Check whether a decision carries a provisional singleton ID."""
     expected = derive_provisional_cluster_id(decision.about_entity_mention)
-    return decision.current_placement.cluster_id == expected
+    return bool(decision.current_placement.cluster_id == expected)
 
 
 def _map_decision(decision: Decision) -> EntityMentionResolutionResult:

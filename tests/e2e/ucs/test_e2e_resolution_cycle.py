@@ -171,7 +171,7 @@ def batch_submit_and_resolve(ctx, datatable):
     ctx["batch_results"] = []
     headers = datatable[0]
     for row_values in datatable[1:]:
-        row = dict(zip(headers, row_values))
+        row = dict(zip(headers, row_values, strict=True))
         ctx["batch_results"].append(
             {
                 "source_id": row["source_id"],

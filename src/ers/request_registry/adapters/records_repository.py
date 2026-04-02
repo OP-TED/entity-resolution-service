@@ -12,12 +12,12 @@ from ers.commons.adapters.repository import (
     AsyncWriteRepository,
     BaseMongoRepository,
 )
-from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
-from ers.request_registry.services.exceptions import (
+from ers.request_registry.domain.errors import (
     DuplicateTriadError,
     RepositoryConnectionError,
     RepositoryOperationError,
 )
+from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
 
 
 class ResolutionRequestRepository(

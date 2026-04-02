@@ -39,6 +39,9 @@ class RedisConnectionConfig:
 class AbstractClient(ABC):
     """Abstraction of a client to access with an ERS instance."""
 
+    request_channel_id: str
+    response_channel_id: str
+
     @abstractmethod
     async def push_request(self, request: ERERequest) -> int:
         """Push a request onto the request channel.

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -8,10 +10,21 @@ from ers.ers_rest_api.domain.errors import ErrorCode
 from ers.ers_rest_api.services.exceptions import MentionNotFoundError
 from ers.request_registry.services.exceptions import IdempotencyConflictError
 from ers.resolution_coordinator.domain.exceptions import (
-    ParsingFailedException,
-    ResolutionTimeoutException,
-    SourceNotFoundException,
+    ParsingFailedError,
+    ResolutionTimeoutError,
+    SourceNotFoundError,
 )
+
+_log = logging.getLogger(__name__)
+
+
+def _format_validation_detail(exc: RequestValidationError) -> str:
+    details = []
+    for err in exc.errors():
+        loc = " -> ".join(str(part) for part in err["loc"] if part != "body")
+        msg = err["msg"]
+        details.append(f"{loc}: {msg}" if loc else msg)
+    return "; ".join(details)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -22,23 +35,18 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request,
         exc: RequestValidationError,
     ) -> JSONResponse:
-        details = []
-        for err in exc.errors():
-            loc = " -> ".join(str(part) for part in err["loc"] if part != "body")
-            msg = err["msg"]
-            details.append(f"{loc}: {msg}" if loc else msg)
         return JSONResponse(
             status_code=400,
             content={
                 "error_code": ErrorCode.VALIDATION_ERROR,
-                "detail": "; ".join(details),
+                "detail": _format_validation_detail(exc),
             },
         )
 
-    @app.exception_handler(ParsingFailedException)
+    @app.exception_handler(ParsingFailedError)
     async def parsing_failed_handler(
         request: Request,
-        exc: ParsingFailedException,
+        exc: ParsingFailedError,
     ) -> JSONResponse:
         return JSONResponse(
             status_code=400,
@@ -74,10 +82,10 @@ def register_exception_handlers(app: FastAPI) -> None:
             },
         )
 
-    @app.exception_handler(SourceNotFoundException)
+    @app.exception_handler(SourceNotFoundError)
     async def source_not_found_handler(
         request: Request,
-        exc: SourceNotFoundException,
+        exc: SourceNotFoundError,
     ) -> JSONResponse:
         return JSONResponse(
             status_code=404,
@@ -87,10 +95,10 @@ def register_exception_handlers(app: FastAPI) -> None:
             },
         )
 
-    @app.exception_handler(ResolutionTimeoutException)
+    @app.exception_handler(ResolutionTimeoutError)
     async def resolution_timeout_handler(
         request: Request,
-        exc: ResolutionTimeoutException,
+        exc: ResolutionTimeoutError,
     ) -> JSONResponse:
         return JSONResponse(
             status_code=504,
@@ -131,6 +139,10 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request,
         exc: Exception,
     ) -> JSONResponse:
+        _log.exception(
+            "Unhandled error processing %s %s", request.method, request.url,
+            exc_info=exc,
+        )
         return JSONResponse(
             status_code=500,
             content={

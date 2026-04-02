@@ -107,7 +107,7 @@ class OutcomeIntegrationWorker:
                                 exc_info=exc,
                                 extra={"ere_request_id": message.ere_request_id},
                             )
-                        except Exception as exc:  # noqa: BLE001
+                        except Exception as exc:
                             _log.error(
                                 "Unexpected error processing ERE outcome",
                                 exc_info=exc,

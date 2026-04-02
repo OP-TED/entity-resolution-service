@@ -26,9 +26,7 @@ from ers.request_registry.adapters.records_repository import (
 )
 from ers.request_registry.domain.records import LookupRequestRecord
 from ers.request_registry.services.request_registry_service import RequestRegistryService
-
-_PARSE_PATH = "ers.request_registry.services.request_registry_service.parse_entity_mention"
-from ers.resolution_coordinator.domain.exceptions import SourceNotFoundException
+from ers.resolution_coordinator.domain.exceptions import SourceNotFoundError
 from ers.resolution_coordinator.services.async_resolution_waiter import AsyncResolutionWaiter
 from ers.resolution_coordinator.services.bulk_refresh_coordinator_service import (
     BulkRefreshCoordinatorService,
@@ -80,13 +78,12 @@ def triad_key(mention: EntityMention) -> str:
 
 @pytest.fixture()
 def registry_service(mongo_db):
-    with patch(_PARSE_PATH, return_value={"type": "Organization"}):
-        yield RequestRegistryService(
-            resolution_repo=MongoResolutionRequestRepository(mongo_db),
-            lookup_repo=MongoLookupStateRepository(mongo_db),
-            hasher=SHA256ContentHasher(),
-            rdf_config=None,
-        )
+    yield RequestRegistryService(
+        resolution_repo=MongoResolutionRequestRepository(mongo_db),
+        lookup_repo=MongoLookupStateRepository(mongo_db),
+        hasher=SHA256ContentHasher(),
+        mention_parser=lambda _em: {"type": "Organization"},
+    )
 
 
 @pytest.fixture()
@@ -331,7 +328,7 @@ async def test_it006_bulk_decomposition(
 
     async def _notify_all():
         await asyncio.sleep(0.05)
-        for i, (mention, key) in enumerate(zip(mentions, keys)):
+        for i, (mention, key) in enumerate(zip(mentions, keys, strict=True)):
             cluster = ClusterReference(
                 cluster_id=f"cl-bulk-{i}", confidence_score=0.9, similarity_score=0.85
             )
@@ -454,14 +451,14 @@ async def test_it008_bulk_refresh_first_lookup(
 
 
 # ---------------------------------------------------------------------------
-# IT-009: Bulk refresh — unknown source raises SourceNotFoundException
+# IT-009: Bulk refresh — unknown source raises SourceNotFoundError
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
 async def test_it009_bulk_refresh_unknown_source(bulk_refresh):
-    """IT-009: Source has no requests in registry → SourceNotFoundException raised."""
-    with pytest.raises(SourceNotFoundException) as exc_info:
+    """IT-009: Source has no requests in registry → SourceNotFoundError raised."""
+    with pytest.raises(SourceNotFoundError) as exc_info:
         await bulk_refresh.refresh_bulk("UNKNOWN_SOURCE")
 
     assert exc_info.value.source_id == "UNKNOWN_SOURCE"

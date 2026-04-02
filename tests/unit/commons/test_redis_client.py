@@ -9,19 +9,13 @@ Failure-path tests (connection errors, close behaviour) use AsyncMock in place
 of aioredis.Redis to avoid needing a real connection.
 """
 import asyncio
+import contextlib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import redis.asyncio as aioredis
-from redis.exceptions import ConnectionError as RedisConnectionError
-
-from ers import config
-from ers.commons.adapters.redis_client import (
-    RedisConnectionConfig,
-    RedisEREClient,
-)
 from erspec.models.ere import (
     ClusterReference,
     EntityMention,
@@ -29,12 +23,20 @@ from erspec.models.ere import (
     EntityMentionResolutionRequest,
     EntityMentionResolutionResponse,
 )
+from redis.exceptions import ConnectionError as RedisConnectionError
+
+from ers import config
+from ers.commons.adapters.redis_client import (
+    RedisConnectionConfig,
+    RedisEREClient,
+)
+
 
 @pytest.fixture
 def dummy_request() -> EntityMentionResolutionRequest:
     return EntityMentionResolutionRequest(
         ere_request_id="m1:01",
-        timestamp=datetime(2026, 3, 1, 12, 34, 56, 123456, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 3, 1, 12, 34, 56, 123456, tzinfo=UTC),
         entity_mention=EntityMention(
             identifiedBy=EntityMentionIdentifier(
                 request_id="m1",
@@ -51,7 +53,7 @@ def dummy_request() -> EntityMentionResolutionRequest:
 def dummy_response() -> EntityMentionResolutionResponse:
     return EntityMentionResolutionResponse(
         ere_request_id="m1:01",
-        timestamp=datetime(2026, 3, 1, 12, 34, 56, 234567, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 3, 1, 12, 34, 56, 234567, tzinfo=UTC),
         entity_mention_id=EntityMentionIdentifier(
             request_id="m1",
             source_id="DEMO",
@@ -80,10 +82,8 @@ async def mock_ere_service(redis_client: aioredis.Redis, dummy_response: EntityM
     yield
     if not task.done():
         task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await task
-    except asyncio.CancelledError:
-        pass
 
 
 class TestPushThenPull:
@@ -164,9 +164,8 @@ class TestContextManager:
     async def test_closes_on_exception(self):
         mock_redis = AsyncMock(spec=aioredis.Redis)
 
-        with patch("ers.commons.adapters.redis_client.aioredis.Redis", return_value=mock_redis):
-            with pytest.raises(RuntimeError):
-                async with RedisEREClient(config_or_client=RedisConnectionConfig.from_settings(config)):
-                    raise RuntimeError("something went wrong")
+        with patch("ers.commons.adapters.redis_client.aioredis.Redis", return_value=mock_redis), pytest.raises(RuntimeError):
+            async with RedisEREClient(config_or_client=RedisConnectionConfig.from_settings(config)):
+                raise RuntimeError("something went wrong")
 
         mock_redis.aclose.assert_called_once()

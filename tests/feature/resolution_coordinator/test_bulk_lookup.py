@@ -22,7 +22,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 from ers.commons.domain.data_transfer_objects import CursorPage
 from ers.request_registry.domain.records import LookupRequestRecord
 from ers.request_registry.services.request_registry_service import RequestRegistryService
-from ers.resolution_coordinator.domain.exceptions import SourceNotFoundException
+from ers.resolution_coordinator.domain.exceptions import SourceNotFoundError
 from ers.resolution_coordinator.services.bulk_refresh_coordinator_service import (
     BulkRefreshCoordinatorService,
 )
@@ -227,8 +227,8 @@ def typed_error_returned(ctx, error_type):
     exc = ctx["raised_exception"]
     assert exc is not None, "Expected an exception but none was raised"
     if error_type == "not_found":
-        assert isinstance(exc, SourceNotFoundException), (
-            f"Expected SourceNotFoundException, got {type(exc).__name__}"
+        assert isinstance(exc, SourceNotFoundError), (
+            f"Expected SourceNotFoundError, got {type(exc).__name__}"
         )
     elif error_type == "service":
         assert isinstance(exc, RepositoryConnectionError), (

@@ -1,4 +1,6 @@
 """Smoke tests for Resolution Decision Store span extractor registration."""
+from datetime import UTC
+
 from erspec.models.core import Decision
 
 import ers.resolution_decision_store.adapters.span_extractors  # noqa: F401 — registers extractors
@@ -10,7 +12,8 @@ def test_decision_extractor_is_registered():
 
 
 def test_decision_extractor_returns_expected_attributes():
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from erspec.models.core import ClusterReference, EntityMentionIdentifier
 
     decision = Decision(
@@ -22,8 +25,8 @@ def test_decision_extractor_returns_expected_attributes():
             cluster_id="c1", confidence_score=0.9, similarity_score=0.85
         ),
         candidates=[],
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     extractor = _extractors[Decision]
     attrs = extractor(decision)

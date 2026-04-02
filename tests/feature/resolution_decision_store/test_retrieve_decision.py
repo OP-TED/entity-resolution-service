@@ -1,6 +1,6 @@
 """Step definitions for: retrieve_decision.feature"""
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -63,7 +63,7 @@ def make_decision(now, cluster_id="c1"):
 @given("a stored decision for a known triad")
 def step_stored_decision(ctx, mock_repo):
     ctx["identifier"] = make_identifier()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     ctx["stored_decision"] = make_decision(now)
     mock_repo.find_by_triad = AsyncMock(return_value=ctx["stored_decision"])
 

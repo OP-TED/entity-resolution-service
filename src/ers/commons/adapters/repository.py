@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, TypeVar
 
+from pydantic import BaseModel
 from pymongo.asynchronous.database import AsyncDatabase
 
-T = TypeVar("T")
+T = TypeVar("T", bound=BaseModel)
 ID = TypeVar("ID")
 
 

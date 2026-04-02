@@ -5,12 +5,11 @@ Resolution Coordinator (EPIC-06). No repositories or lower-level services
 are exposed directly to the REST API layer.
 """
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers import config
 from ers.commons.adapters.hasher import SHA256ContentHasher
 from ers.commons.adapters.redis_client import RedisEREClient
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
@@ -18,6 +17,7 @@ from ers.ers_rest_api.services.lookup_service import LookupService
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
 from ers.ers_rest_api.services.resolve_service import ResolveService
 from ers.rdf_mention_parser.domain.rdf_mapping_config import RDFMappingConfig
+from ers.rdf_mention_parser.services.mention_parser_service import parse_entity_mention
 from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
@@ -45,7 +45,7 @@ from ers.resolution_decision_store.services.decision_store_service import (
 
 
 def _get_database(request: Request) -> AsyncDatabase:
-    return request.app.state.mongo_db
+    return cast(AsyncDatabase, request.app.state.mongo_db)
 
 
 # ---------------------------------------------------------------------------
@@ -54,11 +54,11 @@ def _get_database(request: Request) -> AsyncDatabase:
 
 
 def _get_waiter(request: Request) -> AsyncResolutionWaiter:
-    return request.app.state.waiter
+    return cast(AsyncResolutionWaiter, request.app.state.waiter)
 
 
 def _get_redis_client(request: Request) -> RedisEREClient:
-    return request.app.state.redis_client
+    return cast(RedisEREClient, request.app.state.redis_client)
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ def _get_redis_client(request: Request) -> RedisEREClient:
 
 def _get_rdf_config(request: Request) -> RDFMappingConfig:
     """Return the RDF mapping config from app.state (loaded once in lifespan)."""
-    return request.app.state.rdf_config
+    return cast(RDFMappingConfig, request.app.state.rdf_config)
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +90,7 @@ async def _get_request_registry_service(
         resolution_repo=MongoResolutionRequestRepository(db),
         lookup_repo=MongoLookupStateRepository(db),
         hasher=SHA256ContentHasher(),
-        rdf_config=rdf_config,
+        mention_parser=lambda em: parse_entity_mention(em, rdf_config),
     )
 
 

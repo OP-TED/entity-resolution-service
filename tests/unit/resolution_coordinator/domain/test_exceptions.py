@@ -4,15 +4,15 @@ import pytest
 
 from ers.commons.services.exceptions import ApplicationError
 from ers.resolution_coordinator.domain.exceptions import (
-    CoordinatorException,
-    EnginePublishFailedException,
-    ParsingFailedException,
-    ResolutionTimeoutException,
-    SourceNotFoundException,
+    CoordinatorError,
+    EnginePublishFailedError,
+    ParsingFailedError,
+    ResolutionTimeoutError,
+    SourceNotFoundError,
 )
 
-ALL_SIMPLE_EXCEPTIONS = [ResolutionTimeoutException]
-ALL_CAUSE_EXCEPTIONS = [ParsingFailedException, EnginePublishFailedException]
+ALL_SIMPLE_EXCEPTIONS = [ResolutionTimeoutError]
+ALL_CAUSE_EXCEPTIONS = [ParsingFailedError, EnginePublishFailedError]
 ALL_EXCEPTIONS = ALL_SIMPLE_EXCEPTIONS + ALL_CAUSE_EXCEPTIONS
 
 
@@ -30,14 +30,14 @@ class TestExceptionInstantiation:
 
     @pytest.mark.parametrize("exc_class", ALL_SIMPLE_EXCEPTIONS)
     def test_inherits_from_coordinator_exception(self, exc_class):
-        assert issubclass(exc_class, CoordinatorException)
+        assert issubclass(exc_class, CoordinatorError)
 
     @pytest.mark.parametrize("exc_class", ALL_CAUSE_EXCEPTIONS)
     def test_cause_exceptions_inherit_from_coordinator_exception(self, exc_class):
-        assert issubclass(exc_class, CoordinatorException)
+        assert issubclass(exc_class, CoordinatorError)
 
     def test_coordinator_exception_inherits_from_application_error(self):
-        assert issubclass(CoordinatorException, ApplicationError)
+        assert issubclass(CoordinatorError, ApplicationError)
 
     @pytest.mark.parametrize("exc_class", ALL_SIMPLE_EXCEPTIONS)
     def test_str_includes_message(self, exc_class):
@@ -56,54 +56,54 @@ class TestExceptionInstantiation:
             raise exc_class("raised!", RuntimeError("cause"))
 
 
-class TestParsingFailedException:
+class TestParsingFailedError:
     def test_stores_cause_attribute(self):
         original = ValueError("parse error")
-        exc = ParsingFailedException("failed to parse", original)
+        exc = ParsingFailedError("failed to parse", original)
         assert exc.cause is original
 
     def test_cause_is_not_re_raised(self):
         original = ValueError("parse error")
-        exc = ParsingFailedException("failed", original)
+        exc = ParsingFailedError("failed", original)
         # cause is stored but not set as __cause__ automatically
         assert exc.__cause__ is None
 
     def test_message_accessible(self):
-        exc = ParsingFailedException("parsing failed", ValueError("x"))
+        exc = ParsingFailedError("parsing failed", ValueError("x"))
         assert exc.message == "parsing failed"
 
 
-class TestEnginePublishFailedException:
+class TestEnginePublishFailedError:
     def test_stores_cause_attribute(self):
         original = ConnectionError("redis down")
-        exc = EnginePublishFailedException("publish failed", original)
+        exc = EnginePublishFailedError("publish failed", original)
         assert exc.cause is original
 
     def test_cause_is_not_re_raised(self):
         original = ConnectionError("redis down")
-        exc = EnginePublishFailedException("failed", original)
+        exc = EnginePublishFailedError("failed", original)
         assert exc.__cause__ is None
 
     def test_message_accessible(self):
-        exc = EnginePublishFailedException("engine publish failed", ConnectionError("x"))
+        exc = EnginePublishFailedError("engine publish failed", ConnectionError("x"))
         assert exc.message == "engine publish failed"
 
 
-class TestSourceNotFoundException:
+class TestSourceNotFoundError:
     def test_stores_source_id_attribute(self):
-        exc = SourceNotFoundException("SRC_X")
+        exc = SourceNotFoundError("SRC_X")
         assert exc.source_id == "SRC_X"
 
     def test_is_coordinator_exception(self):
-        assert issubclass(SourceNotFoundException, CoordinatorException)
+        assert issubclass(SourceNotFoundError, CoordinatorError)
 
     def test_message_includes_source_id(self):
-        exc = SourceNotFoundException("SRC_X")
+        exc = SourceNotFoundError("SRC_X")
         assert "SRC_X" in str(exc)
 
     def test_can_be_raised_and_caught(self):
-        with pytest.raises(SourceNotFoundException):
-            raise SourceNotFoundException("SRC_X")
+        with pytest.raises(SourceNotFoundError):
+            raise SourceNotFoundError("SRC_X")
 
 
 class TestCoordinatorConfig:

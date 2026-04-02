@@ -1,10 +1,12 @@
 """Request Registry services package."""
 
-from ers.request_registry.services.exceptions import (
+from ers.request_registry.domain.errors import (
     DuplicateTriadError,
-    IdempotencyConflictError,
     RepositoryConnectionError,
     RepositoryOperationError,
+)
+from ers.request_registry.services.exceptions import (
+    IdempotencyConflictError,
     SnapshotRegressionError,
 )
 

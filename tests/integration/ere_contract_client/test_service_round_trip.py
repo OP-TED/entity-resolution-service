@@ -4,12 +4,12 @@ Uses testcontainers to spin up a Redis instance. Skips if Docker is unavailable.
 """
 
 import pytest
+from erspec.models.core import EntityMentionIdentifier
+from erspec.models.ere import EntityMention, EntityMentionResolutionRequest
 
 from ers import config
 from ers.commons.adapters.redis_client import RedisEREClient
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
-from erspec.models.core import EntityMentionIdentifier
-from erspec.models.ere import EntityMention, EntityMentionResolutionRequest
 
 
 @pytest.fixture

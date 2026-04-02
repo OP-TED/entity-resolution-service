@@ -3,13 +3,13 @@
 import logging
 from datetime import UTC, datetime
 
-from opentelemetry import trace
 from erspec.models.core import Decision
+from opentelemetry import trace
 
 from ers.commons.adapters.tracing import trace_function
 from ers.commons.domain.data_transfer_objects import CursorPage
 from ers.request_registry.services.request_registry_service import RequestRegistryService
-from ers.resolution_coordinator.domain.exceptions import SourceNotFoundException
+from ers.resolution_coordinator.domain.exceptions import SourceNotFoundError
 from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
 
 _log = logging.getLogger(__name__)
@@ -51,14 +51,14 @@ class BulkRefreshCoordinatorService:  # pylint: disable=too-few-public-methods
             A CursorPage of Decisions updated since the last snapshot.
 
         Raises:
-            SourceNotFoundException: If the source has no requests in the registry.
+            SourceNotFoundError: If the source has no requests in the registry.
             RepositoryConnectionError: If the Decision Store is unavailable.
             SnapshotRegressionError: If the snapshot advances backwards (should not
                 happen under normal single-caller usage).
         """
         exists = await self._registry_service.source_has_requests(source_id)
         if not exists:
-            raise SourceNotFoundException(source_id)
+            raise SourceNotFoundError(source_id)
 
         lookup_state = await self._registry_service.get_lookup_state(source_id)
         updated_since = lookup_state.last_snapshot if lookup_state else None
@@ -70,7 +70,8 @@ class BulkRefreshCoordinatorService:  # pylint: disable=too-few-public-methods
             page_size=page_size,
         )
 
-        await self._registry_service.advance_snapshot(source_id, datetime.now(UTC))
+        if page.next_cursor is None:
+            await self._registry_service.advance_snapshot(source_id, datetime.now(UTC))
 
         return page
 
@@ -99,7 +100,7 @@ async def refresh_bulk(
         A CursorPage of Decisions updated since the last snapshot.
 
     Raises:
-        SourceNotFoundException: If the source has no requests in the registry.
+        SourceNotFoundError: If the source has no requests in the registry.
         RepositoryConnectionError: If the Decision Store is unavailable.
     """
     trace.get_current_span().set_attribute(

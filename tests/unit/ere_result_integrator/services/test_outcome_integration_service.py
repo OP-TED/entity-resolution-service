@@ -19,7 +19,6 @@ from ers.request_registry.services.request_registry_service import RequestRegist
 from ers.resolution_decision_store.domain.errors import StaleOutcomeError
 from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

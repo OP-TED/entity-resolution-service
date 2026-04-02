@@ -35,7 +35,7 @@ from ers.ers_rest_api.services.lookup_service import LookupService
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
 from ers.ers_rest_api.services.resolve_service import ResolveService
 from ers.request_registry.services.exceptions import IdempotencyConflictError
-from ers.resolution_coordinator.domain.exceptions import ParsingFailedException
+from ers.resolution_coordinator.domain.exceptions import ParsingFailedError
 
 # ---------------------------------------------------------------------------
 # NOTE: We use starlette.testclient.TestClient (sync) rather than
@@ -350,7 +350,7 @@ def coordinator_returns_provisional(ctx, provisional_id, reason):
 
 @given("the Resolution Coordinator raises a parsing error for unsupported entity type")
 def coordinator_raises_parsing_error(ctx):
-    ctx["resolve_service"].handle_resolve.side_effect = ParsingFailedException(
+    ctx["resolve_service"].handle_resolve.side_effect = ParsingFailedError(
         message=f"Unsupported entity type: {ctx['entity_type']}",
         cause=ValueError(f"Unsupported entity type: {ctx['entity_type']}"),
     )
@@ -463,7 +463,7 @@ def _build_bulk_meta_and_request(entity_type: str, datatable: list) -> tuple[lis
     meta = []
     mentions = []
     for row_values in datatable[1:]:
-        row = dict(zip(headers, row_values))
+        row = dict(zip(headers, row_values, strict=True))
         content = row.get("content_fixture", "") or ""
         meta.append(
             {
@@ -554,7 +554,7 @@ def coordinator_returns_per_mention_outcomes(ctx, datatable):
     headers = datatable[0]
     outcome_map = {}
     for row_values in datatable[1:]:
-        row = dict(zip(headers, row_values))
+        row = dict(zip(headers, row_values, strict=True))
         outcome_map[row["request_id"]] = {
             "outcome": row["outcome"],
             "cluster_id": row["cluster_id"],

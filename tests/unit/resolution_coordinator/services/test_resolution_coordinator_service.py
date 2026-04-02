@@ -26,8 +26,8 @@ from ers.request_registry.services.request_registry_service import (
     RequestRegistryService,
 )
 from ers.resolution_coordinator.domain.exceptions import (
-    ParsingFailedException,
-    ResolutionTimeoutException,
+    ParsingFailedError,
+    ResolutionTimeoutError,
 )
 from ers.resolution_coordinator.services.async_resolution_waiter import (
     AsyncResolutionWaiter,
@@ -42,7 +42,6 @@ from ers.resolution_decision_store.domain.errors import (
 from ers.resolution_decision_store.services.decision_store_service import (
     DecisionStoreService,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -292,7 +291,7 @@ class TestResolveSingleParseFailure:
         registry_svc.register_resolution_request.side_effect = MalformedRDFError(
             "application/rdf+xml"
         )
-        with pytest.raises(ParsingFailedException) as exc_info:
+        with pytest.raises(ParsingFailedError) as exc_info:
             await coordinator.resolve_single(make_entity_mention())
         assert isinstance(exc_info.value.cause, MalformedRDFError)
         publish_svc.publish_request.assert_not_called()
@@ -303,7 +302,7 @@ class TestResolveSingleParseFailure:
         registry_svc.register_resolution_request.side_effect = ValueError(
             "content must not be empty"
         )
-        with pytest.raises(ParsingFailedException) as exc_info:
+        with pytest.raises(ParsingFailedError) as exc_info:
             await coordinator.resolve_single(make_entity_mention())
         assert isinstance(exc_info.value.cause, ValueError)
 
@@ -321,7 +320,7 @@ class TestResolveSingleDecisionStoreDown:
         decision_svc.store_decision.side_effect = RepositoryConnectionError(
             "MongoDB down"
         )
-        with pytest.raises(ResolutionTimeoutException, match="Cannot persist"):
+        with pytest.raises(ResolutionTimeoutError, match="Cannot persist"):
             await coordinator.resolve_single(make_entity_mention())
 
 
@@ -384,7 +383,7 @@ class TestResolveBulk:
         results = await coordinator.resolve_bulk(mentions)
         assert len(results) == 3
         assert isinstance(results[0], Decision)
-        assert isinstance(results[1], ParsingFailedException)
+        assert isinstance(results[1], ParsingFailedError)
         assert isinstance(results[2], Decision)
 
     async def test_empty_input(self, coordinator):
@@ -409,7 +408,7 @@ class TestResolveBulk:
         decision_svc.get_decision_by_triad.return_value = None
 
         mentions = [make_entity_mention("S", f"r{i}", "Org") for i in range(3)]
-        with pytest.raises(ResolutionTimeoutException, match="Bulk resolution"):
+        with pytest.raises(ResolutionTimeoutError, match="Bulk resolution"):
             await svc.resolve_bulk(mentions)
 
 

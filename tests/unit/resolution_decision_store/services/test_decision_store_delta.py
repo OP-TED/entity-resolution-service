@@ -5,19 +5,19 @@ ers.commons.domain.data_transfer_objects was missing source_id and updated_since
 Both fields were added as optional (None defaults), and _build_query in
 MongoDecisionRepository was extended to translate them into MongoDB predicates.
 """
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import create_autospec
 
 import pytest
-from erspec.models.core import Decision, EntityMentionIdentifier, ClusterReference
+from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
 
 from ers import config
-from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams, DecisionFilters
+from ers.commons.domain.data_transfer_objects import CursorPage
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 from ers.resolution_decision_store.domain.errors import RepositoryConnectionError
 from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def make_decision(source_id: str = "SRC_A") -> Decision:

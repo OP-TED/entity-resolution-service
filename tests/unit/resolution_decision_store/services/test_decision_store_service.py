@@ -1,5 +1,5 @@
 """Unit tests for DecisionStoreService."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import create_autospec
 
 import pytest
@@ -7,7 +7,7 @@ from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifi
 
 from ers import config
 from ers.commons.domain.cursor import encode_cursor
-from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
+from ers.commons.domain.data_transfer_objects import CursorPage
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 from ers.resolution_decision_store.domain.errors import StaleOutcomeError
 from ers.resolution_decision_store.services.decision_store_service import (
@@ -27,7 +27,7 @@ def make_cluster(cluster_id="c1"):
 
 
 def make_decision(now=None):
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     return Decision(
         id="hash123",
         about_entity_mention=make_identifier(),
@@ -50,14 +50,14 @@ def service(mock_repo):
 
 class TestStoreDecision:
     async def test_delegates_to_repository(self, service, mock_repo):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         mock_repo.upsert_decision.return_value = make_decision(now)
         result = await service.store_decision(make_identifier(), make_cluster(), [], now)
         assert isinstance(result, Decision)
         mock_repo.upsert_decision.assert_called_once()
 
     async def test_truncates_candidates_to_max(self, service, mock_repo):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         mock_repo.upsert_decision.return_value = make_decision(now)
         many = [make_cluster(f"c{i}") for i in range(10)]
         await service.store_decision(make_identifier(), make_cluster(), many, now)
@@ -65,7 +65,7 @@ class TestStoreDecision:
         assert len(kwargs["candidates"]) == config.DECISION_STORE_MAX_CANDIDATES
 
     async def test_does_not_truncate_when_within_limit(self, service, mock_repo):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         mock_repo.upsert_decision.return_value = make_decision(now)
         few = [make_cluster(f"c{i}") for i in range(2)]
         await service.store_decision(make_identifier(), make_cluster(), few, now)
@@ -78,7 +78,7 @@ class TestStoreDecision:
         )
         with pytest.raises(StaleOutcomeError):
             await service.store_decision(
-                make_identifier(), make_cluster(), [], datetime.now(timezone.utc)
+                make_identifier(), make_cluster(), [], datetime.now(UTC)
             )
 
 
@@ -114,7 +114,7 @@ class TestQueryDecisionsPaginated:
 
     async def test_passes_cursor_to_repository(self, service, mock_repo):
         mock_repo.find_with_filters.return_value = CursorPage(results=[], next_cursor=None)
-        cursor = encode_cursor(datetime.now(timezone.utc), "hash123")
+        cursor = encode_cursor(datetime.now(UTC), "hash123")
         await service.query_decisions_paginated(cursor=cursor)
         _, kwargs = mock_repo.find_with_filters.call_args
         assert kwargs["cursor_params"].cursor == cursor
@@ -128,7 +128,7 @@ class TestQueryDecisionsPaginated:
 
 class TestPublicAPIFunctions:
     async def test_store_decision_delegates_to_service(self, service, mock_repo):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         mock_repo.upsert_decision.return_value = make_decision(now)
         result = await store_decision(
             make_identifier(), make_cluster(), [], now, service=service

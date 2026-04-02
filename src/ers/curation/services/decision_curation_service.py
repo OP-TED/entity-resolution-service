@@ -1,12 +1,11 @@
 import asyncio
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Collection, Coroutine
 from typing import Any
 
 from erspec.models.core import Decision, EntityMention
 
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.commons.services.exceptions import NotFoundError
-from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 from ers.curation.adapters.entity_mention_repository import (
     EntityMentionCurationRepository,
 )
@@ -20,6 +19,7 @@ from ers.curation.domain.data_transfer_objects import (
 )
 from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.services.user_action_service import UserActionService
+from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 
 
 class DecisionCurationService:
@@ -121,20 +121,20 @@ class DecisionCurationService:
         )
 
     async def bulk_accept_decisions(
-        self, decision_ids: list[str], actor: str
+        self, decision_ids: Collection[str], actor: str
     ) -> BulkActionResponse:
         """Accept multiple decisions concurrently."""
         return await self._execute_bulk_action(decision_ids, actor, self.accept_decision)
 
     async def bulk_reject_decisions(
-        self, decision_ids: list[str], actor: str
+        self, decision_ids: Collection[str], actor: str
     ) -> BulkActionResponse:
         """Reject multiple decisions concurrently."""
         return await self._execute_bulk_action(decision_ids, actor, self.reject_decision)
 
     async def _execute_bulk_action(
         self,
-        decision_ids: list[str],
+        decision_ids: Collection[str],
         actor: str,
         action: Callable[[str, str], Coroutine[Any, Any, None]],
     ) -> BulkActionResponse:

@@ -4,12 +4,12 @@ import pytest
 from erspec.models.core import Decision
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ers.commons.domain.data_transfer_objects import CursorParams
-from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 from ers.commons.domain.data_transfer_objects import (
+    CursorParams,
     DecisionFilters,
     DecisionOrdering,
 )
+from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 from tests.unit.factories import (
     ClusterReferenceFactory,
     DecisionFactory,

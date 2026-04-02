@@ -10,7 +10,7 @@ from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifi
 from ers.commons.domain.data_transfer_objects import CursorPage
 from ers.request_registry.domain.records import LookupRequestRecord
 from ers.request_registry.services.request_registry_service import RequestRegistryService
-from ers.resolution_coordinator.domain.exceptions import SourceNotFoundException
+from ers.resolution_coordinator.domain.exceptions import SourceNotFoundError
 from ers.resolution_coordinator.services.bulk_refresh_coordinator_service import (
     BulkRefreshCoordinatorService,
 )
@@ -93,7 +93,7 @@ class TestRefreshBulk:
         registry_svc.source_has_requests.return_value = False
         svc = BulkRefreshCoordinatorService(registry_svc, decision_svc)
 
-        with pytest.raises(SourceNotFoundException) as exc_info:
+        with pytest.raises(SourceNotFoundError) as exc_info:
             await svc.refresh_bulk("UNKNOWN")
 
         assert exc_info.value.source_id == "UNKNOWN"
@@ -168,3 +168,13 @@ class TestRefreshBulk:
         assert result is expected_page
         assert len(result.results) == 3
         assert result.next_cursor == "next-tok"
+
+    async def test_snapshot_not_advanced_mid_pagination(self, registry_svc, decision_svc):
+        """Snapshot must NOT advance when next_cursor is set — pagination is incomplete."""
+        mid_page = CursorPage(results=[_make_decision()], next_cursor="tok2")
+        decision_svc.query_decisions_delta.return_value = mid_page
+        svc = BulkRefreshCoordinatorService(registry_svc, decision_svc)
+
+        await svc.refresh_bulk("SRC_A")
+
+        registry_svc.advance_snapshot.assert_not_awaited()

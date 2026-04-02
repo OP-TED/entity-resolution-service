@@ -126,7 +126,7 @@ def no_signal_timeout(ctx):
         try:
             await asyncio.wait_for(event.wait(), timeout=0.05)
             return False
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return True
 
     ctx["timed_out"] = asyncio.run(_wait_with_timeout())

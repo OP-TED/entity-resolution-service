@@ -25,11 +25,10 @@ from erspec.models.core import (
 from pytest_bdd import given, parsers, scenario, then, when
 
 from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
-from ers.ere_contract_client.domain.errors import ChannelUnavailableError
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.rdf_mention_parser.domain.exceptions import MalformedRDFError
 from ers.request_registry.services.request_registry_service import RequestRegistryService
-from ers.resolution_coordinator.domain.exceptions import ParsingFailedException
+from ers.resolution_coordinator.domain.exceptions import ParsingFailedError
 from ers.resolution_coordinator.services.async_resolution_waiter import AsyncResolutionWaiter
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
     ResolutionCoordinatorService,
@@ -146,7 +145,7 @@ def ere_execution_window_configured(ctx):
 @given(parsers.parse("a bulk resolve request containing {mention_count:d} entity mentions"))
 def bulk_request_with_n_mentions(ctx, mention_count):
     ctx["mentions"] = [
-        _make_mention(f"BULK_SYS", f"req-bulk-{i:03d}")
+        _make_mention("BULK_SYS", f"req-bulk-{i:03d}")
         for i in range(mention_count)
     ]
 
@@ -173,8 +172,6 @@ def n_mentions_malformed(ctx, count):
     mentions = ctx["mentions"]
     # Last `count` mentions will raise a parsing error.
     error_indices = set(range(len(mentions) - count, len(mentions)))
-
-    original_register = ctx["registry_svc"].register_resolution_request
 
     call_counter = {"n": 0}
 
@@ -319,8 +316,8 @@ def mention_at_position_returns(ctx, position, result_type):
             f"{result.current_placement.cluster_id}"
         )
     elif result_type == "parsing failure error":
-        assert isinstance(result, ParsingFailedException), (
-            f"Expected ParsingFailedException at index {idx}, got {type(result).__name__}"
+        assert isinstance(result, ParsingFailedError), (
+            f"Expected ParsingFailedError at index {idx}, got {type(result).__name__}"
         )
     elif result_type == "provisional singleton identifier":
         assert isinstance(result, Decision), f"Expected Decision at index {idx}, got {type(result)}"

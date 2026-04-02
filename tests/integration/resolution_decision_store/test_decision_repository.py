@@ -1,6 +1,6 @@
 """Integration tests for MongoDecisionRepository against real MongoDB."""
 import asyncio
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from erspec.models.core import ClusterReference, EntityMentionIdentifier
@@ -39,7 +39,7 @@ async def repo(mongo_db):
 @pytest.mark.integration
 async def test_it001_store_and_retrieve(repo):
     """IT-001: Store a decision and retrieve it by triad."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stored = await repo.upsert_decision(
         make_identifier(), make_cluster(), [], now
     )
@@ -53,7 +53,7 @@ async def test_it001_store_and_retrieve(repo):
 @pytest.mark.integration
 async def test_it002_staleness_rejection(repo):
     """IT-002: Storing with an older timestamp raises StaleOutcomeError."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     await repo.upsert_decision(make_identifier(), make_cluster(), [], now)
     with pytest.raises(StaleOutcomeError):
         await repo.upsert_decision(
@@ -68,7 +68,7 @@ async def test_it002_staleness_rejection(repo):
 @pytest.mark.integration
 async def test_it003_created_at_preserved_on_replacement(repo):
     """IT-003: Replacing a decision preserves created_at; advances updated_at."""
-    t1 = datetime.now(timezone.utc).replace(microsecond=0)
+    t1 = datetime.now(UTC).replace(microsecond=0)
     t2 = t1 + timedelta(seconds=5)
     await repo.upsert_decision(make_identifier(), make_cluster("c1"), [], t1)
     updated = await repo.upsert_decision(
@@ -84,7 +84,7 @@ async def test_it003_created_at_preserved_on_replacement(repo):
 @pytest.mark.integration
 async def test_it004_cursor_pagination(repo):
     """IT-004: Cursor pagination traverses all decisions in correct order."""
-    base = datetime.now(timezone.utc)
+    base = datetime.now(UTC)
     for i in range(5):
         ident = make_identifier(source_id=f"s{i}")
         await repo.upsert_decision(
@@ -112,7 +112,7 @@ async def test_it004_cursor_pagination(repo):
 @pytest.mark.integration
 async def test_it005_concurrent_upsert(repo):
     """IT-005: Concurrent upserts — at least one succeeds; no data corruption."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     results = await asyncio.gather(
         repo.upsert_decision(make_identifier(), make_cluster("c1"), [], now),
         repo.upsert_decision(make_identifier(), make_cluster("c2"), [], now),
