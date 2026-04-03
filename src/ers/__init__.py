@@ -75,7 +75,7 @@ class RDFMentionParserConfig:
     def ERS_PARSER_MAX_CONTENT_LENGTH(self, config_value: str) -> int:
         return int(config_value)
 
-    @env_property(default_value="rdf_mention_config.yaml")
+    @env_property(default_value="tests/test_data/sample_rdf_mapping.yaml")
     def RDF_MENTION_CONFIG_FILE(self, config_value: str) -> str:
         return config_value
 
@@ -112,6 +112,10 @@ class RedisConfig:
     @env_property(default_value="0")
     def REDIS_DB(self, config_value: str) -> int:
         return int(config_value)
+
+    @env_property(default_value="changeme")
+    def REDIS_PASSWORD(self, config_value: str) -> str:
+        return config_value
 
     @env_property(default_value="ere_requests")
     def ERE_REQUEST_CHANNEL(self, config_value: str) -> str:

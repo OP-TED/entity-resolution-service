@@ -13,10 +13,11 @@ log = logging.getLogger(__name__)
 class RedisConnectionConfig:
     """Simple data class to hold Redis connection configuration."""
 
-    def __init__(self, host: str, port: int, db: int):
+    def __init__(self, host: str, port: int, db: int, password: str | None = None):
         self.host = host
         self.port = port
         self.db = db
+        self.password = password
 
     @classmethod
     def from_settings(cls, settings) -> "RedisConnectionConfig":
@@ -28,7 +29,12 @@ class RedisConnectionConfig:
         Returns:
             A RedisConnectionConfig populated from settings.
         """
-        return cls(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)
+        return cls(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            db=settings.REDIS_DB,
+            password=settings.REDIS_PASSWORD,
+        )
 
     def __str__(self) -> str:
         return (
@@ -118,7 +124,10 @@ class RedisEREClient(AbstractClient):
             self.config = config_or_client
             log.info("Redis ERE client: connecting to %s", self.config)
             self._redis_client = aioredis.Redis(
-                host=self.config.host, port=self.config.port, db=self.config.db
+                host=self.config.host,
+                port=self.config.port,
+                db=self.config.db,
+                password=self.config.password,
             )
         else:
             log.info("Redis ERE client: using existing redis client #%s", id(config_or_client))
