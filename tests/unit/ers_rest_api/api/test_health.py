@@ -6,4 +6,9 @@ class TestHealth:
         response = await client.get("/health")
 
         assert response.status_code == 200
-        assert response.json() == {"status": "ok"}
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["supported_entity_types"] == [
+            {"name": "ORGANISATION", "rdf_type": "org:Organization"},
+            {"name": "PROCEDURE", "rdf_type": "epo:Procedure"},
+        ]

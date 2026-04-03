@@ -16,6 +16,24 @@ from ers.ers_rest_api.entrypoints.api.dependencies import (
 from ers.ers_rest_api.services.lookup_service import LookupService
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
 from ers.ers_rest_api.services.resolve_service import ResolveService
+from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
+
+STUB_RDF_CONFIG = RDFMappingConfig(
+    namespaces={
+        "org": "http://www.w3.org/ns/org#",
+        "epo": "http://data.europa.eu/a4g/ontology#",
+    },
+    entity_types={
+        "ORGANISATION": EntityTypeConfig(
+            rdf_type="org:Organization",
+            fields={"legal_name": "org:legalName"},
+        ),
+        "PROCEDURE": EntityTypeConfig(
+            rdf_type="epo:Procedure",
+            fields={"identifier": "epo:hasID"},
+        ),
+    },
+)
 
 
 @asynccontextmanager
@@ -49,6 +67,7 @@ def app(
     monkeypatch.setenv("DEBUG", "false")
     app = create_app()
     app.router.lifespan_context = _noop_lifespan
+    app.state.rdf_config = STUB_RDF_CONFIG
     app.dependency_overrides[get_resolve_service] = lambda: resolve_service
     app.dependency_overrides[get_lookup_service] = lambda: lookup_service
     app.dependency_overrides[get_refresh_bulk_service] = lambda: refresh_bulk_service

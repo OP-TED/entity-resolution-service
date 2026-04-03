@@ -66,7 +66,7 @@ def _get_redis_client(request: Request) -> RedisEREClient:
 # ---------------------------------------------------------------------------
 
 
-def _get_rdf_config(request: Request) -> RDFMappingConfig:
+def get_rdf_config(request: Request) -> RDFMappingConfig:
     """Return the RDF mapping config from app.state (loaded once in lifespan)."""
     return cast(RDFMappingConfig, request.app.state.rdf_config)
 
@@ -84,7 +84,7 @@ async def _get_decision_store_service(
 
 async def _get_request_registry_service(
     db: Annotated[AsyncDatabase, Depends(_get_database)],
-    rdf_config: Annotated[RDFMappingConfig, Depends(_get_rdf_config)],
+    rdf_config: Annotated[RDFMappingConfig, Depends(get_rdf_config)],
 ) -> RequestRegistryService:
     return RequestRegistryService(
         resolution_repo=MongoResolutionRequestRepository(db),
