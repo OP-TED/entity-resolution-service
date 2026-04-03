@@ -62,6 +62,13 @@ class DecisionSummary(FrozenDTO):
     updated_at: datetime | None = None
 
 
+class ActorSummary(FrozenDTO):
+    """Embedded actor info for user action display."""
+
+    id: str
+    email: str
+
+
 class UserActionSummary(FrozenDTO):
     """User action summary for list display."""
 
@@ -70,7 +77,7 @@ class UserActionSummary(FrozenDTO):
     candidates: list[ClusterReference]
     selected_cluster: ClusterReference | None = None
     action_type: UserActionType
-    actor: str
+    actor: ActorSummary
     created_at: datetime
     metadata: Any | None = None
 
