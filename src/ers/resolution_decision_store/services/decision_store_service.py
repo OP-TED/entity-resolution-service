@@ -67,6 +67,31 @@ class DecisionStoreService:
         """
         return await self._repository.find_by_triad(identifier)
 
+    async def query_decisions_by_timestamp(
+        self,
+        source_id: str,
+        updated_since: datetime | None,
+        limit: int,
+        continuation_cursor: str | None,
+    ) -> CursorPage[Decision]:
+        """Return decisions for a source changed after updated_since, cursor-paginated.
+
+        Args:
+            source_id: Filter to this source system.
+            updated_since: Return decisions updated after this timestamp, or all if None.
+            limit: Max decisions per page. Capped at DECISION_STORE_MAX_PAGE_SIZE.
+            continuation_cursor: Opaque pagination token from a previous response, or None.
+
+        Returns:
+            A CursorPage with matching decisions and an optional next_cursor.
+        """
+        effective_limit = min(limit, config.DECISION_STORE_MAX_PAGE_SIZE)
+        return await self._repository.find_delta_for_source(
+            source_id=source_id,
+            updated_since=updated_since,
+            cursor_params=CursorParams(cursor=continuation_cursor, limit=effective_limit),
+        )
+
     async def query_decisions_paginated(
         self,
         cursor: str | None = None,
@@ -163,3 +188,31 @@ async def query_decisions_paginated(
         InvalidCursorError: If the cursor string cannot be decoded.
     """
     return await service.query_decisions_paginated(cursor=cursor, page_size=page_size)
+
+
+@trace_function(span_name="decision_store.query_by_timestamp")
+async def query_decisions_by_timestamp(
+    source_id: str,
+    updated_since: datetime | None,
+    limit: int,
+    continuation_cursor: str | None,
+    service: DecisionStoreService,
+) -> CursorPage[Decision]:
+    """Return decisions for a source changed after updated_since, cursor-paginated.
+
+    Args:
+        source_id: Filter to this source system.
+        updated_since: Return decisions updated after this timestamp, or all if None.
+        limit: Max decisions per page. Capped at DECISION_STORE_MAX_PAGE_SIZE.
+        continuation_cursor: Opaque pagination token from a previous response, or None.
+        service: The DecisionStoreService instance.
+
+    Returns:
+        A CursorPage with matching decisions and an optional next_cursor.
+    """
+    return await service.query_decisions_by_timestamp(
+        source_id=source_id,
+        updated_since=updated_since,
+        limit=limit,
+        continuation_cursor=continuation_cursor,
+    )

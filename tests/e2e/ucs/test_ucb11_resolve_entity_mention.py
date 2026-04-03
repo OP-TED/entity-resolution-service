@@ -15,6 +15,7 @@ UC-B1.1 — Resolve Entity Mention via ERS API (Integration)
     7. Client timeout exceeded — explicit timeout error.
     8. Request Registry unavailable → service error.
     9. Decision Store write failure → service error, request still registered.
+   10. ERE messaging boundary unavailable → service error, no decision written.
 
   ERE is mocked at the messaging boundary. All other components are real.
   Traceability: UC-W1, UC-B1.1, ADR-A1N, ADR-A2N, ADR-C1N.
@@ -102,6 +103,14 @@ def test_request_registry_unavailable():
     "Return service error when the Decision Store fails after ERE response",
 )
 def test_decision_store_write_failure():
+    pass
+
+
+@scenario(
+    FEATURE_FILE,
+    "Return service error when the ERE messaging boundary is unavailable",
+)
+def test_ere_messaging_boundary_unavailable():
     pass
 
 
@@ -355,6 +364,18 @@ def decision_store_write_failure(ctx):
     )
     """
     ctx["decision_store_write_failure"] = True
+
+
+@given("the ERE messaging boundary is unavailable for publishing")
+def ere_messaging_unavailable_for_publishing(ctx):
+    """
+    Configure the messaging publisher to fail on publish.
+
+    TODO: ctx["ere_client"].publish = AsyncMock(
+        side_effect=MessagingException("ERE messaging unavailable")
+    )
+    """
+    ctx["messaging_unavailable"] = True
 
 
 # ---------------------------------------------------------------------------

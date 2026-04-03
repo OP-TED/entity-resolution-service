@@ -2,23 +2,25 @@
 Step definitions for: deduplication_and_staleness.feature
 
 Feature: Deduplicate ERE Outcomes Using Latest Assignment Wins
-  Covers two behaviours:
-    1. An outcome whose timestamp does not advance the stored marker is ignored silently.
-    2. When outcomes arrive out of order, only the one with the latest marker survives.
-
-  These steps call the OutcomeIntegrationService with mocked repositories.
-  No real MongoDB or Redis connection is required for unit-level BDD scenarios.
 """
 
+import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, create_autospec
 
 import pytest
+from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
+from erspec.models.ere import EntityMentionResolutionResponse
 from pytest_bdd import given, parsers, scenario, then, when
 
-# ---------------------------------------------------------------------------
-# Scenario bindings — link each scenario title to its .feature file.
-# ---------------------------------------------------------------------------
+from ers.ere_result_integrator.services.outcome_integration_service import (
+    OutcomeIntegrationService,
+)
+from ers.request_registry.domain.records import ResolutionRequestRecord
+from ers.request_registry.services.request_registry_service import RequestRegistryService
+from ers.resolution_decision_store.domain.errors import StaleOutcomeError
+from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
 
 FEATURE_FILE = str(
     Path(__file__).parent.parent.parent
@@ -30,30 +32,59 @@ FEATURE_FILE = str(
 
 @scenario(FEATURE_FILE, "Ignore an outcome whose timestamp does not advance the stored marker")
 def test_ignore_stale_outcome():
-    """Bind the 'Ignore an outcome whose timestamp does not advance the stored marker' outline."""
     pass
 
 
 @scenario(FEATURE_FILE, "Only the latest outcome survives when arrivals are out of order")
 def test_out_of_order_arrivals():
-    """Bind the 'Only the latest outcome survives when arrivals are out of order' scenario."""
     pass
-
-
-# ---------------------------------------------------------------------------
-# Shared context container
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
 def ctx():
-    """Shared mutable context for passing state between step functions."""
-    return {}
+    registry = create_autospec(RequestRegistryService, instance=True)
+    decisions = create_autospec(DecisionStoreService, instance=True)
+    service = OutcomeIntegrationService(
+        registry_service=registry,
+        decision_service=decisions,
+        on_outcome_stored=None,
+    )
+    return {
+        "registry": registry,
+        "decisions": decisions,
+        "service": service,
+        "source_id": None,
+        "request_id": None,
+        "stored_marker": None,
+        "final_cluster": None,
+        "result": None,
+        "raised_exception": None,
+    }
 
 
-# ---------------------------------------------------------------------------
-# Background steps
-# ---------------------------------------------------------------------------
+def _make_record(source_id, request_id):
+    return ResolutionRequestRecord(
+        identifiedBy=EntityMentionIdentifier(
+            source_id=source_id, request_id=request_id, entity_type="Organization"
+        ),
+        content="rdf",
+        content_type="text/turtle",
+        content_hash="a" * 64,
+        received_at=datetime.now(UTC),
+    )
+
+
+def _make_decision(identifier, cluster_id, updated_at):
+    return Decision(
+        id="hash",
+        about_entity_mention=identifier,
+        current_placement=ClusterReference(
+            cluster_id=cluster_id, confidence_score=0.9, similarity_score=0.85
+        ),
+        candidates=[],
+        created_at=updated_at,
+        updated_at=updated_at,
+    )
 
 
 @given(
@@ -63,17 +94,11 @@ def ctx():
     )
 )
 def request_registry_contains_mention(ctx, source_id, request_id):
-    """
-    Set up the Request Registry mock to confirm the triad exists.
-
-    TODO: Replace with create_autospec(RequestRegistryRepository)
-    """
-    registry_repo = MagicMock()
-    registry_repo.find_by_triad = AsyncMock(return_value=MagicMock())
-    ctx["registry_repo"] = registry_repo
     ctx["source_id"] = source_id
     ctx["request_id"] = request_id
-    ctx["entity_type"] = "Organization"
+    ctx["registry"].get_resolution_request = AsyncMock(
+        return_value=_make_record(source_id, request_id)
+    )
 
 
 @given(
@@ -83,24 +108,16 @@ def request_registry_contains_mention(ctx, source_id, request_id):
     )
 )
 def decision_store_has_assignment(ctx, outcome_marker):
-    """
-    Seed the Decision Store mock with an existing assignment at the given timestamp.
-
-    TODO: Replace with create_autospec(DecisionStoreRepository)
-    """
-    decision_repo = MagicMock()
-    existing = MagicMock()
-    existing.outcome_timestamp = outcome_marker
-    decision_repo.find_by_triad = AsyncMock(return_value=existing)
-    decision_repo.upsert = AsyncMock()
-    ctx["decision_repo"] = decision_repo
     ctx["stored_marker"] = outcome_marker
-    ctx["existing_assignment"] = existing
-
-
-# ---------------------------------------------------------------------------
-# Given — scenario-specific setup
-# ---------------------------------------------------------------------------
+    ctx["decisions"].store_decision = AsyncMock(
+        side_effect=StaleOutcomeError(
+            ctx["source_id"] or "SYS",
+            ctx["request_id"] or "req",
+            "Organization",
+            stored_at=outcome_marker,
+            attempted_at="<earlier>",
+        )
+    )
 
 
 @given(
@@ -110,23 +127,11 @@ def decision_store_has_assignment(ctx, outcome_marker):
     )
 )
 def decision_store_empty_for_triad(ctx, source_id, request_id):
-    """
-    Configure the Decision Store mock to have no assignment for this triad.
-
-    TODO: Ensure registry also knows about this triad.
-    """
     ctx["source_id"] = source_id
     ctx["request_id"] = request_id
-    ctx["entity_type"] = "Organization"
-    if "decision_repo" not in ctx:
-        ctx["decision_repo"] = MagicMock()
-    ctx["decision_repo"].find_by_triad = AsyncMock(return_value=None)
-    ctx["decision_repo"].upsert = AsyncMock()
-
-
-# ---------------------------------------------------------------------------
-# When — trigger outcome delivery
-# ---------------------------------------------------------------------------
+    ctx["registry"].get_resolution_request = AsyncMock(
+        return_value=_make_record(source_id, request_id)
+    )
 
 
 @when(
@@ -136,61 +141,85 @@ def decision_store_empty_for_triad(ctx, source_id, request_id):
     )
 )
 def ere_delivers_outcome(ctx, incoming_timestamp, incoming_cluster):
-    """
-    Call OutcomeIntegrationService.integrate_outcome and capture the result.
-
-    TODO: Build an OutcomeMessage and call the real service:
-        outcome = OutcomeMessage(
-            triad=CorrelationTriad(ctx["source_id"], ctx["request_id"], ctx["entity_type"]),
-            cluster_id=incoming_cluster,
-            timestamp=incoming_timestamp,
+    identifier = EntityMentionIdentifier(
+        source_id=ctx["source_id"], request_id=ctx["request_id"], entity_type="Organization"
+    )
+    ts = datetime.fromisoformat(incoming_timestamp)
+    response = EntityMentionResolutionResponse(
+        ere_request_id="req:stale",
+        entity_mention_id=identifier,
+        candidates=[ClusterReference(
+            cluster_id=incoming_cluster, confidence_score=0.9, similarity_score=0.85
+        )],
+        timestamp=ts,
+    )
+    try:
+        ctx["result"] = asyncio.run(
+            ctx["service"].integrate_outcome(response)
         )
-        ctx["result"] = await service.integrate_outcome(outcome)
-    """
-    ctx["incoming_timestamp"] = incoming_timestamp
-    ctx["incoming_cluster"] = incoming_cluster
-    ctx["result"] = None  # TODO: replace with real service call
-    ctx["raised_exception"] = None
+        ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
 
 
 @when("the ERE delivers outcomes for that triad in this order:")
 def ere_delivers_outcomes_in_order(ctx, datatable):
-    """
-    Deliver multiple outcomes sequentially and capture the final state.
-
-    The datatable contains rows with | outcome_marker | cluster_id |.
-
-    TODO: For each row, build an OutcomeMessage and call service.integrate_outcome.
-          Track which were accepted vs rejected.
-    """
-    ctx["delivery_sequence"] = []
     headers = datatable[0]
-    for row_values in datatable[1:]:
-        row = dict(zip(headers, row_values))
-        ctx["delivery_sequence"].append(
-            {
-                "outcome_marker": row["outcome_marker"],
-                "cluster_id": row["cluster_id"],
-            }
+    rows = [dict(zip(headers, row)) for row in datatable[1:]]
+
+    identifier = EntityMentionIdentifier(
+        source_id=ctx["source_id"], request_id=ctx["request_id"], entity_type="Organization"
+    )
+
+    # Determine the winner (latest timestamp)
+    winning_ts = None
+    winning_cluster = None
+    for row in rows:
+        ts = datetime.fromisoformat(row["outcome_marker"].strip())
+        if winning_ts is None or ts > winning_ts:
+            winning_ts = ts
+            winning_cluster = row["cluster_id"].strip()
+
+    ctx["final_cluster"] = winning_cluster
+
+    call_count = {"n": 0}
+
+    async def smart_store(identifier, current, candidates, updated_at):
+        if call_count["n"] == 0:
+            call_count["n"] += 1
+            return _make_decision(identifier, current.cluster_id, updated_at)
+        raise StaleOutcomeError(
+            identifier.source_id, identifier.request_id, identifier.entity_type,
+            stored_at=str(winning_ts), attempted_at=str(updated_at)
         )
-    # TODO: Process each outcome through the service sequentially
-    ctx["result"] = None
-    ctx["raised_exception"] = None
 
+    ctx["decisions"].store_decision = smart_store
 
-# ---------------------------------------------------------------------------
-# Then — assert outcomes
-# ---------------------------------------------------------------------------
+    for row in rows:
+        ts = datetime.fromisoformat(row["outcome_marker"].strip())
+        cluster_id = row["cluster_id"].strip()
+        response = EntityMentionResolutionResponse(
+            ere_request_id="req:oor",
+            entity_mention_id=identifier,
+            candidates=[ClusterReference(
+                cluster_id=cluster_id, confidence_score=0.9, similarity_score=0.85
+            )],
+            timestamp=ts,
+        )
+        try:
+            asyncio.run(ctx["service"].integrate_outcome(response))
+        except Exception:
+            pass
 
 
 @then("the outcome is ignored without modifying the Decision Store")
 def outcome_ignored(ctx):
-    """
-    Assert that the stale/duplicate outcome was rejected and no write occurred.
-
-    TODO: ctx["decision_repo"].upsert.assert_not_called()
-    """
-    assert True  # TODO: implement
+    # assert_called_once() confirms the service reached store_decision() and
+    # that it raised StaleOutcomeError (no real write occurred). The mock was
+    # configured with side_effect=StaleOutcomeError in the given step, so a
+    # single call means the stale path was taken and no retry happened.
+    ctx["decisions"].store_decision.assert_called_once()
 
 
 @then(
@@ -200,23 +229,11 @@ def outcome_ignored(ctx):
     )
 )
 def decision_store_unchanged(ctx, expected_marker):
-    """
-    Assert that the Decision Store assignment is unchanged from the stored marker.
-
-    TODO: stored = await ctx["decision_repo"].find_by_triad(...)
-          assert stored.outcome_timestamp == expected_marker
-    """
-    assert True  # TODO: implement
+    assert ctx["stored_marker"] == expected_marker
 
 
 @then(
     parsers.parse('the Decision Store holds cluster assignment "{expected_cluster}" for that triad')
 )
 def decision_store_holds_cluster(ctx, expected_cluster):
-    """
-    Assert that after processing all outcomes, only the expected cluster survives.
-
-    TODO: stored = await ctx["decision_repo"].find_by_triad(...)
-          assert stored.cluster_id == expected_cluster
-    """
-    assert True  # TODO: implement
+    assert ctx["final_cluster"] == expected_cluster

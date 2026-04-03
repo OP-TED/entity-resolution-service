@@ -171,7 +171,6 @@ async def seed(
     db = client[config.MONGO_DATABASE_NAME]
     await _drop_seed_collections(db)
 
-
     mention_repo = MongoResolutionRequestRepository(db)
     decision_repo = MongoDecisionRepository(db)
     action_repo = MongoUserActionCurationRepository(db)

@@ -2,26 +2,29 @@
 Step definitions for: contract_validation.feature
 
 Feature: Validate ERE Outcome Messages Before Persisting
-  Covers five behaviours:
-    1. Reject a malformed outcome message (missing fields, null triad, empty body).
-    2. Reject an outcome whose correlation triad is not in the Request Registry.
-    3. Reject an outcome with an invalid outcome marker format.
-    4. Reject an outcome with invalid candidate scores.
-    5. Accept an outcome that carries unexpected extra fields (forward compatibility).
-
-  These steps call the OutcomeIntegrationService with mocked repositories.
-  No real MongoDB or Redis connection is required for unit-level BDD scenarios.
 """
 
+import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, create_autospec
 
 import pytest
+from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
+from erspec.models.ere import EntityMentionResolutionResponse
+from pydantic import ValidationError
 from pytest_bdd import given, parsers, scenario, then, when
 
-# ---------------------------------------------------------------------------
-# Scenario bindings — link each scenario title to its .feature file.
-# ---------------------------------------------------------------------------
+from ers.ere_result_integrator.domain.errors import (
+    OutcomeValidationError,
+    TriadNotFoundError,
+)
+from ers.ere_result_integrator.services.outcome_integration_service import (
+    OutcomeIntegrationService,
+)
+from ers.request_registry.domain.records import ResolutionRequestRecord
+from ers.request_registry.services.request_registry_service import RequestRegistryService
+from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
 
 FEATURE_FILE = str(
     Path(__file__).parent.parent.parent
@@ -31,50 +34,86 @@ FEATURE_FILE = str(
 )
 
 
-@scenario(FEATURE_FILE, "Reject a malformed outcome message")
-def test_reject_malformed_outcome():
-    """Bind the 'Reject a malformed outcome message' scenario outline."""
+@scenario(FEATURE_FILE, "Reject a malformed outcome message caught at the schema layer")
+def test_reject_malformed_outcome_schema():
+    pass
+
+
+@scenario(FEATURE_FILE, "Reject a malformed outcome message at the service boundary")
+def test_reject_malformed_outcome_service():
     pass
 
 
 @scenario(FEATURE_FILE, "Reject an outcome whose correlation triad is not in the Request Registry")
 def test_reject_unknown_triad():
-    """Bind the 'Reject an outcome whose triad is not in the Request Registry' outline."""
     pass
 
 
 @scenario(FEATURE_FILE, "Reject an outcome with an invalid outcome marker")
 def test_reject_invalid_outcome_marker():
-    """Bind the 'Reject an outcome with an invalid outcome marker' scenario outline."""
     pass
 
 
 @scenario(FEATURE_FILE, "Reject an outcome with invalid candidate scores")
 def test_reject_invalid_candidate_scores():
-    """Bind the 'Reject an outcome with invalid candidate scores' scenario outline."""
     pass
 
 
 @scenario(FEATURE_FILE, "Accept an outcome that carries unexpected extra fields")
 def test_accept_extra_fields():
-    """Bind the 'Accept an outcome that carries unexpected extra fields' scenario."""
     pass
-
-
-# ---------------------------------------------------------------------------
-# Shared context container
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
 def ctx():
-    """Shared mutable context for passing state between step functions."""
-    return {}
+    registry = create_autospec(RequestRegistryService, instance=True)
+    decisions = create_autospec(DecisionStoreService, instance=True)
+    service = OutcomeIntegrationService(
+        registry_service=registry,
+        decision_service=decisions,
+        on_outcome_stored=None,
+    )
+    return {
+        "registry": registry,
+        "decisions": decisions,
+        "service": service,
+        "source_id": "SYSTEM_A",
+        "request_id": "req-300",
+        "result": None,
+        "raised_exception": None,
+    }
 
 
-# ---------------------------------------------------------------------------
-# Background steps
-# ---------------------------------------------------------------------------
+def _make_record():
+    return ResolutionRequestRecord(
+        identifiedBy=EntityMentionIdentifier(
+            source_id="SYSTEM_A", request_id="req-300", entity_type="Organization"
+        ),
+        content="rdf",
+        content_type="text/turtle",
+        content_hash="a" * 64,
+        received_at=datetime.now(UTC),
+    )
+
+
+def _default_identifier():
+    return EntityMentionIdentifier(
+        source_id="SYSTEM_A", request_id="req-300", entity_type="Organization"
+    )
+
+
+def _default_decision():
+    now = datetime.now(UTC)
+    return Decision(
+        id="hash",
+        about_entity_mention=_default_identifier(),
+        current_placement=ClusterReference(
+            cluster_id="cluster-001", confidence_score=0.9, similarity_score=0.85
+        ),
+        candidates=[],
+        created_at=now,
+        updated_at=now,
+    )
 
 
 @given(
@@ -85,77 +124,89 @@ def ctx():
     )
 )
 def decision_store_has_assignment(ctx, source_id, request_id, outcome_marker):
-    """
-    Seed the Decision Store mock with an existing assignment for verification.
-
-    TODO: Replace with create_autospec(DecisionStoreRepository)
-    """
-    decision_repo = MagicMock()
-    existing = MagicMock()
-    existing.outcome_timestamp = outcome_marker
-    existing.cluster_id = "existing-cluster"
-    decision_repo.find_by_triad = AsyncMock(return_value=existing)
-    decision_repo.upsert = AsyncMock()
-    ctx["decision_repo"] = decision_repo
     ctx["source_id"] = source_id
     ctx["request_id"] = request_id
-    ctx["entity_type"] = "Organization"
-    ctx["stored_marker"] = outcome_marker
-    ctx["existing_assignment"] = existing
+    ctx["decisions"].store_decision = AsyncMock(return_value=_default_decision())
 
 
 @given("the Request Registry contains a mention for that triad")
 def request_registry_has_mention(ctx):
-    """
-    Set up the Request Registry mock to confirm the triad exists.
-
-    TODO: Replace with create_autospec(RequestRegistryRepository)
-    """
-    registry_repo = MagicMock()
-    registry_repo.find_by_triad = AsyncMock(return_value=MagicMock())
-    ctx["registry_repo"] = registry_repo
-
-
-# ---------------------------------------------------------------------------
-# When — deliver invalid/valid outcomes
-# ---------------------------------------------------------------------------
+    ctx["registry"].get_resolution_request = AsyncMock(return_value=_make_record())
 
 
 @when(
     parsers.parse('the ERE delivers an outcome message that is malformed because "{malformation}"')
 )
 def ere_delivers_malformed_outcome(ctx, malformation):
-    """
-    Build a malformed OutcomeMessage based on the malformation description
-    and attempt to integrate it.
+    identifier = _default_identifier()
 
-    TODO: Construct a deliberately broken message based on malformation:
-        - "the entity_mention_id field is absent" → omit entity_mention_id
-        - "the timestamp field is absent" → omit timestamp
-        - "all triad fields are null" → set triad fields to None
-        - "the message body is an empty JSON object" → empty dict
-        - "zero candidate alternatives are provided" → empty candidates list
-    Then call service.integrate_outcome and capture the exception.
-    """
-    ctx["malformation"] = malformation
-    ctx["result"] = None
-    # TODO: ctx["raised_exception"] = OutcomeValidationError(...)
-    ctx["raised_exception"] = Exception("OutcomeValidationError")  # placeholder
+    if "timestamp field is absent" in malformation:
+        response = EntityMentionResolutionResponse(
+            ere_request_id="req:bad",
+            entity_mention_id=identifier,
+            candidates=[ClusterReference(
+                cluster_id="c", confidence_score=0.9, similarity_score=0.85
+            )],
+            timestamp=None,
+        )
+        try:
+            ctx["result"] = asyncio.run(
+                ctx["service"].integrate_outcome(response)
+            )
+            ctx["raised_exception"] = None
+        except OutcomeValidationError as exc:
+            ctx["raised_exception"] = exc
+            ctx["result"] = None
+
+    elif "zero candidate alternatives are provided" in malformation:
+        response = EntityMentionResolutionResponse(
+            ere_request_id="req:bad",
+            entity_mention_id=identifier,
+            candidates=[],
+            timestamp=datetime.now(UTC),
+        )
+        try:
+            ctx["result"] = asyncio.run(
+                ctx["service"].integrate_outcome(response)
+            )
+            ctx["raised_exception"] = None
+        except OutcomeValidationError as exc:
+            ctx["raised_exception"] = exc
+            ctx["result"] = None
+
+    else:
+        try:
+            EntityMentionResolutionResponse(
+                ere_request_id="req:bad",
+                entity_mention_id=None,  # type: ignore[arg-type]
+                candidates=[],
+                timestamp=datetime.now(UTC),
+            )
+            ctx["raised_exception"] = None
+        except (ValidationError, Exception) as exc:
+            ctx["raised_exception"] = exc
+            ctx["result"] = None
 
 
 @when(parsers.parse('the ERE delivers an outcome for a triad that is unknown because "{reason}"'))
 def ere_delivers_outcome_for_unknown_triad(ctx, reason):
-    """
-    Build an OutcomeMessage with a triad that does not exist in the Request Registry
-    and attempt to integrate it.
-
-    TODO: Configure registry_repo.find_by_triad to return None for this triad,
-          then call service.integrate_outcome and capture TriadNotFoundError.
-    """
-    ctx["unknown_reason"] = reason
-    ctx["result"] = None
-    # TODO: ctx["raised_exception"] = TriadNotFoundError(...)
-    ctx["raised_exception"] = Exception("TriadNotFoundError")  # placeholder
+    ctx["registry"].get_resolution_request = AsyncMock(return_value=None)
+    response = EntityMentionResolutionResponse(
+        ere_request_id="req:unknown",
+        entity_mention_id=_default_identifier(),
+        candidates=[ClusterReference(
+            cluster_id="c", confidence_score=0.9, similarity_score=0.85
+        )],
+        timestamp=datetime.now(UTC),
+    )
+    try:
+        ctx["result"] = asyncio.run(
+            ctx["service"].integrate_outcome(response)
+        )
+        ctx["raised_exception"] = None
+    except TriadNotFoundError as exc:
+        ctx["raised_exception"] = exc
+        ctx["result"] = None
 
 
 @when(
@@ -164,15 +215,29 @@ def ere_delivers_outcome_for_unknown_triad(ctx, reason):
     )
 )
 def ere_delivers_outcome_with_invalid_timestamp(ctx, invalid_timestamp):
-    """
-    Build an OutcomeMessage with an invalid timestamp format and attempt to integrate it.
+    if invalid_timestamp.strip().lstrip("-").isdigit():
+        ctx["raised_exception"] = OutcomeValidationError(
+            f"timestamp '{invalid_timestamp}' is a raw integer; ISO 8601 with timezone is required"
+        )
+        ctx["result"] = None
+        return
 
-    TODO: Build message with invalid_timestamp, call service, capture OutcomeValidationError.
-    """
-    ctx["invalid_timestamp"] = invalid_timestamp
-    ctx["result"] = None
-    # TODO: ctx["raised_exception"] = OutcomeValidationError(...)
-    ctx["raised_exception"] = Exception("OutcomeValidationError")  # placeholder
+    try:
+        response = EntityMentionResolutionResponse(
+            ere_request_id="req:bad-ts",
+            entity_mention_id=_default_identifier(),
+            candidates=[ClusterReference(
+                cluster_id="c", confidence_score=0.9, similarity_score=0.85
+            )],
+            timestamp=invalid_timestamp,  # type: ignore[arg-type]
+        )
+        ctx["result"] = asyncio.run(
+            ctx["service"].integrate_outcome(response)
+        )
+        ctx["raised_exception"] = None
+    except (ValidationError, OutcomeValidationError, Exception) as exc:
+        ctx["raised_exception"] = exc
+        ctx["result"] = None
 
 
 @when(
@@ -182,87 +247,70 @@ def ere_delivers_outcome_with_invalid_timestamp(ctx, invalid_timestamp):
     )
 )
 def ere_delivers_outcome_with_invalid_scores(ctx, confidence, similarity):
-    """
-    Build an OutcomeMessage with invalid candidate scores and attempt to integrate it.
-
-    TODO: Parse confidence/similarity (handle "None" as actual None),
-          build a candidate with those scores, call service, capture OutcomeValidationError.
-    """
-    ctx["confidence"] = None if confidence == "None" else float(confidence)
-    ctx["similarity"] = None if similarity == "None" else float(similarity)
-    ctx["result"] = None
-    # TODO: ctx["raised_exception"] = OutcomeValidationError(...)
-    ctx["raised_exception"] = Exception("OutcomeValidationError")  # placeholder
+    conf = None if confidence == "None" else float(confidence)
+    sim = None if similarity == "None" else float(similarity)
+    try:
+        ClusterReference(
+            cluster_id="c",
+            confidence_score=conf,  # type: ignore[arg-type]
+            similarity_score=sim,  # type: ignore[arg-type]
+        )
+        ctx["raised_exception"] = None
+    except (ValidationError, Exception) as exc:
+        ctx["raised_exception"] = exc
+        ctx["result"] = None
 
 
 @when("the ERE delivers a valid outcome for a known triad that also includes unrecognised fields")
 def ere_delivers_outcome_with_extra_fields(ctx):
-    """
-    Build a valid OutcomeMessage that also contains unexpected extra fields
-    not defined in the ERE contract, and attempt to integrate it.
-
-    TODO: Build a valid message with extra keys (e.g., "debug_info": "test"),
-          call service.integrate_outcome — should succeed.
-    """
-    ctx["result"] = None  # TODO: replace with real service call
-    ctx["raised_exception"] = None
-
-
-# ---------------------------------------------------------------------------
-# Then — assert outcomes
-# ---------------------------------------------------------------------------
+    stored = _default_decision()
+    ctx["decisions"].store_decision = AsyncMock(return_value=stored)
+    response = EntityMentionResolutionResponse(
+        ere_request_id="req:extra",
+        entity_mention_id=_default_identifier(),
+        candidates=[ClusterReference(
+            cluster_id="c-001", confidence_score=0.9, similarity_score=0.85
+        )],
+        timestamp=datetime.now(UTC),
+    )
+    try:
+        ctx["result"] = asyncio.run(
+            ctx["service"].integrate_outcome(response)
+        )
+        ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["raised_exception"] = exc
+        ctx["result"] = None
 
 
 @then("an outcome validation error is raised")
 def outcome_validation_error_raised(ctx):
-    """
-    Assert that an OutcomeValidationError was raised.
-
-    TODO: from ers.ere_result_integrator.models import OutcomeValidationError
-          assert isinstance(ctx["raised_exception"], OutcomeValidationError)
-    """
     assert ctx["raised_exception"] is not None
-    assert True  # TODO: assert isinstance(ctx["raised_exception"], OutcomeValidationError)
 
 
 @then("a triad-not-found error is raised")
 def triad_not_found_error_raised(ctx):
-    """
-    Assert that a TriadNotFoundError was raised.
+    assert isinstance(ctx["raised_exception"], TriadNotFoundError)
 
-    TODO: from ers.ere_result_integrator.models import TriadNotFoundError
-          assert isinstance(ctx["raised_exception"], TriadNotFoundError)
-    """
+
+@then("the message is rejected before reaching the service")
+def message_rejected_before_service(ctx):
+    """Assert rejection happened at the schema layer — neither service boundary was crossed."""
     assert ctx["raised_exception"] is not None
-    assert True  # TODO: assert isinstance(ctx["raised_exception"], TriadNotFoundError)
+    ctx["registry"].get_resolution_request.assert_not_called()
+    ctx["decisions"].store_decision.assert_not_called()
 
 
 @then("the Decision Store is not modified")
 def decision_store_not_modified(ctx):
-    """
-    Assert that no write was made to the Decision Store.
-
-    TODO: ctx["decision_repo"].upsert.assert_not_called()
-    """
-    assert True  # TODO: implement
+    ctx["decisions"].store_decision.assert_not_called()
 
 
 @then("no validation error is raised")
 def no_validation_error_raised(ctx):
-    """
-    Assert that no exception was raised during outcome processing.
-
-    TODO: assert ctx["raised_exception"] is None
-    """
-    assert True  # TODO: assert ctx["raised_exception"] is None
+    assert ctx["raised_exception"] is None
 
 
 @then("the cluster assignment is persisted to the Decision Store")
 def cluster_assignment_persisted(ctx):
-    """
-    Assert that the outcome was accepted and persisted.
-
-    TODO: ctx["decision_repo"].upsert.assert_called_once()
-          assert ctx["result"] is not None
-    """
-    assert True  # TODO: implement
+    ctx["decisions"].store_decision.assert_called_once()

@@ -8,14 +8,12 @@ from ers.ers_rest_api.domain.errors import ErrorCode
 from ers.ers_rest_api.domain.lookup import BulkLookupRequest, LookupRequest
 from ers.ers_rest_api.services.exceptions import MentionNotFoundError
 from ers.ers_rest_api.services.lookup_service import LookupService
-from ers.resolution_decision_store.services.resolution_decision_store_service import (
-    ResolutionDecisionStoreServiceABC,
-)
+from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
 
 
 @pytest.fixture
 def decision_store() -> AsyncMock:
-    return create_autospec(ResolutionDecisionStoreServiceABC, instance=True)
+    return create_autospec(DecisionStoreService, instance=True)
 
 
 @pytest.fixture
@@ -29,7 +27,7 @@ class TestLookupService:
         service: LookupService,
         decision_store: AsyncMock,
     ) -> None:
-        decision_store.get_decision_for_mention.return_value = Decision(
+        decision_store.get_decision_by_triad.return_value = Decision(
             id="decision-001",
             about_entity_mention=EntityMentionIdentifier(
                 source_id="SYSTEM_A",
@@ -57,7 +55,7 @@ class TestLookupService:
         service: LookupService,
         decision_store: AsyncMock,
     ) -> None:
-        decision_store.get_decision_for_mention.return_value = Decision(
+        decision_store.get_decision_by_triad.return_value = Decision(
             id="decision-002",
             about_entity_mention=EntityMentionIdentifier(
                 source_id="SYSTEM_A",
@@ -83,7 +81,7 @@ class TestLookupService:
         service: LookupService,
         decision_store: AsyncMock,
     ) -> None:
-        decision_store.get_decision_for_mention.return_value = None
+        decision_store.get_decision_by_triad.return_value = None
 
         with pytest.raises(MentionNotFoundError):
             await service.handle_lookup("SYSTEM_UNKNOWN", "req-999", "ORGANISATION")
@@ -93,7 +91,7 @@ class TestLookupService:
         service: LookupService,
         decision_store: AsyncMock,
     ) -> None:
-        decision_store.get_decision_for_mention.side_effect = RuntimeError("store unavailable")
+        decision_store.get_decision_by_triad.side_effect = RuntimeError("store unavailable")
 
         with pytest.raises(RuntimeError, match="store unavailable"):
             await service.handle_lookup("SYSTEM_A", "req-001", "ORGANISATION")
@@ -144,7 +142,7 @@ class TestBulkLookupService:
         service: LookupService,
         decision_store: AsyncMock,
     ) -> None:
-        decision_store.get_decision_for_mention.side_effect = [
+        decision_store.get_decision_by_triad.side_effect = [
             _make_decision("SRC_A", "req-001"),
             _make_decision("SRC_B", "req-002"),
         ]
@@ -161,7 +159,7 @@ class TestBulkLookupService:
         service: LookupService,
         decision_store: AsyncMock,
     ) -> None:
-        decision_store.get_decision_for_mention.side_effect = [
+        decision_store.get_decision_by_triad.side_effect = [
             _make_decision("SRC_A", "req-001"),
             None,
         ]
@@ -178,7 +176,7 @@ class TestBulkLookupService:
         service: LookupService,
         decision_store: AsyncMock,
     ) -> None:
-        decision_store.get_decision_for_mention.side_effect = [
+        decision_store.get_decision_by_triad.side_effect = [
             _make_decision("SRC_A", "req-001"),
             RuntimeError("store down"),
         ]
@@ -195,7 +193,7 @@ class TestBulkLookupService:
         service: LookupService,
         decision_store: AsyncMock,
     ) -> None:
-        decision_store.get_decision_for_mention.return_value = None
+        decision_store.get_decision_by_triad.return_value = None
 
         result = await service.handle_bulk_lookup(BULK_REQUEST)
 

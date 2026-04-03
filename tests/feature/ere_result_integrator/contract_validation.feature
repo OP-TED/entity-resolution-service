@@ -8,17 +8,25 @@ Feature: Validate ERE Outcome Messages Before Persisting
     Given the Decision Store contains a cluster assignment for triad ("SYSTEM_A", "req-300", "Organization") with outcome marker "2026-03-12T14:30:45.123Z"
     And the Request Registry contains a mention for that triad
 
-  Scenario Outline: Reject a malformed outcome message
+  Scenario Outline: Reject a malformed outcome message caught at the schema layer
+    When the ERE delivers an outcome message that is malformed because "<malformation>"
+    Then an outcome validation error is raised
+    And the message is rejected before reaching the service
+
+    Examples:
+      | malformation                             |
+      | the entity_mention_id field is absent    |
+      | all triad fields are null                |
+      | the message body is an empty JSON object |
+
+  Scenario Outline: Reject a malformed outcome message at the service boundary
     When the ERE delivers an outcome message that is malformed because "<malformation>"
     Then an outcome validation error is raised
     And the Decision Store is not modified
 
     Examples:
       | malformation                             |
-      | the entity_mention_id field is absent    |
       | the timestamp field is absent            |
-      | all triad fields are null                |
-      | the message body is an empty JSON object |
       | zero candidate alternatives are provided |
 
   Scenario Outline: Reject an outcome whose correlation triad is not in the Request Registry
@@ -46,7 +54,7 @@ Feature: Validate ERE Outcome Messages Before Persisting
   Scenario Outline: Reject an outcome with invalid candidate scores
     When the ERE delivers an outcome for a known triad with a candidate having confidence score "<confidence>" and similarity score "<similarity>"
     Then an outcome validation error is raised
-    And the Decision Store is not modified
+    And the message is rejected before reaching the service
 
     Examples:
       | confidence | similarity | reason                   |

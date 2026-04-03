@@ -6,7 +6,7 @@
 - **Phase:** Gherkin features complete, ready for implementation
 - **Spines:** A (Resolution Intake), B (Async Engine Interaction)
 - **Last updated:** 2026-03-16
-- **Dependencies:** EPIC-01 (Request Registry), EPIC-02 (RDF Mention Parser), EPIC-03 (ERE Contract Client), EPIC-04 (Resolution Decision Store)
+- **Dependencies:** EPIC-01 (Request Registry), EPIC-02 (RDF Mention Parser), EPIC-03 (ERE Contract Client), EPIC-04 (Resolution Decision Store), EPIC-05 (ERE Result Integrator — `AsyncResolutionWaiter.notify` wired via EPIC-07 lifespan)
 - **Clarity Gate:** Score: 9.85/10
 
 ---
@@ -81,7 +81,7 @@ The Coordinator does NOT:
 1. All dependency services (EPIC-01 through EPIC-04) are available as injectable Python classes.
 2. `AsyncResolutionWaiter` runs in the same process as the Coordinator (single-process deployment for MVP).
 3. The er-spec library provides all domain models needed (`EntityMention`, `EntityMentionIdentifier`, `ClusterReference`, `EntityMentionResolutionRequest`).
-4. EPIC-05 (ERE Result Integrator) writes to the Decision Store and then signals the `AsyncResolutionWaiter` via a callback. This coupling is the integration contract between EPIC-05 and EPIC-06.
+4. EPIC-05 (ERE Result Integrator) writes to the Decision Store and then calls an injected async callback `on_outcome_stored(triad_key)`. At runtime this callback is `AsyncResolutionWaiter.notify`, wired by EPIC-07's FastAPI lifespan. EPIC-05 does not import EPIC-06 directly — the connection is made entirely at wiring time to respect Tier 2 sibling import rules.
 5. Bulk requests are bounded in size (max items enforced at the API layer, EPIC-07).
 
 ## 4. Domain Models
@@ -97,8 +97,8 @@ All models are imported from er-spec or dependency EPICs. The Coordinator define
 | `ClusterReference` | er-spec | Cluster assignment (current + candidates) |
 | `EntityMentionResolutionRequest` | er-spec | ERE publish envelope |
 | `ResolutionRequestRecord` | EPIC-01 | Request Registry record |
-| `JSONRepresentation` | EPIC-01 | Parsed mention content |
-| `ResolutionDecisionRecord` | EPIC-04 | Decision Store record |
+| `parsed_representation: Optional[str]` | er-spec (`EntityMention` field) | Parsed mention content populated by RDF parser; not a separate class |
+| `Decision` | er-spec | Decision Store record (canonical type returned by Decision Store) |
 
 ### 4.2 Local Configuration Model
 
@@ -143,21 +143,21 @@ flowchart TD
     B -- Success --> C[Register in Request Registry - EPIC-01]
     C -- Idempotency conflict --> Z2[Propagate IdempotencyConflictError]
     C -- Idempotent replay --> D{Decision exists in Decision Store?}
-    D -- Yes --> E[Return existing ResolutionDecisionRecord]
+    D -- Yes --> E[Return existing Decision]
     D -- No --> F[Wait on AsyncResolutionWaiter]
     C -- New record --> G[Publish to ERE via Contract Client - EPIC-03]
     G -- RedisConnectionError --> H[Derive provisional singleton ID]
     G -- Success --> I[Await AsyncResolutionWaiter with ERE execution window timeout]
     I -- ERE responds in time --> J[Read decision from Decision Store]
-    J --> K[Return ResolutionDecisionRecord]
+    J --> K[Return Decision]
     I -- Timeout --> H
     H --> L[Store provisional decision in Decision Store - EPIC-04]
-    L --> M[Return ResolutionDecisionRecord with provisional ID]
+    L --> M[Return Decision with provisional ID]
 ```
 
 **Step-by-step algorithm:**
 
-1. **Parse.** Call `RDFMentionParserService.parse(entity_mention)` → `JSONRepresentation`. If parsing fails, raise `ParsingFailedError`. Do NOT register the request.
+1. **Parse.** Call `RDFMentionParserService.parse(entity_mention)` — populates `entity_mention.parsed_representation`. If parsing fails, raise `ParsingFailedError`. Do NOT register the request.
 
 2. **Register.** Call `RequestRegistryService.register_resolution_request(entity_mention)`.
    - If **idempotent replay** (same triad, same content): look up Decision Store. If a decision exists, return it immediately. If no decision yet (ERE hasn't responded), share the existing async wait (step 5).
@@ -178,9 +178,9 @@ flowchart TD
    - Derive: `cluster_id = SHA256(concat(source_id, request_id, entity_type))` as hex string.
    - Construct `ClusterReference(cluster_id=provisional_id, confidence_score=1.0, similarity_score=1.0)`.
    - Call `DecisionStoreService.store_decision(identifier, current=provisional_ref, candidates=[provisional_ref], updated_at=now_utc)`.
-   - Return the `ResolutionDecisionRecord`.
+   - Return the `Decision`.
 
-7. **Read authoritative decision.** Call `DecisionStoreService.get_decision_by_triad(identifier)`. Return the `ResolutionDecisionRecord`.
+7. **Read authoritative decision.** Call `DecisionStoreService.get_decision_by_triad(identifier)`. Return the `Decision`.
 
 8. **Cleanup.** After returning, `AsyncResolutionWaiter.release(triad_key)` decrements the waiter count and removes the Event when no more waiters remain.
 
@@ -190,7 +190,7 @@ flowchart TD
 async def resolve_bulk(
     self,
     entity_mentions: list[EntityMention],
-) -> list[ResolutionDecisionRecord | CoordinatorError]:
+) -> list[Decision | CoordinatorError]:
 ```
 
 - Decompose the list into independent `resolve_single()` calls.
@@ -223,7 +223,7 @@ class AsyncResolutionWaiter:
         """Decrements waiter count. Removes Event when count reaches 0."""
 ```
 
-- `triad_key` is a string: `f"{source_id}|{request_id}|{entity_type}"`.
+- `triad_key` is a string: `f"{source_id}{request_id}{entity_type}"` (direct concatenation, no separator — matches the provisional cluster ID derivation algorithm).
 - Thread-safe via `asyncio.Lock`.
 - The `notify` method is the **integration contract** with EPIC-05. EPIC-05 calls `waiter.notify(triad_key)` after writing the ERE outcome to the Decision Store.
 - Events are ephemeral (in-memory only). On process restart, pending waits are lost — this is acceptable because the client request will have already timed out.
@@ -291,9 +291,9 @@ def derive_provisional_cluster_id(identifier: EntityMentionIdentifier) -> str:
 | TC-006 | `AsyncResolutionWaiter.get_or_create` | New triad_key | New Event created, waiter count = 1 | Same key called twice → same Event, count = 2 |
 | TC-007 | `AsyncResolutionWaiter.notify` | Triad with waiting Event | Event is set; all waiters unblocked | Notify on non-existent key → no-op |
 | TC-008 | `AsyncResolutionWaiter.release` | Triad with count = 1 | Event removed from dict | Count > 1 → decremented but not removed |
-| TC-009 | Service: resolve_single (happy path) | Valid EntityMention, ERE responds in time | `ResolutionDecisionRecord` with ERE cluster ID | N/A |
-| TC-010 | Service: resolve_single (ERE timeout) | Valid EntityMention, ERE does NOT respond in time | `ResolutionDecisionRecord` with provisional singleton ID | Provisional ID matches SHA-256 derivation |
-| TC-011 | Service: resolve_single (idempotent replay, decision exists) | Same triad + same content, decision in store | Returns existing `ResolutionDecisionRecord` | No ERE publish, no new registration |
+| TC-009 | Service: resolve_single (happy path) | Valid EntityMention, ERE responds in time | `Decision` with ERE cluster ID | N/A |
+| TC-010 | Service: resolve_single (ERE timeout) | Valid EntityMention, ERE does NOT respond in time | `Decision` with provisional singleton ID | Provisional ID matches SHA-256 derivation |
+| TC-011 | Service: resolve_single (idempotent replay, decision exists) | Same triad + same content, decision in store | Returns existing `Decision` | No ERE publish, no new registration |
 | TC-012 | Service: resolve_single (idempotent replay, no decision yet) | Same triad + same content, no decision yet | Shares async wait with original request | Both waiters unblocked when EPIC-05 signals |
 | TC-013 | Service: resolve_single (idempotency conflict) | Same triad, different content | `IdempotencyConflictError` propagated | Decision Store not touched |
 | TC-014 | Service: resolve_single (parse failure) | Malformed RDF content | `ParsingFailedError` raised | Request NOT registered in Request Registry |
@@ -362,8 +362,8 @@ def derive_provisional_cluster_id(identifier: EntityMentionIdentifier) -> str:
 **Dependencies:** Tasks 1-3, EPIC-01 service, EPIC-02 service, EPIC-03 service, EPIC-04 service
 **Description:**
 - Create `ResolutionCoordinatorService` with constructor accepting all dependency services + `AsyncResolutionWaiter` + `CoordinatorConfig`.
-- Implement `resolve_single(entity_mention: EntityMention) -> ResolutionDecisionRecord`.
-- Implement `resolve_bulk(entity_mentions: list[EntityMention]) -> list[ResolutionDecisionRecord | CoordinatorError]`.
+- Implement `resolve_single(entity_mention: EntityMention) -> Decision`.
+- Implement `resolve_bulk(entity_mentions: list[EntityMention]) -> list[Decision | CoordinatorError]`.
 - Full flow per Section 5.1 algorithm.
 - OpenTelemetry spans on `resolve_single` and `resolve_bulk`.
 
@@ -499,7 +499,7 @@ At `tests/features/resolution_coordinator/`:
 | Dependency | Type | Provides | Epic |
 |-----------|------|----------|------|
 | `RequestRegistryService` | Service (injected) | `register_resolution_request()`, idempotency enforcement | EPIC-01 |
-| `RDFMentionParserService` | Service (injected) | `parse(entity_mention)` → `JSONRepresentation` | EPIC-02 |
+| `RDFMentionParserService` | Service (injected) | `parse(entity_mention)` → populates `entity_mention.parsed_representation` (mutates in place) | EPIC-02 |
 | `EREPublishService` | Service (injected) | `publish_request(request)` → `ere_request_id` | EPIC-03 |
 | `DecisionStoreService` | Service (injected) | `store_decision()`, `get_decision_by_triad()` | EPIC-04 |
 | `AsyncResolutionWaiter` | Component (injected) | In-process event coordination | This EPIC |
@@ -511,7 +511,8 @@ At `tests/features/resolution_coordinator/`:
 | Consumer | What It Uses | Epic |
 |----------|-------------|------|
 | ERS REST API | `ResolutionCoordinatorService.resolve_single()`, `resolve_bulk()` | EPIC-07 |
-| ERE Result Integrator | `AsyncResolutionWaiter.notify()` callback | EPIC-05 |
+| ERE Result Integrator | `AsyncResolutionWaiter.notify` passed as `on_outcome_stored` callback — wired by EPIC-07 lifespan; EPIC-05 never imports EPIC-06 directly | EPIC-05 |
+| ERS REST API (lifecycle) | `OutcomeIntegrationWorker.start()` on startup, `stop()` on shutdown | EPIC-07 owns worker lifecycle |
 
 ---
 

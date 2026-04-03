@@ -12,9 +12,9 @@ from ers.commons.adapters.decision_repository import (
     BaseMongoDecisionRepository,
 )
 from ers.commons.domain.cursor import decode_cursor, encode_cursor
-from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
-
 from ers.commons.domain.data_transfer_objects import (
+    CursorPage,
+    CursorParams,
     DecisionFilters,
     DecisionOrdering,
 )
@@ -30,6 +30,7 @@ from ers.resolution_decision_store.domain.errors import (
 
 # MongoDB document field paths
 _FIELD_ENTITY_TYPE = "about_entity_mention.entity_type"
+_FIELD_SOURCE_ID = "about_entity_mention.source_id"
 _FIELD_CONFIDENCE = "current_placement.confidence_score"
 _FIELD_SIMILARITY = "current_placement.similarity_score"
 _FIELD_CLUSTER_ID = "current_placement.cluster_id"
@@ -76,6 +77,25 @@ class DecisionRepository(BaseDecisionRepository):
     @abstractmethod
     async def average_cluster_size(self) -> float:
         """Return the average number of decisions per cluster."""
+
+    @abstractmethod
+    async def find_delta_for_source(
+        self,
+        source_id: str,
+        updated_since: datetime | None,
+        cursor_params: CursorParams | None = None,
+    ) -> CursorPage[Decision]:
+        """Return decisions for a source changed after updated_since, cursor-paginated.
+
+        Args:
+            source_id: Filter to this source system.
+            updated_since: Return decisions with updated_at > this value, or all if None.
+            cursor_params: Pagination parameters (cursor, limit).
+
+        Returns:
+            A CursorPage with matching decisions and an optional next_cursor.
+            ``count`` is always 0 — no total-count query is performed.
+        """
 
 
 class MongoDecisionRepository(
@@ -318,6 +338,43 @@ class MongoDecisionRepository(
             next_cursor = encode_cursor(sort_value, last.id)
 
         return CursorPage(results=results, count=count, next_cursor=next_cursor)
+
+    async def find_delta_for_source(
+        self,
+        source_id: str,
+        updated_since: datetime | None,
+        cursor_params: CursorParams | None = None,
+    ) -> CursorPage[Decision]:
+        """Return decisions for a source changed after updated_since, cursor-paginated."""
+        if cursor_params is None:
+            cursor_params = CursorParams()
+
+        query: dict[str, Any] = {_FIELD_SOURCE_ID: source_id}
+        if updated_since is not None:
+            query[_FIELD_UPDATED_AT] = {"$gt": updated_since}
+
+        sort_field = _FIELD_UPDATED_AT
+        sort = [(_FIELD_UPDATED_AT, 1), ("_id", 1)]
+
+        if cursor_params.cursor is not None:
+            raw_value, last_id = decode_cursor(cursor_params.cursor)
+            sort_value = self._parse_cursor_sort_value(raw_value, sort_field)
+            cursor_condition = self._build_cursor_condition(
+                sort_field, sort_value, last_id, True
+            )
+            query = {"$and": [query, cursor_condition]}
+
+        fetch_limit = cursor_params.limit + 1
+        cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
+        results = [self._from_document(doc) async for doc in cursor]
+
+        next_cursor = None
+        if len(results) > cursor_params.limit:
+            results = results[: cursor_params.limit]
+            last = results[-1]
+            next_cursor = encode_cursor(last.updated_at, last.id)
+
+        return CursorPage(results=results, next_cursor=next_cursor)
 
     async def find_mention_ids_by_cluster(
         self,

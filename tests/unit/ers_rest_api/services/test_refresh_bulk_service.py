@@ -11,10 +11,9 @@ from erspec.models.core import (
 
 from ers.ers_rest_api.domain.lookup import RefreshBulkRequest
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
-from ers.resolution_decision_store.domain.data_transfer_objects import DeltaPage
-from ers.resolution_decision_store.services.resolution_decision_store_service import (
-    ResolutionDecisionStoreServiceABC,
-)
+from ers.request_registry.services.request_registry_service import RequestRegistryService
+from ers.commons.domain.data_transfer_objects import CursorPage
+from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
 
 
 def _make_decision(
@@ -40,12 +39,17 @@ def _make_decision(
 
 @pytest.fixture
 def decision_store() -> AsyncMock:
-    return create_autospec(ResolutionDecisionStoreServiceABC, instance=True)
+    return create_autospec(DecisionStoreService, instance=True)
 
 
 @pytest.fixture
-def service(decision_store: AsyncMock) -> RefreshBulkService:
-    return RefreshBulkService(decision_store=decision_store)
+def registry() -> AsyncMock:
+    return create_autospec(RequestRegistryService, instance=True)
+
+
+@pytest.fixture
+def service(decision_store: AsyncMock, registry: AsyncMock) -> RefreshBulkService:
+    return RefreshBulkService(decision_store=decision_store, registry=registry)
 
 
 class TestRefreshBulkService:
@@ -53,13 +57,14 @@ class TestRefreshBulkService:
         self,
         service: RefreshBulkService,
         decision_store: AsyncMock,
+        registry: AsyncMock,
     ) -> None:
-        decision_store.get_lookup_state.return_value = LookupState(
+        registry.get_lookup_state.return_value = LookupState(
             source_id="SYSTEM_C",
             last_snapshot=datetime(2026, 3, 10, tzinfo=UTC),
         )
-        decision_store.get_delta_for_source.return_value = DeltaPage(
-            deltas=[
+        decision_store.query_decisions_by_timestamp.return_value = CursorPage(
+            results=[
                 _make_decision(
                     "SYSTEM_C", "req-001", "cluster-010", datetime(2026, 3, 15, tzinfo=UTC)
                 ),
@@ -67,8 +72,7 @@ class TestRefreshBulkService:
                     "SYSTEM_C", "req-002", "cluster-011", datetime(2026, 3, 15, tzinfo=UTC)
                 ),
             ],
-            continuation_cursor=None,
-            has_more=False,
+            next_cursor=None,
         )
 
         result = await service.handle_refresh_bulk(
@@ -79,38 +83,38 @@ class TestRefreshBulkService:
         assert result.deltas[0].cluster_reference.cluster_id == "cluster-010"
         assert result.deltas[1].identified_by.request_id == "req-002"
         assert result.has_more is False
-        decision_store.advance_snapshot.assert_called_once()
+        registry.advance_snapshot.assert_called_once()
 
     async def test_first_call_passes_none_snapshot(
         self,
         service: RefreshBulkService,
         decision_store: AsyncMock,
+        registry: AsyncMock,
     ) -> None:
-        decision_store.get_lookup_state.return_value = None
-        decision_store.get_delta_for_source.return_value = DeltaPage(
-            deltas=[],
-            continuation_cursor=None,
-            has_more=False,
+        registry.get_lookup_state.return_value = None
+        decision_store.query_decisions_by_timestamp.return_value = CursorPage(
+            results=[], next_cursor=None
         )
 
         await service.handle_refresh_bulk(
             RefreshBulkRequest(source_id="SYSTEM_NEW", limit=1000),
         )
 
-        call_args = decision_store.get_delta_for_source.call_args
-        assert call_args.kwargs["last_snapshot"] is None
+        call_args = decision_store.query_decisions_by_timestamp.call_args
+        assert call_args.kwargs["updated_since"] is None
 
     async def test_paginated_response_passes_cursor(
         self,
         service: RefreshBulkService,
         decision_store: AsyncMock,
+        registry: AsyncMock,
     ) -> None:
-        decision_store.get_lookup_state.return_value = LookupState(
+        registry.get_lookup_state.return_value = LookupState(
             source_id="SYSTEM_D",
             last_snapshot=datetime(2026, 3, 10, tzinfo=UTC),
         )
-        decision_store.get_delta_for_source.return_value = DeltaPage(
-            deltas=[
+        decision_store.query_decisions_by_timestamp.return_value = CursorPage(
+            results=[
                 _make_decision(
                     "SYSTEM_D",
                     f"req-{i:03d}",
@@ -119,8 +123,7 @@ class TestRefreshBulkService:
                 )
                 for i in range(50)
             ],
-            continuation_cursor="cursor-page-2",
-            has_more=True,
+            next_cursor="cursor-page-2",
         )
 
         result = await service.handle_refresh_bulk(
@@ -130,20 +133,20 @@ class TestRefreshBulkService:
         assert len(result.deltas) == 50
         assert result.has_more is True
         assert result.continuation_cursor == "cursor-page-2"
+        registry.advance_snapshot.assert_not_called()
 
     async def test_forwards_continuation_cursor_to_store(
         self,
         service: RefreshBulkService,
         decision_store: AsyncMock,
+        registry: AsyncMock,
     ) -> None:
-        decision_store.get_lookup_state.return_value = LookupState(
+        registry.get_lookup_state.return_value = LookupState(
             source_id="SYSTEM_E",
             last_snapshot=datetime(2026, 3, 10, tzinfo=UTC),
         )
-        decision_store.get_delta_for_source.return_value = DeltaPage(
-            deltas=[],
-            continuation_cursor=None,
-            has_more=False,
+        decision_store.query_decisions_by_timestamp.return_value = CursorPage(
+            results=[], next_cursor=None
         )
 
         await service.handle_refresh_bulk(
@@ -154,22 +157,21 @@ class TestRefreshBulkService:
             ),
         )
 
-        call_args = decision_store.get_delta_for_source.call_args
+        call_args = decision_store.query_decisions_by_timestamp.call_args
         assert call_args.kwargs["continuation_cursor"] == "cursor-existing"
 
     async def test_empty_delta_still_advances_snapshot(
         self,
         service: RefreshBulkService,
         decision_store: AsyncMock,
+        registry: AsyncMock,
     ) -> None:
-        decision_store.get_lookup_state.return_value = LookupState(
+        registry.get_lookup_state.return_value = LookupState(
             source_id="SYSTEM_C",
             last_snapshot=datetime(2026, 3, 10, tzinfo=UTC),
         )
-        decision_store.get_delta_for_source.return_value = DeltaPage(
-            deltas=[],
-            continuation_cursor=None,
-            has_more=False,
+        decision_store.query_decisions_by_timestamp.return_value = CursorPage(
+            results=[], next_cursor=None
         )
 
         result = await service.handle_refresh_bulk(
@@ -177,14 +179,36 @@ class TestRefreshBulkService:
         )
 
         assert len(result.deltas) == 0
-        decision_store.advance_snapshot.assert_called_once()
+        registry.advance_snapshot.assert_called_once()
+
+    async def test_snapshot_advances_on_last_page(
+        self,
+        service: RefreshBulkService,
+        decision_store: AsyncMock,
+        registry: AsyncMock,
+    ) -> None:
+        registry.get_lookup_state.return_value = None
+        decision_store.query_decisions_by_timestamp.return_value = CursorPage(
+            results=[], next_cursor=None
+        )
+
+        await service.handle_refresh_bulk(
+            RefreshBulkRequest(
+                source_id="SYSTEM_F",
+                limit=100,
+                continuation_cursor="cursor-last",
+            ),
+        )
+
+        registry.advance_snapshot.assert_called_once()
 
     async def test_propagates_store_exception(
         self,
         service: RefreshBulkService,
         decision_store: AsyncMock,
+        registry: AsyncMock,
     ) -> None:
-        decision_store.get_lookup_state.side_effect = RuntimeError("store error")
+        registry.get_lookup_state.side_effect = RuntimeError("store error")
 
         with pytest.raises(RuntimeError, match="store error"):
             await service.handle_refresh_bulk(

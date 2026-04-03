@@ -112,18 +112,6 @@ Feature: UC-B1.2 — Integrate ERE Resolution Outcomes (Asynchronous)
       | malformed message structure         |
 
   # ---------------------------------------------------------------------------
-  # Messaging failures
-  # ---------------------------------------------------------------------------
-
-  Scenario: Messaging publish failure does not modify Decision Store state
-    Given a mention with triad "SYSTEM_G", "req-050", "ORGANISATION" is registered
-    And the Decision Store holds "cluster-090" for that triad
-    And the ERE messaging boundary is unavailable for publishing
-    When ERS attempts to publish a resolve message for that mention
-    Then the publish failure is logged
-    And the Decision Store still reflects "cluster-090" for triad "SYSTEM_G", "req-050", "ORGANISATION"
-
-  # ---------------------------------------------------------------------------
   # Score preservation (Special Requirement)
   # ---------------------------------------------------------------------------
 
