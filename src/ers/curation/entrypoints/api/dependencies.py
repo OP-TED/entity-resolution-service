@@ -6,7 +6,6 @@ from pymongo.asynchronous.database import AsyncDatabase
 from ers import config
 from ers.commons.adapters.hasher import Argon2PasswordHasher, ContentHasher
 from ers.commons.adapters.redis_client import RedisEREClient
-from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.curation.adapters import (
     DecisionRepository,
     EntityMentionCurationRepository,
@@ -24,6 +23,7 @@ from ers.curation.services import (
     StatisticsService,
     UserActionService,
 )
+from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.users.adapters import MongoUserRepository, UserRepository
 from ers.users.services import AuthService, UserManagementService
 from ers.users.services.token_service import JWTTokenService, TokenService

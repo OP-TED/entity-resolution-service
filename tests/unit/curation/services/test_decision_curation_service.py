@@ -2,8 +2,8 @@ import json
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
-
 from erspec.models.ere import EntityMentionResolutionRequest
+
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters import (
