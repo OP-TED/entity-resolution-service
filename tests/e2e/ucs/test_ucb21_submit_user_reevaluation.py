@@ -314,7 +314,7 @@ def no_ere_message(ctx):
 @then(parsers.parse('the Decision Store still reflects "{cluster_id}" for that triad'))
 def decision_store_unchanged(ctx, cluster_id):
     """
-    TODO: decision = await ctx["decision_store"].get_decision_for_mention(...)
+    TODO: decision = await ctx["decision_store"].get_decision_by_triad(...)
           assert decision.current_placement.cluster_id == cluster_id
     """
     assert True  # TODO: implement

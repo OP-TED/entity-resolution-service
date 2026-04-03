@@ -13,6 +13,7 @@ from ers.resolution_decision_store.domain.errors import StaleOutcomeError
 from ers.resolution_decision_store.services.decision_store_service import (
     DecisionStoreService,
     get_decision_by_triad,
+    query_decisions_delta,
     query_decisions_paginated,
     store_decision,
 )
@@ -143,4 +144,11 @@ class TestPublicAPIFunctions:
     async def test_query_decisions_paginated_delegates_to_service(self, service, mock_repo):
         mock_repo.find_with_filters.return_value = CursorPage(results=[], next_cursor=None)
         result = await query_decisions_paginated(service=service)
+        assert isinstance(result, CursorPage)
+
+    async def test_query_decisions_delta_delegates_to_service(self, service, mock_repo):
+        mock_repo.find_with_filters.return_value = CursorPage(results=[], next_cursor=None)
+        result = await query_decisions_delta(
+            source_id="s1", updated_since=None, service=service, cursor=None, page_size=10
+        )
         assert isinstance(result, CursorPage)
