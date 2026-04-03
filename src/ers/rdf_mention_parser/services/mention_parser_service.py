@@ -124,7 +124,7 @@ class MentionParserService:
 
         self._validate_content_size(content, entity_type, content_type)
 
-        entity_config = self._config.resolve_entity_type(entity_type)
+        entity_config = self._config.get_entity_type_config(entity_type)
         graph = self._adapter.parse_to_graph(content, content_type)
 
         prefix, local = entity_config.rdf_type.split(":", 1)
