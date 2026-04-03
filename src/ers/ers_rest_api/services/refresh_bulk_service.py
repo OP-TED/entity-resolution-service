@@ -7,25 +7,29 @@ from ers.ers_rest_api.domain.lookup import (
     RefreshBulkRequest,
     RefreshBulkResponse,
 )
-from ers.resolution_decision_store.services.resolution_decision_store_service import (
-    ResolutionDecisionStoreServiceABC,
-)
+from ers.request_registry.services.request_registry_service import RequestRegistryService
+from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
 
 
 class RefreshBulkService:
     """Orchestrator for the POST /refresh-bulk endpoint."""
 
-    def __init__(self, decision_store: ResolutionDecisionStoreServiceABC) -> None:
+    def __init__(
+        self,
+        decision_store: DecisionStoreService,
+        registry: RequestRegistryService,
+    ) -> None:
         self._decision_store = decision_store
+        self._registry = registry
 
     async def handle_refresh_bulk(self, request: RefreshBulkRequest) -> RefreshBulkResponse:
         """Retrieve delta of changed assignments since the last synchronisation snapshot."""
-        lookup_state = await self._decision_store.get_lookup_state(request.source_id)
+        lookup_state = await self._registry.get_lookup_state(request.source_id)
         last_snapshot = lookup_state.last_snapshot if lookup_state else None
 
-        page = await self._decision_store.get_delta_for_source(
+        page = await self._decision_store.query_decisions_by_timestamp(
             source_id=request.source_id,
-            last_snapshot=last_snapshot,
+            updated_since=last_snapshot,
             limit=request.limit,
             continuation_cursor=request.continuation_cursor,
         )
@@ -40,16 +44,17 @@ class RefreshBulkService:
                 cluster_reference=d.current_placement,
                 last_updated=d.updated_at or d.created_at,
             )
-            for d in page.deltas
+            for d in page.results
         ]
 
-        await self._decision_store.advance_snapshot(
-            request.source_id,
-            datetime.now(UTC),
-        )
+        if page.next_cursor is None:
+            await self._registry.advance_snapshot(
+                request.source_id,
+                datetime.now(UTC),
+            )
 
         return RefreshBulkResponse(
             deltas=deltas,
-            has_more=page.has_more,
-            continuation_cursor=page.continuation_cursor,
+            has_more=page.next_cursor is not None,
+            continuation_cursor=page.next_cursor,
         )

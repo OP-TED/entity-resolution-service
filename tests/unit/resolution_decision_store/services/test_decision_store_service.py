@@ -13,6 +13,7 @@ from ers.resolution_decision_store.domain.errors import StaleOutcomeError
 from ers.resolution_decision_store.services.decision_store_service import (
     DecisionStoreService,
     get_decision_by_triad,
+    query_decisions_by_timestamp,
     query_decisions_paginated,
     store_decision,
 )
@@ -144,3 +145,61 @@ class TestPublicAPIFunctions:
         mock_repo.find_with_filters.return_value = CursorPage(results=[], next_cursor=None)
         result = await query_decisions_paginated(service=service)
         assert isinstance(result, CursorPage)
+
+    async def test_query_decisions_by_timestamp_delegates_to_service(self, service, mock_repo):
+        mock_repo.find_delta_for_source.return_value = CursorPage(results=[], next_cursor=None)
+        result = await query_decisions_by_timestamp(
+            source_id="s1", updated_since=None, limit=10, continuation_cursor=None, service=service
+        )
+        assert isinstance(result, CursorPage)
+
+
+class TestQueryDecisionsByTimestamp:
+    async def test_delegates_to_repository_with_cursor_params(self, service, mock_repo):
+        now = datetime.now(timezone.utc)
+        expected = CursorPage(results=[make_decision(now)], next_cursor=None)
+        mock_repo.find_delta_for_source.return_value = expected
+
+        result = await service.query_decisions_by_timestamp(
+            source_id="s1",
+            updated_since=datetime(2026, 3, 10, tzinfo=timezone.utc),
+            limit=50,
+            continuation_cursor=None,
+        )
+
+        assert result == expected
+        mock_repo.find_delta_for_source.assert_called_once_with(
+            source_id="s1",
+            updated_since=datetime(2026, 3, 10, tzinfo=timezone.utc),
+            cursor_params=CursorParams(cursor=None, limit=50),
+        )
+
+    async def test_caps_limit_at_max_page_size(self, service, mock_repo):
+        mock_repo.find_delta_for_source.return_value = CursorPage(results=[], next_cursor=None)
+
+        await service.query_decisions_by_timestamp(
+            source_id="s1", updated_since=None, limit=99999, continuation_cursor=None
+        )
+
+        call_args = mock_repo.find_delta_for_source.call_args
+        assert call_args.kwargs["cursor_params"].limit == config.DECISION_STORE_MAX_PAGE_SIZE
+
+    async def test_passes_continuation_cursor(self, service, mock_repo):
+        mock_repo.find_delta_for_source.return_value = CursorPage(results=[], next_cursor=None)
+
+        await service.query_decisions_by_timestamp(
+            source_id="s1", updated_since=None, limit=10, continuation_cursor="cursor-abc"
+        )
+
+        call_args = mock_repo.find_delta_for_source.call_args
+        assert call_args.kwargs["cursor_params"].cursor == "cursor-abc"
+
+    async def test_none_updated_since_passes_none_to_repo(self, service, mock_repo):
+        mock_repo.find_delta_for_source.return_value = CursorPage(results=[], next_cursor=None)
+
+        await service.query_decisions_by_timestamp(
+            source_id="s1", updated_since=None, limit=10, continuation_cursor=None
+        )
+
+        call_args = mock_repo.find_delta_for_source.call_args
+        assert call_args.kwargs["updated_since"] is None

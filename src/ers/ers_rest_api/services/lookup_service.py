@@ -8,15 +8,13 @@ from ers.ers_rest_api.domain.lookup import (
     LookupResponse,
 )
 from ers.ers_rest_api.services.exceptions import MentionNotFoundError
-from ers.resolution_decision_store.services.resolution_decision_store_service import (
-    ResolutionDecisionStoreServiceABC,
-)
+from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
 
 
 class LookupService:
     """Orchestrator for the GET /lookup and POST /lookup-bulk endpoints."""
 
-    def __init__(self, decision_store: ResolutionDecisionStoreServiceABC) -> None:
+    def __init__(self, decision_store: DecisionStoreService) -> None:
         self._decision_store = decision_store
 
     async def handle_lookup(
@@ -26,11 +24,12 @@ class LookupService:
         entity_type: str,
     ) -> LookupResponse:
         """Look up the current cluster assignment for a mention triad."""
-        decision = await self._decision_store.get_decision_for_mention(
+        identifier = EntityMentionIdentifier(
             source_id=source_id,
             request_id=request_id,
             entity_type=entity_type,
         )
+        decision = await self._decision_store.get_decision_by_triad(identifier)
 
         if decision is None:
             raise MentionNotFoundError(source_id, request_id, entity_type)
