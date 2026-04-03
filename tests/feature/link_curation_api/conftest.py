@@ -135,10 +135,12 @@ def token_service() -> MagicMock:
 def user_action_service(
     user_action_repository: AsyncMock,
     entity_mention_repository: AsyncMock,
+    user_repository: AsyncMock,
 ) -> UserActionService:
     return UserActionService(
         user_action_repository=user_action_repository,
         entity_mention_repository=entity_mention_repository,
+        user_repository=user_repository,
     )
 
 

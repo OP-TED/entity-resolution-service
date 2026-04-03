@@ -20,12 +20,14 @@ from ers.curation.adapters import (
 from ers.curation.domain.data_transfer_objects import CanonicalEntityPreview, UserActionFilters
 from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.services import CanonicalEntityService, UserActionService
+from ers.users.adapters.user_repository import UserRepository
 from tests.unit.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
     EntityMentionFactory,
     EntityMentionIdentifierFactory,
     UserActionFactory,
+    UserFactory,
 )
 
 
@@ -37,6 +39,11 @@ def user_action_repository() -> MagicMock:
 @pytest.fixture
 def entity_mention_repository() -> MagicMock:
     return create_autospec(EntityMentionCurationRepository, instance=True)
+
+
+@pytest.fixture
+def user_repository() -> MagicMock:
+    return create_autospec(UserRepository, instance=True)
 
 
 @pytest.fixture
@@ -59,10 +66,12 @@ def canonical_entity_service(
 def user_action_service(
     user_action_repository: MagicMock,
     entity_mention_repository: MagicMock,
+    user_repository: MagicMock,
 ) -> UserActionService:
     return UserActionService(
         user_action_repository=user_action_repository,
         entity_mention_repository=entity_mention_repository,
+        user_repository=user_repository,
     )
 
 
@@ -101,8 +110,10 @@ class TestListUserActions:
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
         entity_mention_repository: MagicMock,
+        user_repository: MagicMock,
     ) -> None:
-        action = UserActionFactory.build()
+        user = UserFactory.build(id="curator-1")
+        action = UserActionFactory.build(actor=user.id)
         entity_mention = EntityMentionFactory.build(
             identifiedBy=action.about_entity_mention,
         )
@@ -110,6 +121,7 @@ class TestListUserActions:
         cursor_params = CursorParams(cursor=None, limit=5)
         user_action_repository.find_with_cursor.return_value = expected
         entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
+        user_repository.find_by_ids.return_value = [user]
 
         result = await user_action_service.list_user_actions(cursor_params)
 
@@ -120,11 +132,14 @@ class TestListUserActions:
         assert result.results[0].about_entity_mention.parsed_representation == json.loads(
             entity_mention.parsed_representation
         )
+        assert result.results[0].actor.id == user.id
+        assert result.results[0].actor.email == user.email
         assert result.next_cursor is None
         user_action_repository.find_with_cursor.assert_called_once_with(cursor_params, None)
         entity_mention_repository.find_by_identifiers.assert_called_once_with(
             [action.about_entity_mention],
         )
+        user_repository.find_by_ids.assert_called_once()
 
 
 class TestRecordReject:
@@ -181,11 +196,13 @@ class TestListUserActionsFiltered:
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
         entity_mention_repository: MagicMock,
+        user_repository: MagicMock,
     ) -> None:
         user_action_repository.find_with_cursor.return_value = CursorPage(
             results=[],
         )
         entity_mention_repository.find_by_identifiers.return_value = []
+        user_repository.find_by_ids.return_value = []
         filters = UserActionFilters(action_type=UserActionType.ACCEPT_TOP)
         cursor_params = CursorParams(limit=10)
 
@@ -198,24 +215,29 @@ class TestListUserActionsFiltered:
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
         entity_mention_repository: MagicMock,
+        user_repository: MagicMock,
     ) -> None:
-        action = UserActionFactory.build(actor="curator@example.com")
+        user = UserFactory.build(id="user-123")
+        action = UserActionFactory.build(actor=user.id)
         user_action_repository.find_with_cursor.return_value = CursorPage(
             results=[action],
         )
         entity_mention_repository.find_by_identifiers.return_value = []
-        filters = UserActionFilters(actor="curator@example.com")
+        user_repository.find_by_ids.return_value = [user]
+        filters = UserActionFilters(actor=user.id)
 
         result = await user_action_service.list_user_actions(CursorParams(), filters)
 
         assert len(result.results) == 1
-        assert result.results[0].actor == "curator@example.com"
+        assert result.results[0].actor.id == user.id
+        assert result.results[0].actor.email == user.email
 
     async def test_filter_by_time_range(
         self,
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
         entity_mention_repository: MagicMock,
+        user_repository: MagicMock,
     ) -> None:
         start = datetime(2026, 3, 13, tzinfo=UTC)
         end = datetime(2026, 3, 20, tzinfo=UTC)
@@ -224,6 +246,7 @@ class TestListUserActionsFiltered:
             results=[action],
         )
         entity_mention_repository.find_by_identifiers.return_value = []
+        user_repository.find_by_ids.return_value = []
         filters = UserActionFilters(time_range_start=start, time_range_end=end)
 
         result = await user_action_service.list_user_actions(CursorParams(), filters)
@@ -239,11 +262,13 @@ class TestListUserActionsFiltered:
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
         entity_mention_repository: MagicMock,
+        user_repository: MagicMock,
     ) -> None:
         user_action_repository.find_with_cursor.return_value = CursorPage(
             results=[],
         )
         entity_mention_repository.find_by_identifiers.return_value = []
+        user_repository.find_by_ids.return_value = []
 
         await user_action_service.list_user_actions(CursorParams())
 

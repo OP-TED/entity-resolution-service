@@ -47,5 +47,5 @@ Feature: User action listing
     Examples:
       | filter criterion | filter value               |
       | recommendation type  | accept top recommendation  |
-      | actor            | curator@example.com        |
+      | actor            | curator-id-1               |
       | time range       | last 7 days                |

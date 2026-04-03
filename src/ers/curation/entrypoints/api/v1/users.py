@@ -1,9 +1,9 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult
-from ers.curation.entrypoints.api.auth import AdminUser, CurrentUser
+from ers.curation.entrypoints.api.auth import AdminUser, CurrentUser, VerifiedUser
 from ers.curation.entrypoints.api.dependencies import get_user_management_service
 from ers.curation.entrypoints.api.v1.schemas import ErrorResponse, Pagination
 from ers.users.domain.data_transfer_objects import (
@@ -43,11 +43,12 @@ async def create_user(
 )
 async def list_users(
     pagination: Pagination,
-    _admin: AdminUser,
+    _user: VerifiedUser,
     service: Annotated[UserManagementService, Depends(get_user_management_service)],
+    email: Annotated[str | None, Query(description="Partial email match")] = None,
 ) -> PaginatedResult[UserResponse]:
-    """List all users (admin only)."""
-    return await service.list_users(pagination)
+    """List all users (verified users)."""
+    return await service.list_users(pagination, email_search=email)
 
 
 @router.patch(

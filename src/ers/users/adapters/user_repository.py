@@ -17,9 +17,14 @@ class UserRepository(AsyncReadRepository[User, str], AsyncWriteRepository[User, 
         """Find a user by email address. Returns None if not found."""
 
     @abstractmethod
+    async def find_by_ids(self, user_ids: list[str]) -> list[User]:
+        """Return users matching the given IDs."""
+
+    @abstractmethod
     async def find_paginated(
         self,
         pagination: PaginationParams,
+        email_search: str | None = None,
     ) -> PaginatedResult[User]:
         """Return paginated users ordered by latest first."""
 
@@ -41,14 +46,24 @@ class MongoUserRepository(BaseMongoRepository[User, str], UserRepository):
             return None
         return self._from_document(doc)
 
+    async def find_by_ids(self, user_ids: list[str]) -> list[User]:
+        if not user_ids:
+            return []
+        cursor = self._collection.find({"_id": {"$in": user_ids}})
+        return [self._from_document(doc) async for doc in cursor]
+
     async def find_paginated(
         self,
         pagination: PaginationParams,
+        email_search: str | None = None,
     ) -> PaginatedResult[User]:
+        query: dict = {}
+        if email_search is not None:
+            query["email"] = {"$regex": email_search, "$options": "i"}
         skip = (pagination.page - 1) * pagination.per_page
-        count = await self._collection.count_documents({})
+        count = await self._collection.count_documents(query)
         cursor = (
-            self._collection.find({})
+            self._collection.find(query)
             .sort([("created_at", -1)])
             .skip(skip)
             .limit(pagination.per_page)

@@ -88,7 +88,7 @@ async def accept_decision(
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> Response:
     """Accept the proposed canonical entity match."""
-    await service.accept_decision(decision_id, actor=user.email)
+    await service.accept_decision(decision_id, actor=user.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -107,7 +107,7 @@ async def reject_decision(
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> Response:
     """Reject the proposed canonical entity match."""
-    await service.reject_decision(decision_id, actor=user.email)
+    await service.reject_decision(decision_id, actor=user.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -130,7 +130,7 @@ async def assign_decision(
     await service.assign_decision(
         decision_id,
         cluster_id=body.cluster_id,
-        actor=user.email,
+        actor=user.id,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -146,7 +146,7 @@ async def bulk_accept_decisions(
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> BulkActionResponse:
     """Accept multiple decisions in a single request."""
-    return await service.bulk_accept_decisions(body.decision_ids, actor=user.email)
+    return await service.bulk_accept_decisions(body.decision_ids, actor=user.id)
 
 
 @router.post(
@@ -160,4 +160,4 @@ async def bulk_reject_decisions(
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> BulkActionResponse:
     """Reject multiple decisions in a single request."""
-    return await service.bulk_reject_decisions(body.decision_ids, actor=user.email)
+    return await service.bulk_reject_decisions(body.decision_ids, actor=user.id)

@@ -13,6 +13,7 @@ from ers.curation.adapters import (
     UserActionCurationRepository,
 )
 from ers.curation.services import UserActionService
+from ers.users.adapters.user_repository import UserRepository
 
 
 @pytest.fixture
@@ -32,11 +33,18 @@ def entity_mention_repository() -> MagicMock:
 
 
 @pytest.fixture
+def user_repository() -> MagicMock:
+    return create_autospec(UserRepository, instance=True)
+
+
+@pytest.fixture
 def user_action_service(
     user_action_repository: MagicMock,
     entity_mention_repository: MagicMock,
+    user_repository: MagicMock,
 ) -> UserActionService:
     return UserActionService(
         user_action_repository=user_action_repository,
         entity_mention_repository=entity_mention_repository,
+        user_repository=user_repository,
     )

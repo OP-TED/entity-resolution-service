@@ -90,7 +90,8 @@ class TestServiceProviders:
     async def test_get_user_action_service(self):
         mock_repo = MagicMock()
         mock_entity_repo = MagicMock()
-        result = await get_user_action_service(mock_repo, mock_entity_repo)
+        mock_user_repo = MagicMock()
+        result = await get_user_action_service(mock_repo, mock_entity_repo, mock_user_repo)
         assert isinstance(result, UserActionService)
 
     async def test_get_decision_curation_service(self):
