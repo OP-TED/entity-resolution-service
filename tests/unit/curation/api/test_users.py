@@ -90,9 +90,10 @@ class TestListUsers:
         assert pagination.page == 2
         assert pagination.per_page == 5
 
-    async def test_non_admin_gets_403(
+    async def test_verified_non_admin_can_list_users(
         self,
         app: FastAPI,
+        user_management_service: AsyncMock,
     ) -> None:
         regular_user = UserContext(
             id="u-2",
@@ -102,6 +103,29 @@ class TestListUsers:
             is_verified=True,
         )
         app.dependency_overrides[get_current_user] = lambda: regular_user
+        user_management_service.list_users.return_value = PaginatedResult(
+            count=0, previous=None, next=None, results=[]
+        )
+
+        from httpx import ASGITransport, AsyncClient
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            response = await c.get(USERS_URL)
+
+        assert response.status_code == 200
+
+    async def test_unverified_gets_403(
+        self,
+        app: FastAPI,
+    ) -> None:
+        unverified_user = UserContext(
+            id="u-3",
+            email="unverified@example.com",
+            is_active=True,
+            is_superuser=False,
+            is_verified=False,
+        )
+        app.dependency_overrides[get_current_user] = lambda: unverified_user
 
         from httpx import ASGITransport, AsyncClient
 
@@ -109,6 +133,21 @@ class TestListUsers:
             response = await c.get(USERS_URL)
 
         assert response.status_code == 403
+
+    async def test_passes_email_search_to_service(
+        self,
+        client: AsyncClient,
+        user_management_service: AsyncMock,
+    ) -> None:
+        user_management_service.list_users.return_value = PaginatedResult(
+            count=0, previous=None, next=None, results=[]
+        )
+
+        response = await client.get(f"{USERS_URL}?email=test")
+
+        assert response.status_code == 200
+        call_kwargs = user_management_service.list_users.call_args
+        assert call_kwargs.kwargs["email_search"] == "test"
 
 
 class TestPatchUser:
