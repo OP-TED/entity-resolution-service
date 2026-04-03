@@ -23,9 +23,14 @@ Feature: Access control
 
   # --- Non-admin access to admin endpoints ---
 
-  Scenario: Non-admin user cannot access user management
+  Scenario: Verified user can list users
     Given a verified user is authenticated but is not an administrator
     When the user attempts to list all users
+    Then the user list is returned successfully
+
+  Scenario: Non-admin user cannot create users
+    Given a verified user is authenticated but is not an administrator
+    When the user attempts to create a new user
     Then the request is rejected with a forbidden error
 
   Scenario: Verified user can view user action trail

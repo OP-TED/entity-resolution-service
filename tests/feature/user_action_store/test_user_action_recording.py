@@ -111,7 +111,7 @@ def decision_has_alternative(ctx: dict[str, Any], cluster_id: str) -> None:
 
 @when("the curator recommends the top candidate placement")
 def curator_recommends_top(ctx: dict[str, Any]) -> None:
-    ctx["actor"] = "curator@example.com"
+    ctx["actor"] = "curator-id-1"
     ctx["user_action"] = DomainUserActionFactory.create_accept(
         actor=ctx["actor"],
         decision=ctx["decision"],
@@ -133,17 +133,21 @@ def curator_recommends_parametrized(
 
     if recommendation == "the top candidate placement":
         ctx["user_action"] = DomainUserActionFactory.create_accept(
-            actor=actor, decision=ctx["decision"],
+            actor=actor,
+            decision=ctx["decision"],
         )
     elif recommendation == "rejection of all candidates":
         ctx["user_action"] = DomainUserActionFactory.create_reject(
-            actor=actor, decision=ctx["decision"],
+            actor=actor,
+            decision=ctx["decision"],
         )
     elif recommendation == "placement in alternative cluster":
         # Pick the last candidate as the alternative for this parametrized case.
         alt_cluster_id = ctx["decision"].candidates[-1].cluster_id
         ctx["user_action"] = DomainUserActionFactory.create_assign(
-            actor=actor, decision=ctx["decision"], cluster_id=alt_cluster_id,
+            actor=actor,
+            decision=ctx["decision"],
+            cluster_id=alt_cluster_id,
         )
     else:
         msg = f"Unknown recommendation: {recommendation}"
@@ -152,7 +156,7 @@ def curator_recommends_parametrized(
 
 @when("the curator recommends rejection of all candidates")
 def curator_recommends_rejection(ctx: dict[str, Any]) -> None:
-    ctx["actor"] = "curator@example.com"
+    ctx["actor"] = "curator-id-1"
     ctx["user_action"] = DomainUserActionFactory.create_reject(
         actor=ctx["actor"],
         decision=ctx["decision"],
@@ -163,7 +167,7 @@ def curator_recommends_rejection(ctx: dict[str, Any]) -> None:
     parsers.parse('the curator recommends placement in alternative cluster "{cluster_id}"'),
 )
 def curator_recommends_alternative(ctx: dict[str, Any], cluster_id: str) -> None:
-    ctx["actor"] = "curator@example.com"
+    ctx["actor"] = "curator-id-1"
     try:
         ctx["user_action"] = DomainUserActionFactory.create_assign(
             actor=ctx["actor"],
@@ -178,7 +182,7 @@ def curator_recommends_alternative(ctx: dict[str, Any], cluster_id: str) -> None
 
 @when(parsers.parse('the curator recommends placement in cluster "{cluster_id}"'))
 def curator_recommends_cluster(ctx: dict[str, Any], cluster_id: str) -> None:
-    ctx["actor"] = "curator@example.com"
+    ctx["actor"] = "curator-id-1"
     try:
         ctx["user_action"] = DomainUserActionFactory.create_assign(
             actor=ctx["actor"],
@@ -258,16 +262,10 @@ def snapshot_includes_current_placement(ctx: dict[str, Any]) -> None:
     # the chosen cluster.  For reject all, selected_cluster is None but
     # the candidates snapshot still includes the current placement.
     if action.selected_cluster is not None:
-        assert any(
-            c.cluster_id == decision.current_placement.cluster_id
-            for c in action.candidates
-        )
+        assert any(c.cluster_id == decision.current_placement.cluster_id for c in action.candidates)
     else:
         # reject all — current placement still in snapshot candidates
-        assert any(
-            c.cluster_id == decision.current_placement.cluster_id
-            for c in action.candidates
-        )
+        assert any(c.cluster_id == decision.current_placement.cluster_id for c in action.candidates)
 
 
 @then("the selected cluster is empty")
