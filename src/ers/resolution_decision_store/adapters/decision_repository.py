@@ -42,10 +42,10 @@ class DecisionRepository(BaseDecisionRepository):
 
     @abstractmethod
     async def find_with_filters(
-            self,
-            filters: DecisionFilters | None = None,
-            cursor_params: CursorParams | None = None,
-            mention_identifiers: list[EntityMentionIdentifier] | None = None,
+        self,
+        filters: DecisionFilters | None = None,
+        cursor_params: CursorParams | None = None,
+        mention_identifiers: list[EntityMentionIdentifier] | None = None,
     ) -> CursorPage[Decision]:
         """Find decisions with optional filtering and cursor-based pagination.
 
@@ -62,9 +62,9 @@ class DecisionRepository(BaseDecisionRepository):
 
     @abstractmethod
     async def find_mention_ids_by_cluster(
-            self,
-            cluster_id: str,
-            limit: int,
+        self,
+        cluster_id: str,
+        limit: int,
     ) -> list[EntityMentionIdentifier]:
         """Return entity mention identifiers for decisions placed in a cluster."""
 
@@ -137,12 +137,50 @@ class MongoDecisionRepository(
             return decision.updated_at
         return None
 
+    async def _fetch_existing_and_raise_stale(
+        self,
+        triad_hash: str,
+        identifier: EntityMentionIdentifier,
+        updated_at: datetime,
+        cause: Exception | None = None,
+    ) -> None:
+        """Fetch existing doc and raise StaleOutcomeError if it exists."""
+        existing = await self._collection.find_one({"_id": triad_hash})
+        if existing:
+            raise StaleOutcomeError(
+                identifier.source_id,
+                identifier.request_id,
+                str(identifier.entity_type),
+                stored_at=str(existing.get("updated_at")),
+                attempted_at=str(updated_at),
+            ) from cause
+
+    async def _execute_upsert(
+        self,
+        triad_hash: str,
+        update_doc: dict[str, Any],
+        updated_at: datetime,
+    ) -> dict[str, Any] | None:
+        """Execute the find_one_and_update call, translating connection errors."""
+        try:
+            return await self._collection.find_one_and_update(
+                filter={"_id": triad_hash, "updated_at": {"$lt": updated_at}},
+                update=update_doc,
+                upsert=True,
+                return_document=pymongo.ReturnDocument.AFTER,
+            )
+        except ConnectionFailure as exc:
+            raise RepositoryConnectionError(str(exc)) from exc
+
+    def _is_duplicate_key_operation_failure(self, exc: OperationFailure) -> bool:
+        return exc.code == 1 and "duplicate key" in str(exc)
+
     async def upsert_decision(
-            self,
-            identifier: EntityMentionIdentifier,
-            current: ClusterReference,
-            candidates: list[ClusterReference],
-            updated_at: datetime,
+        self,
+        identifier: EntityMentionIdentifier,
+        current: ClusterReference,
+        candidates: list[ClusterReference],
+        updated_at: datetime,
     ) -> Decision:
         """Atomically store or replace a decision, rejecting stale updates.
 
@@ -173,51 +211,17 @@ class MongoDecisionRepository(
             },
         }
         try:
-            result = await self._collection.find_one_and_update(
-                filter={"_id": triad_hash, "updated_at": {"$lt": updated_at}},
-                update=update_doc,
-                upsert=True,
-                return_document=pymongo.ReturnDocument.AFTER,
-            )
+            result = await self._execute_upsert(triad_hash, update_doc, updated_at)
         except DuplicateKeyError as exc:
-            # Concurrent upsert race: another writer inserted the same triad first.
-            existing = await self._collection.find_one({"_id": triad_hash})
-            if existing:
-                raise StaleOutcomeError(
-                    identifier.source_id,
-                    identifier.request_id,
-                    str(identifier.entity_type),
-                    stored_at=str(existing.get("updated_at")),
-                    attempted_at=str(updated_at),
-                ) from exc
+            await self._fetch_existing_and_raise_stale(triad_hash, identifier, updated_at, exc)
             raise RepositoryOperationError(str(exc)) from exc
         except OperationFailure as exc:
-            # Code 1 (InternalError) with "duplicate key" means upsert tried to insert
-            # but the _id already exists (filter didn't match due to staleness).
-            if exc.code == 1 and "duplicate key" in str(exc):
-                existing = await self._collection.find_one({"_id": triad_hash})
-                if existing:
-                    raise StaleOutcomeError(
-                        identifier.source_id,
-                        identifier.request_id,
-                        str(identifier.entity_type),
-                        stored_at=str(existing.get("updated_at")),
-                        attempted_at=str(updated_at),
-                    ) from exc
+            if self._is_duplicate_key_operation_failure(exc):
+                await self._fetch_existing_and_raise_stale(triad_hash, identifier, updated_at, exc)
             raise RepositoryOperationError(str(exc)) from exc
-        except ConnectionFailure as exc:
-            raise RepositoryConnectionError(str(exc)) from exc
 
         if result is None:
-            existing = await self._collection.find_one({"_id": triad_hash})
-            if existing:
-                raise StaleOutcomeError(
-                    identifier.source_id,
-                    identifier.request_id,
-                    str(identifier.entity_type),
-                    stored_at=str(existing.get("updated_at")),
-                    attempted_at=str(updated_at),
-                )
+            await self._fetch_existing_and_raise_stale(triad_hash, identifier, updated_at)
             raise RepositoryOperationError(
                 "Upsert returned no document and no existing record found"
             )
@@ -239,10 +243,10 @@ class MongoDecisionRepository(
         return await self.find_by_id(triad_hash)
 
     async def find_with_filters(
-            self,
-            filters: DecisionFilters | None = None,
-            cursor_params: CursorParams | None = None,
-            mention_identifiers: list[EntityMentionIdentifier] | None = None,
+        self,
+        filters: DecisionFilters | None = None,
+        cursor_params: CursorParams | None = None,
+        mention_identifiers: list[EntityMentionIdentifier] | None = None,
     ) -> CursorPage[Decision]:
         """Cursor-paginated query over decisions with optional filtering.
 
@@ -321,9 +325,9 @@ class MongoDecisionRepository(
         return CursorPage(results=results, count=count, next_cursor=next_cursor)
 
     async def find_mention_ids_by_cluster(
-            self,
-            cluster_id: str,
-            limit: int,
+        self,
+        cluster_id: str,
+        limit: int,
     ) -> list[EntityMentionIdentifier]:
         cursor = self._collection.find(
             {_FIELD_CLUSTER_ID: cluster_id},
