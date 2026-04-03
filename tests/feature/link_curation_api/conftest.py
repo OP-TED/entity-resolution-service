@@ -18,6 +18,7 @@ from pytest_bdd import given
 from starlette.testclient import TestClient
 
 from ers.commons.adapters.hasher import Argon2PasswordHasher
+from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.curation.adapters import (
     EntityMentionCurationRepository,
     StatisticsRepository,
@@ -95,7 +96,11 @@ def decision_repository() -> AsyncMock:
 
 @pytest.fixture
 def entity_mention_repository() -> AsyncMock:
-    return create_autospec(EntityMentionCurationRepository, instance=True)
+    mock = create_autospec(EntityMentionCurationRepository, instance=True)
+    # Default: no mentions found — _publish_reevaluation skips silently.
+    # Tests that exercise entity mention data override this explicitly.
+    mock.find_by_identifiers.return_value = []
+    return mock
 
 
 @pytest.fixture
@@ -145,15 +150,22 @@ def user_action_service(
 
 
 @pytest.fixture
+def ere_publish_service() -> MagicMock:
+    return create_autospec(EREPublishService, instance=True)
+
+
+@pytest.fixture
 def decision_curation_service(
     decision_repository: AsyncMock,
     entity_mention_repository: AsyncMock,
     user_action_service: UserActionService,
+    ere_publish_service: MagicMock,
 ) -> DecisionCurationService:
     return DecisionCurationService(
         decision_repository=decision_repository,
         entity_mention_repository=entity_mention_repository,
         user_action_service=user_action_service,
+        ere_publish_service=ere_publish_service,
     )
 
 
