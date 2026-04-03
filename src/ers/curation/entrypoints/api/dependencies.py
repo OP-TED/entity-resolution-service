@@ -86,10 +86,12 @@ async def get_user_repository(
 async def get_user_action_service(
     repo: Annotated[UserActionCurationRepository, Depends(get_user_action_repository)],
     entity_repo: Annotated[EntityMentionCurationRepository, Depends(get_entity_mention_repository)],
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
 ) -> UserActionService:
     return UserActionService(
         user_action_repository=repo,
         entity_mention_repository=entity_repo,
+        user_repository=user_repo,
     )
 
 
