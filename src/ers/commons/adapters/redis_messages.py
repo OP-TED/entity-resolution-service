@@ -57,7 +57,9 @@ def get_message_object(
     except json.JSONDecodeError as exc:
         raise ValueError(f"Message is not valid JSON: {exc}") from exc
 
-    message_type = msg_json.get("type")
+    # LinkML's JSONDumper uses the JSON-LD key "@type"; fall back to it when the
+    # Pydantic-style "type" field is absent (e.g. responses serialised by ERE).
+    message_type = msg_json.get("type") or msg_json.get("@type")
     if not message_type:
         raise ValueError("Message without 'type' field")
 
@@ -65,7 +67,10 @@ def get_message_object(
     if not message_class:
         raise ValueError(f'Unsupported message type: "{message_type}"')
 
-    return message_class.model_validate_json(msg_str)
+    # Strip "@type" before model validation: erspec models have extra="forbid"
+    # and will reject the JSON-LD annotation as an unexpected field.
+    clean = {k: v for k, v in msg_json.items() if k != "@type"}
+    return message_class.model_validate(clean)
 
 
 def get_response_from_message(raw_msg: bytes, encoding: str = "utf-8") -> EREResponse:
