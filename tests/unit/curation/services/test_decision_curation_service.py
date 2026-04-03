@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
+from erspec.models.ere import EntityMentionResolutionRequest
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters import (
@@ -16,6 +17,7 @@ from ers.curation.domain.data_transfer_objects import (
 )
 from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.services import DecisionCurationService, UserActionService
+from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 from tests.unit.factories import (
     ClusterReferenceFactory,
@@ -32,7 +34,11 @@ def decision_repository() -> MagicMock:
 
 @pytest.fixture
 def entity_mention_repository() -> MagicMock:
-    return create_autospec(EntityMentionCurationRepository, instance=True)
+    mock = create_autospec(EntityMentionCurationRepository, instance=True)
+    # Default: no mentions found — _publish_reevaluation skips silently.
+    # Tests that exercise ERE publishing override this explicitly.
+    mock.find_by_identifiers.return_value = []
+    return mock
 
 
 @pytest.fixture
@@ -41,15 +47,22 @@ def user_action_service() -> MagicMock:
 
 
 @pytest.fixture
+def ere_publish_service() -> MagicMock:
+    return create_autospec(EREPublishService, instance=True)
+
+
+@pytest.fixture
 def service(
     decision_repository: MagicMock,
     entity_mention_repository: MagicMock,
     user_action_service: MagicMock,
+    ere_publish_service: MagicMock,
 ) -> DecisionCurationService:
     return DecisionCurationService(
         decision_repository=decision_repository,
         entity_mention_repository=entity_mention_repository,
         user_action_service=user_action_service,
+        ere_publish_service=ere_publish_service,
     )
 
 
@@ -427,3 +440,121 @@ class TestBulkRejectDecisions:
 
         assert result.results[0].status == BulkItemStatus.ERROR
         assert result.results[0].detail == "db timeout"
+
+
+class TestAcceptDecisionPublishesERE:
+    async def test_accept_publishes_proposed_cluster(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+        user_action_service: MagicMock,
+        ere_publish_service: MagicMock,
+    ) -> None:
+        decision = DecisionFactory.build()
+        entity_mention = EntityMentionFactory.build(
+            identifiedBy=decision.about_entity_mention
+        )
+        decision_repository.find_by_id.return_value = decision
+        entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
+
+        await service.accept_decision(decision.id, actor="curator")
+
+        ere_publish_service.publish_request.assert_awaited_once()
+        request: EntityMentionResolutionRequest = (
+            ere_publish_service.publish_request.call_args[0][0]
+        )
+        assert request.entity_mention == entity_mention
+        assert request.proposed_cluster_ids == [decision.current_placement.cluster_id]
+        assert request.excluded_cluster_ids == []
+
+    async def test_accept_skips_ere_when_mention_not_found(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+        user_action_service: MagicMock,
+        ere_publish_service: MagicMock,
+    ) -> None:
+        decision = DecisionFactory.build()
+        decision_repository.find_by_id.return_value = decision
+        entity_mention_repository.find_by_identifiers.return_value = []
+
+        await service.accept_decision(decision.id, actor="curator")
+
+        ere_publish_service.publish_request.assert_not_awaited()
+
+    async def test_accept_swallows_ere_publish_error(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+        user_action_service: MagicMock,
+        ere_publish_service: MagicMock,
+    ) -> None:
+        decision = DecisionFactory.build()
+        entity_mention = EntityMentionFactory.build(
+            identifiedBy=decision.about_entity_mention
+        )
+        decision_repository.find_by_id.return_value = decision
+        entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
+        ere_publish_service.publish_request.side_effect = ConnectionError("Redis down")
+
+        # Must not raise
+        await service.accept_decision(decision.id, actor="curator")
+
+
+class TestAssignDecisionPublishesERE:
+    async def test_assign_publishes_requested_cluster(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+        user_action_service: MagicMock,
+        ere_publish_service: MagicMock,
+    ) -> None:
+        decision = DecisionFactory.build()
+        target_cluster = decision.candidates[0].cluster_id
+        entity_mention = EntityMentionFactory.build(
+            identifiedBy=decision.about_entity_mention
+        )
+        decision_repository.find_by_id.return_value = decision
+        entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
+
+        await service.assign_decision(decision.id, cluster_id=target_cluster, actor="curator")
+
+        ere_publish_service.publish_request.assert_awaited_once()
+        request: EntityMentionResolutionRequest = (
+            ere_publish_service.publish_request.call_args[0][0]
+        )
+        assert request.entity_mention == entity_mention
+        assert request.proposed_cluster_ids == [target_cluster]
+        assert request.excluded_cluster_ids == []
+
+
+class TestRejectDecisionPublishesERE:
+    async def test_reject_publishes_all_candidates_as_exclusions(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+        user_action_service: MagicMock,
+        ere_publish_service: MagicMock,
+    ) -> None:
+        decision = DecisionFactory.build()
+        entity_mention = EntityMentionFactory.build(
+            identifiedBy=decision.about_entity_mention
+        )
+        decision_repository.find_by_id.return_value = decision
+        entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
+
+        await service.reject_decision(decision.id, actor="curator")
+
+        ere_publish_service.publish_request.assert_awaited_once()
+        request: EntityMentionResolutionRequest = (
+            ere_publish_service.publish_request.call_args[0][0]
+        )
+        expected_exclusions = [c.cluster_id for c in decision.candidates]
+        assert request.entity_mention == entity_mention
+        assert request.excluded_cluster_ids == expected_exclusions
+        assert request.proposed_cluster_ids == []
