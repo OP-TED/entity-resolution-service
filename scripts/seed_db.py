@@ -18,16 +18,15 @@ from erspec.models.core import UserActionType
 from pymongo import AsyncMongoClient
 
 from ers import config
-from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
-from ers.curation.adapters.entity_mention_repository import (
-    MongoEntityMentionCurationRepository,
-)
 from ers.curation.adapters.user_action_repository import (
     MongoUserActionCurationRepository,
 )
 from ers.request_registry.adapters.records_repository import (
     MongoResolutionRequestRepository,
 )
+from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
+from ers.users.adapters.user_repository import MongoUserRepository
+from ers.users.domain.users import User
 
 # only used for seeding/testing
 from tests.unit.factories import (
@@ -40,9 +39,15 @@ from tests.unit.factories import (
 
 ENTITY_TYPES = ["ORGANISATION", "PROCEDURE"]
 ACTION_TYPES = list(UserActionType)
-CURATORS = ["curator-1", "curator-2", "curator-3"]
 
-SEED_COLLECTIONS = ["decisions", "resolution_requests", "user_actions"]
+SEED_USERS = [
+    {"email": "alice.curator@example.com", "is_verified": True},
+    {"email": "bob.reviewer@example.com", "is_verified": True},
+    {"email": "carol.admin@example.com", "is_superuser": True, "is_verified": True},
+    {"email": "dave.new@example.com", "is_verified": False},
+]
+
+SEED_COLLECTIONS = ["decisions", "resolution_requests", "user_actions", "users"]
 
 
 def _random_past(max_days: int = 90) -> datetime:
@@ -144,9 +149,30 @@ def _selected_cluster_for_action(decision: Any, action_type: UserActionType) -> 
     return None
 
 
+async def _create_users(user_repo: MongoUserRepository) -> list[User]:
+    from ers.commons.adapters.hasher import Argon2PasswordHasher
+
+    hasher = Argon2PasswordHasher()
+    users: list[User] = []
+    for spec in SEED_USERS:
+        user = User(
+            id=f"user-{spec['email'].split('@')[0]}",
+            email=spec["email"],
+            hashed_password=hasher.hash("password123"),
+            is_active=True,
+            is_superuser=spec.get("is_superuser", False),
+            is_verified=spec.get("is_verified", False),
+            created_at=_random_past(max_days=180),
+        )
+        await user_repo.save(user)
+        users.append(user)
+    return users
+
+
 async def _create_user_actions(
     decisions: list[Any],
     action_repo: MongoUserActionCurationRepository,
+    user_ids: list[str],
 ) -> int:
     curated_decisions = random.sample(decisions, k=min(len(decisions) // 3, len(decisions)))
     action_count = 0
@@ -157,7 +183,7 @@ async def _create_user_actions(
             candidates=decision.candidates,
             selected_cluster=_selected_cluster_for_action(decision, action_type),
             action_type=action_type,
-            actor=random.choice(CURATORS),
+            actor=random.choice(user_ids),
             created_at=decision.created_at + timedelta(minutes=random.randint(1, 120)),
         )
         await action_repo.save(action)
@@ -177,7 +203,10 @@ async def seed(
     mention_repo = MongoResolutionRequestRepository(db)
     decision_repo = MongoDecisionRepository(db)
     action_repo = MongoUserActionCurationRepository(db)
+    user_repo = MongoUserRepository(db)
 
+    users = await _create_users(user_repo)
+    user_ids = [u.id for u in users]
     mentions = await _create_mentions(mention_repo, num_mentions, num_requests)
     cluster_ids, cluster_refs_by_mention = _build_cluster_references(mentions, num_clusters)
     decisions = await _create_decisions(
@@ -186,9 +215,10 @@ async def seed(
         cluster_ids,
         decision_repo,
     )
-    action_count = await _create_user_actions(decisions, action_repo)
+    action_count = await _create_user_actions(decisions, action_repo, user_ids)
 
     print(f"Seeded database '{config.MONGO_DATABASE_NAME}':")
+    print(f"  {len(users)} users ({', '.join(u.email for u in users)})")
     print(
         f"  {num_mentions} entity mentions ({num_requests} requests, {len(ENTITY_TYPES)} entity types)"
     )
