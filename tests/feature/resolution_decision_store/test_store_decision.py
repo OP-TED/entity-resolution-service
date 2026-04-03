@@ -186,7 +186,7 @@ def step_stale_error_raised(ctx):
 
 
 @then("the stored record has at most 5 candidates")
-def step_candidates_capped(ctx):
+def step_candidates_capped(ctx, mock_repo):
     assert ctx["raised_exception"] is None, ctx["raised_exception"]
-    assert isinstance(ctx["result"], Decision)
-    assert len(ctx["result"].candidates) <= config.DECISION_STORE_MAX_CANDIDATES
+    call_kwargs = mock_repo.upsert_decision.call_args.kwargs
+    assert len(call_kwargs["candidates"]) <= config.DECISION_STORE_MAX_CANDIDATES

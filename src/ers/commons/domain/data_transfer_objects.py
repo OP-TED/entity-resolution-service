@@ -75,13 +75,14 @@ class CursorParams(FrozenDTO):
     """Cursor-based pagination parameters."""
 
     cursor: str | None = None
-    limit: int = Field(default=DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE)
+    limit: int = Field(default=DEFAULT_PER_PAGE, ge=1)
 
 
 class CursorPage[T](FrozenDTO):
     """Cursor-paginated query result."""
 
     results: list[T]
+    count: int = 0
     next_cursor: str | None = None
 
 

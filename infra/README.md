@@ -6,32 +6,57 @@ Deployment and infrastructure files for the Entity Resolution Service.
 
 ```
 infra/
-├── compose.yaml       # Docker Compose service definitions
-├── docker/
-│   └── Dockerfile     # Multi-stage build (builder + runtime)
-└── scripts/
-    └── entrypoint.sh  # Container entrypoint
+├── .env.example      # Environment variable template
+├── compose.dev.yaml  # Docker Compose for local development
+├── Dockerfile        # Multi-stage build (ARG ENVIRONMENT=production|development)
+├── entrypoint.sh     # Container entrypoint (seeding + service start)
+└── README.md
 ```
 
 ## Services
 
 | Service | Purpose | Port |
 |---|---|---|
-| `ers-api` | ERS FastAPI application | see `infra/compose.yaml` |
-| `curation-api` | Curation FastAPI application | see `infra/compose.yaml` |
+| `curation-api` | Curation FastAPI application | 8000 |
+| `ers-api` | ERS FastAPI application | 8001 |
 | `ferretdb` | MongoDB-compatible document store | 27017 |
-| `postgres` | FerretDB storage backend | — |
-| `redis` | ERE contract message queue (ere_requests / ere_responses) | 6379 |
+| `postgres` | FerretDB storage backend (DocumentDB) | — (internal) |
+| `redis` | ERE contract message queue | 6379 |
 
 ## Usage
 
 All commands run from the repo root via `make`:
 
 ```bash
-make up        # Start all services
-make down      # Stop all services
-make rebuild   # Rebuild images and start
-make logs      # Follow service logs
+make up              # Start all services
+make down            # Stop all services
+make down-volumes    # Stop services and remove volumes (clean slate)
+make rebuild         # Rebuild images and start
+make rebuild-clean   # Rebuild from scratch (no cache)
+make logs            # Follow service logs
+make watch           # Start services with file watching (hot-reload)
+```
+
+### File watching (development)
+
+`make watch` uses Docker Compose's `watch` feature to sync source code changes
+into running containers without a full rebuild:
+
+- **Source changes** (`src/`) are synced live into the container.
+- **Dependency changes** (`pyproject.toml`, `poetry.lock`) trigger a full rebuild.
+
+### Production build
+
+The Dockerfile defaults to a production build. To build manually:
+
+```bash
+docker build -f infra/Dockerfile -t ers:latest .
+```
+
+The development build (used by `make up`) includes dev dependencies, tests, and project scripts:
+
+```bash
+docker build -f infra/Dockerfile --build-arg ENVIRONMENT=development -t ers:dev .
 ```
 
 ## Configuration

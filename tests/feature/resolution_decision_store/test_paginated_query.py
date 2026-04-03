@@ -8,6 +8,7 @@ from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifi
 from pytest_bdd import given, scenario, then, when
 
 from ers import config
+from ers.commons.domain.exceptions import InvalidCursorError
 from ers.commons.domain.cursor import encode_cursor
 from ers.commons.domain.data_transfer_objects import CursorPage
 from ers.resolution_decision_store.services.decision_store_service import query_decisions_paginated
@@ -37,6 +38,11 @@ def test_empty_store_empty_page():
 
 @scenario(FEATURE_FILE, "page_size is capped at system limit")
 def test_page_size_capped():
+    pass
+
+
+@scenario(FEATURE_FILE, "Querying with a malformed cursor raises an error")
+def test_malformed_cursor_rejected():
     pass
 
 
@@ -156,6 +162,16 @@ def step_query_paginated_empty(ctx, service):
         ctx["raised_exception"] = exc
 
 
+@when("I query decisions with a malformed cursor")
+def step_query_malformed_cursor(ctx, service, mock_repo):
+    mock_repo.find_with_filters = AsyncMock(side_effect=InvalidCursorError())
+    try:
+        asyncio.run(query_decisions_paginated(service=service, cursor="not!!valid-base64"))
+        ctx["raised_exception"] = None
+    except Exception as exc:
+        ctx["raised_exception"] = exc
+
+
 @when("I query with page_size 9999")
 def step_query_large_page_size(ctx, service, mock_repo):
     mock_repo.find_with_filters = AsyncMock(
@@ -205,3 +221,8 @@ def step_page_size_capped(ctx):
     assert ctx["raised_exception"] is None, ctx["raised_exception"]
     effective_limit = ctx["call_args"].kwargs["cursor_params"].limit
     assert effective_limit <= config.DECISION_STORE_MAX_PAGE_SIZE
+
+
+@then("an InvalidCursorError is raised")
+def step_invalid_cursor_error_raised(ctx):
+    assert isinstance(ctx["raised_exception"], InvalidCursorError)

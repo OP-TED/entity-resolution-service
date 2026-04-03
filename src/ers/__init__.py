@@ -7,8 +7,8 @@ from ers.commons.adapters.config_resolver import env_property
 load_dotenv()
 
 
-class AppConfig:
-    @env_property(default_value="Entity Resolution Service")
+class CurationAppConfig:
+    @env_property(default_value="Curation REST API")
     def APP_NAME(self, config_value: str) -> str:
         return config_value
 
@@ -92,6 +92,11 @@ class ERSRestApiConfig:
     def ERS_API_PORT(self, config_value: str) -> int:
         return int(config_value)
 
+    @env_property(default_value="false")
+    def USE_MOCK_SERVICES(self, config_value: str) -> bool:
+        """Enable factory-generated mock responses (temporary dev)."""
+        return config_value.lower() == "true"
+
 
 class EREConfig:
     @env_property(default_value="1000")
@@ -161,7 +166,7 @@ class ObservabilityConfig:
 
 
 class ERSConfigResolver(
-    AppConfig,
+    CurationAppConfig,
     JWTConfig,
     AdminConfig,
     CurationConfig,

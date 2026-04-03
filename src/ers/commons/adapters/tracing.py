@@ -46,12 +46,13 @@ import asyncio
 import functools
 import logging
 import uuid
+from collections.abc import Callable
 from contextvars import ContextVar
-from typing import Any, Callable
+from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-from opentelemetry.sdk.trace import TracerProvider, SpanProcessor
+from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 
 logger = logging.getLogger(__name__)
 
@@ -114,9 +115,7 @@ def add_span_processor(sp: SpanProcessor) -> None:
 _extractors: dict[type, Callable[[Any], dict[str, Any]]] = {}
 
 
-def register_span_extractor(
-    type_: type, extractor: Callable[[Any], dict[str, Any]]
-) -> None:
+def register_span_extractor(type_: type, extractor: Callable[[Any], dict[str, Any]]) -> None:
     """Register a span attribute extractor for a domain type.
 
     Called from ``span_extractors.py`` modules at startup — never at import time.
@@ -155,7 +154,7 @@ def _extract_attributes(args: tuple, kwargs: dict) -> dict[str, Any]:
         if extractor is not None:
             try:
                 attributes.update(extractor(value))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("Span extractor failed for %s", type(value).__name__)
     return attributes
 
@@ -224,9 +223,7 @@ def span(name: str, **attributes: Any):
     """
     # ``attributes or None``: an empty dict is falsy and becomes None.
     # OTel treats None and {} identically — both mean "no attributes".
-    return trace.get_tracer(__name__).start_as_current_span(
-        name, attributes=attributes or None
-    )
+    return trace.get_tracer(__name__).start_as_current_span(name, attributes=attributes or None)
 
 
 def trace_function(
@@ -273,11 +270,13 @@ def trace_function(
         def parse_entity_mention(entity_mention: EntityMention, ...) -> dict:
             ...
     """
+
     def decorator(f: Callable) -> Callable:
         module_short = f.__module__.rsplit(".", 1)[-1]
         effective_name = span_name or f"{module_short}.{f.__qualname__}"
 
         if asyncio.iscoroutinefunction(f):
+
             @functools.wraps(f)
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 attributes = _extract_attributes(args, kwargs)
@@ -290,6 +289,7 @@ def trace_function(
                         current_span.set_attribute("error.type", type(exc).__name__)
                         current_span.record_exception(exc)
                         raise
+
             return async_wrapper
 
         @functools.wraps(f)
@@ -304,6 +304,7 @@ def trace_function(
                     current_span.set_attribute("error.type", type(exc).__name__)
                     current_span.record_exception(exc)
                     raise
+
         return sync_wrapper
 
     if func is not None:

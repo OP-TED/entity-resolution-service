@@ -1,16 +1,22 @@
 # Docker Compose configuration for development environment
 
+x-api-env: &api-env
+  PYTHONDONTWRITEBYTECODE: 1
+  PYTHONUNBUFFERED: 1
+  # FerretDB authenticates via PostgreSQL credentials
+  MONGO_URI: mongodb://${POSTGRES_USER:-username}:${POSTGRES_PASSWORD:-password}@ferretdb:27017
+  MONGO_DATABASE_NAME: ${MONGO_DATABASE_NAME:-ers}
+
 x-api-common: &api-common
   build:
     context: ..
-    dockerfile: infra/docker/dev.Dockerfile
+    dockerfile: infra/Dockerfile
+    args:
+      ENVIRONMENT: development
   env_file:
     - .env
   environment:
-    - PYTHONDONTWRITEBYTECODE=1
-    - PYTHONUNBUFFERED=1
-    - MONGO_URI=mongodb://${POSTGRES_USER:-username}:${POSTGRES_PASSWORD:-password}@ferretdb:27017
-    - MONGO_DATABASE_NAME=${MONGO_DATABASE_NAME:-ers}
+    <<: *api-env
   restart: unless-stopped
   depends_on:
     ferretdb:
@@ -31,16 +37,17 @@ services:
   curation-api:
     <<: *api-common
     container_name: "curation-api"
-    command: ["/scripts/start-curation-api.sh"]
+    command: ["curation"]
     ports:
       - "${UVICORN_PORT:-8000}:8000"
     environment:
-      - SEED_DB=true  # for development only
+      <<: *api-env
+      SEED_DB: "true"  # dev-only: seed DB on startup
 
   ers-api:
     <<: *api-common
     container_name: "ers-api"
-    command: ["/scripts/start-ers-api.sh"]
+    command: ["ers"]
     ports:
       - "${ERS_API_PORT:-8001}:8001"
 
@@ -53,7 +60,12 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
     volumes:
-      - ../data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-username}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     networks:
       - local
 
@@ -66,13 +78,20 @@ services:
     environment:
       - FERRETDB_POSTGRESQL_URL=postgres://${POSTGRES_USER:-username}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-postgres}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/ferretdb", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     networks:
       - local
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    container_name: "redis"
     ports:
       - "6379:6379"
     command: redis-server --requirepass ${REDIS_PASSWORD:-changeme}
@@ -83,6 +102,9 @@ services:
       retries: 5
     networks:
       - local
+
+volumes:
+  postgres-data:
 
 networks:
   local:

@@ -1,0 +1,2242 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Entity Resolution Service",
+        "version": "0.1.0-dev-ba03be0d"
+    },
+    "paths": {
+        "/health": {
+            "get": {
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Health",
+                "description": "Health check endpoint to verify the service is running.",
+                "operationId": "health_health_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "type": "object",
+                                    "title": "Response Health Health Get"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/register": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Register",
+                "description": "Register a new user account.",
+                "operationId": "register_api_v1_auth_register_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/login": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Login",
+                "description": "Authenticate and receive access + refresh tokens.",
+                "operationId": "login_api_v1_auth_login_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TokenResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/refresh": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Refresh",
+                "description": "Exchange a refresh token for a new token pair.",
+                "operationId": "refresh_api_v1_auth_refresh_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RefreshRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TokenResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/curation/decisions": {
+            "get": {
+                "tags": [
+                    "Decisions"
+                ],
+                "summary": "List Decisions",
+                "description": "Retrieve cursor-paginated list of decisions with optional filtering.",
+                "operationId": "list_decisions_api_v1_curation_decisions_get",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "entity_type",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "description": "Filter by entity type",
+                            "title": "Entity Type"
+                        },
+                        "description": "Filter by entity type"
+                    },
+                    {
+                        "name": "confidence_min",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "number",
+                                    "maximum": 1,
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "description": "Minimum confidence",
+                            "title": "Confidence Min"
+                        },
+                        "description": "Minimum confidence"
+                    },
+                    {
+                        "name": "confidence_max",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "number",
+                                    "maximum": 1,
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "description": "Maximum confidence",
+                            "default": 0.85,
+                            "title": "Confidence Max"
+                        },
+                        "description": "Maximum confidence"
+                    },
+                    {
+                        "name": "similarity_min",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "number",
+                                    "maximum": 1,
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "description": "Minimum similarity",
+                            "title": "Similarity Min"
+                        },
+                        "description": "Minimum similarity"
+                    },
+                    {
+                        "name": "similarity_max",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "number",
+                                    "maximum": 1,
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "description": "Maximum similarity",
+                            "title": "Similarity Max"
+                        },
+                        "description": "Maximum similarity"
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "description": "Search text",
+                            "title": "Search"
+                        },
+                        "description": "Search text"
+                    },
+                    {
+                        "name": "ordering",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "$ref": "#/components/schemas/DecisionOrdering"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "description": "Ordering field",
+                            "title": "Ordering"
+                        },
+                        "description": "Ordering field"
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "description": "Pagination cursor from previous response",
+                            "title": "Cursor"
+                        },
+                        "description": "Pagination cursor from previous response"
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 50,
+                            "minimum": 1,
+                            "description": "Items per page",
+                            "default": 20,
+                            "title": "Limit"
+                        },
+                        "description": "Items per page"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CursorPage_DecisionSummary_"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    }
+                }
+            }
+        },
+        "/api/v1/curation/decisions/{decision_id}/proposed-canonical-entity": {
+            "get": {
+                "tags": [
+                    "Decisions"
+                ],
+                "summary": "Get Proposed Canonical Entity",
+                "description": "Get the proposed canonical entity for a given decision.",
+                "operationId": "get_proposed_canonical_entity_api_v1_curation_decisions__decision_id__proposed_canonical_entity_get",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "decision_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Decision Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CanonicalEntityPreview"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    }
+                }
+            }
+        },
+        "/api/v1/curation/decisions/{decision_id}/alternative-canonical-entities": {
+            "get": {
+                "tags": [
+                    "Decisions"
+                ],
+                "summary": "Get Alternative Canonical Entities",
+                "description": "Get alternative canonical entities for a given decision.",
+                "operationId": "get_alternative_canonical_entities_api_v1_curation_decisions__decision_id__alternative_canonical_entities_get",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "decision_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Decision Id"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Page number",
+                            "default": 1,
+                            "title": "Page"
+                        },
+                        "description": "Page number"
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 50,
+                            "minimum": 1,
+                            "description": "Items per page",
+                            "default": 20,
+                            "title": "Per Page"
+                        },
+                        "description": "Items per page"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedResult_CanonicalEntityPreview_"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    }
+                }
+            }
+        },
+        "/api/v1/curation/decisions/{decision_id}/accept": {
+            "post": {
+                "tags": [
+                    "Decisions"
+                ],
+                "summary": "Accept Decision",
+                "description": "Accept the proposed canonical entity match.",
+                "operationId": "accept_decision_api_v1_curation_decisions__decision_id__accept_post",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "decision_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Decision Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Successful Response"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Conflict"
+                    }
+                }
+            }
+        },
+        "/api/v1/curation/decisions/{decision_id}/reject": {
+            "post": {
+                "tags": [
+                    "Decisions"
+                ],
+                "summary": "Reject Decision",
+                "description": "Reject the proposed canonical entity match.",
+                "operationId": "reject_decision_api_v1_curation_decisions__decision_id__reject_post",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "decision_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Decision Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Successful Response"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Conflict"
+                    }
+                }
+            }
+        },
+        "/api/v1/curation/decisions/{decision_id}/assign": {
+            "post": {
+                "tags": [
+                    "Decisions"
+                ],
+                "summary": "Assign Decision",
+                "description": "Assign the subject entity mention to a specific cluster.",
+                "operationId": "assign_decision_api_v1_curation_decisions__decision_id__assign_post",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "decision_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Decision Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssignRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "Successful Response"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Conflict"
+                    }
+                }
+            }
+        },
+        "/api/v1/curation/decisions/bulk-accept": {
+            "post": {
+                "tags": [
+                    "Decisions"
+                ],
+                "summary": "Bulk Accept Decisions",
+                "description": "Accept multiple decisions in a single request.",
+                "operationId": "bulk_accept_decisions_api_v1_curation_decisions_bulk_accept_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/BulkActionRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BulkActionResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/curation/decisions/bulk-reject": {
+            "post": {
+                "tags": [
+                    "Decisions"
+                ],
+                "summary": "Bulk Reject Decisions",
+                "description": "Reject multiple decisions in a single request.",
+                "operationId": "bulk_reject_decisions_api_v1_curation_decisions_bulk_reject_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/BulkActionRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BulkActionResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/curation/stats": {
+            "get": {
+                "tags": [
+                    "Statistics"
+                ],
+                "summary": "Get Statistics",
+                "description": "Retrieve registry statistics and curation statistics with optional filtering.",
+                "operationId": "get_statistics_api_v1_curation_stats_get",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "entity_type",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "description": "Filter by entity type",
+                            "title": "Entity Type"
+                        },
+                        "description": "Filter by entity type"
+                    },
+                    {
+                        "name": "timeframe_start",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "description": "Start of timeframe",
+                            "title": "Timeframe Start"
+                        },
+                        "description": "Start of timeframe"
+                    },
+                    {
+                        "name": "timeframe_end",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "description": "End of timeframe",
+                            "title": "Timeframe End"
+                        },
+                        "description": "End of timeframe"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Statistics"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    }
+                }
+            }
+        },
+        "/api/v1/user-actions": {
+            "get": {
+                "tags": [
+                    "User Actions"
+                ],
+                "summary": "List User Actions",
+                "description": "List paginated user actions ordered by latest first (admin only).",
+                "operationId": "list_user_actions_api_v1_user_actions_get",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "action_type",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "$ref": "#/components/schemas/UserActionType"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Action Type"
+                        }
+                    },
+                    {
+                        "name": "actor",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Actor"
+                        }
+                    },
+                    {
+                        "name": "time_range_start",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Time Range Start"
+                        }
+                    },
+                    {
+                        "name": "time_range_end",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Time Range End"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Page number",
+                            "default": 1,
+                            "title": "Page"
+                        },
+                        "description": "Page number"
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 50,
+                            "minimum": 1,
+                            "description": "Items per page",
+                            "default": 20,
+                            "title": "Per Page"
+                        },
+                        "description": "Items per page"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedResult_UserActionSummary_"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Forbidden"
+                    }
+                }
+            }
+        },
+        "/api/v1/users": {
+            "post": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Create User",
+                "description": "Create a new user (admin only).",
+                "operationId": "create_user_api_v1_users_post",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateUserRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Forbidden"
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Conflict"
+                    }
+                }
+            },
+            "get": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "List Users",
+                "description": "List all users (admin only).",
+                "operationId": "list_users_api_v1_users_get",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Page number",
+                            "default": 1,
+                            "title": "Page"
+                        },
+                        "description": "Page number"
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 50,
+                            "minimum": 1,
+                            "description": "Items per page",
+                            "default": 20,
+                            "title": "Per Page"
+                        },
+                        "description": "Items per page"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedResult_UserResponse_"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Forbidden"
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{user_id}": {
+            "patch": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Patch User",
+                "description": "Update user flags (admin only).",
+                "operationId": "patch_user_api_v1_users__user_id__patch",
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "User Id"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UserPatchRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Conflict"
+                    }
+                }
+            }
+        },
+        "/api/v1/users/me": {
+            "get": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Get Current User",
+                "description": "Get current authenticated user.",
+                "operationId": "get_current_user_api_v1_users_me_get",
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserContext"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "HTTPBearer": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "AssignRequest": {
+                "properties": {
+                    "cluster_id": {
+                        "type": "string",
+                        "title": "Cluster Id"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "cluster_id"
+                ],
+                "title": "AssignRequest",
+                "description": "Request body for assigning an entity to an alternative cluster."
+            },
+            "BulkActionRequest": {
+                "properties": {
+                    "decision_ids": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array",
+                        "maxItems": 200,
+                        "minItems": 1,
+                        "uniqueItems": true,
+                        "title": "Decision Ids"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "decision_ids"
+                ],
+                "title": "BulkActionRequest",
+                "description": "Request body for bulk accept/reject operations."
+            },
+            "BulkActionResponse": {
+                "properties": {
+                    "results": {
+                        "items": {
+                            "$ref": "#/components/schemas/BulkItemResult"
+                        },
+                        "type": "array",
+                        "title": "Results"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "results"
+                ],
+                "title": "BulkActionResponse",
+                "description": "Response body for bulk accept/reject operations."
+            },
+            "BulkItemResult": {
+                "properties": {
+                    "decision_id": {
+                        "type": "string",
+                        "title": "Decision Id"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/BulkItemStatus"
+                    },
+                    "detail": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Detail"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "decision_id",
+                    "status"
+                ],
+                "title": "BulkItemResult",
+                "description": "Result of a single decision within a bulk action."
+            },
+            "BulkItemStatus": {
+                "type": "string",
+                "enum": [
+                    "success",
+                    "not_found",
+                    "already_curated",
+                    "error"
+                ],
+                "title": "BulkItemStatus",
+                "description": "Outcome of an individual bulk action item."
+            },
+            "CanonicalEntityPreview": {
+                "properties": {
+                    "cluster_id": {
+                        "type": "string",
+                        "title": "Cluster Id"
+                    },
+                    "confidence_score": {
+                        "type": "number",
+                        "title": "Confidence Score"
+                    },
+                    "similarity_score": {
+                        "type": "number",
+                        "title": "Similarity Score"
+                    },
+                    "top_entities": {
+                        "items": {
+                            "$ref": "#/components/schemas/EntityMentionPreview"
+                        },
+                        "type": "array",
+                        "title": "Top Entities"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "cluster_id",
+                    "confidence_score",
+                    "similarity_score",
+                    "top_entities"
+                ],
+                "title": "CanonicalEntityPreview",
+                "description": "Cluster preview with top entity mentions for display."
+            },
+            "ClusterReference": {
+                "properties": {
+                    "cluster_id": {
+                        "type": "string",
+                        "title": "Cluster Id",
+                        "description": "The identifier of the cluster/canonical entity that is considered equivalent to the\nsubject entity mention that an `EntityMentionResolutionResponse` refers to.\n",
+                        "linkml_meta": {
+                            "domain_of": [
+                                "ClusterReference"
+                            ]
+                        }
+                    },
+                    "confidence_score": {
+                        "type": "number",
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "title": "Confidence Score",
+                        "description": "A 0-1 value of how confident the ERE is about the equivalence between the subject entity mention\nand the target canonical entity.\n",
+                        "linkml_meta": {
+                            "domain_of": [
+                                "ClusterReference"
+                            ]
+                        }
+                    },
+                    "similarity_score": {
+                        "type": "number",
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "title": "Similarity Score",
+                        "description": "A 0-1 score representing the pairwise comparison between a mention and a cluster (likely\nbased on a representative representation).\n",
+                        "linkml_meta": {
+                            "domain_of": [
+                                "ClusterReference"
+                            ]
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                    "cluster_id",
+                    "confidence_score",
+                    "similarity_score"
+                ],
+                "title": "ClusterReference",
+                "description": "A reference to a cluster to which an entity is deemed to belong, with an associated confidence and similarity scores.\n\nA cluster is a set of entity mentions that have been determined to refer to the same real-world entity.\nEach cluster has a unique clusterId.\n\nA cluster reference is used to report the association between an entity mention and a cluster \nof equivalence."
+            },
+            "CreateUserRequest": {
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "title": "Email"
+                    },
+                    "password": {
+                        "type": "string",
+                        "maxLength": 128,
+                        "minLength": 8,
+                        "title": "Password"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "title": "Is Active",
+                        "default": true
+                    },
+                    "is_superuser": {
+                        "type": "boolean",
+                        "title": "Is Superuser",
+                        "default": false
+                    },
+                    "is_verified": {
+                        "type": "boolean",
+                        "title": "Is Verified",
+                        "default": false
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "email",
+                    "password"
+                ],
+                "title": "CreateUserRequest",
+                "description": "Admin request to create a user."
+            },
+            "CurationStatistics": {
+                "properties": {
+                    "total_decisions": {
+                        "type": "integer",
+                        "title": "Total Decisions"
+                    },
+                    "selected_top": {
+                        "type": "integer",
+                        "title": "Selected Top"
+                    },
+                    "selected_alternative": {
+                        "type": "integer",
+                        "title": "Selected Alternative"
+                    },
+                    "rejected_all": {
+                        "type": "integer",
+                        "title": "Rejected All"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "total_decisions",
+                    "selected_top",
+                    "selected_alternative",
+                    "rejected_all"
+                ],
+                "title": "CurationStatistics",
+                "description": "Statistics about the curation process based on UserAction counts."
+            },
+            "CursorPage_DecisionSummary_": {
+                "properties": {
+                    "results": {
+                        "items": {
+                            "$ref": "#/components/schemas/DecisionSummary"
+                        },
+                        "type": "array",
+                        "title": "Results"
+                    },
+                    "next_cursor": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Next Cursor"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "results"
+                ],
+                "title": "CursorPage[DecisionSummary]"
+            },
+            "DecisionOrdering": {
+                "type": "string",
+                "enum": [
+                    "confidence_score",
+                    "-confidence_score",
+                    "created_at",
+                    "-created_at",
+                    "updated_at",
+                    "-updated_at"
+                ],
+                "title": "DecisionOrdering",
+                "description": "Allowed ordering options for decision listing."
+            },
+            "DecisionSummary": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "title": "Id"
+                    },
+                    "about_entity_mention": {
+                        "$ref": "#/components/schemas/EntityMentionPreview"
+                    },
+                    "current_placement": {
+                        "$ref": "#/components/schemas/ClusterReference"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "title": "Created At"
+                    },
+                    "updated_at": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Updated At"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "id",
+                    "about_entity_mention",
+                    "current_placement",
+                    "created_at"
+                ],
+                "title": "DecisionSummary",
+                "description": "Decision summary for list display."
+            },
+            "EntityMentionIdentifier": {
+                "properties": {
+                    "source_id": {
+                        "type": "string",
+                        "title": "Source Id",
+                        "description": "The ID or URI of the ERS client that originated the request. This identifies an application or a \nperson accessing the ERS system.\n",
+                        "linkml_meta": {
+                            "domain_of": [
+                                "EntityMentionIdentifier",
+                                "LookupState"
+                            ]
+                        }
+                    },
+                    "request_id": {
+                        "type": "string",
+                        "title": "Request Id",
+                        "description": "A string representing the unique ID of the request made to the ERS system. In general, this is unique\nonly within the scope of the source and the entity type, ie, within `sourceId` and `entityType`. \n\nMoreover, this is **not** the same as `ereRequestId`, which instead, is internal to the ERE and is \nused to match responses to requests.\n",
+                        "linkml_meta": {
+                            "domain_of": [
+                                "EntityMentionIdentifier"
+                            ]
+                        }
+                    },
+                    "entity_type": {
+                        "type": "string",
+                        "title": "Entity Type",
+                        "description": "A string representing the entity type (based on CET). This is typically a URI.\n\nNote that this is at this level, and not at `EntityMention`, since, as said above, \nit's needed to identify the entity, even when its content is not present. For the same\nreason, it's used both for `EREResolutionRequest` and `EREResolutionResponse` messages.,\n",
+                        "linkml_meta": {
+                            "domain_of": [
+                                "EntityMentionIdentifier"
+                            ]
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                    "source_id",
+                    "request_id",
+                    "entity_type"
+                ],
+                "title": "EntityMentionIdentifier",
+                "description": "A container that groups the attributes needed to identify an entity mention in a resolution request\nor response.\n\nAs per ERS architectural decision, in the whole ERS and ERE systems, there is always a deterministic\nmethod to build a canonical identifier from the combination of `sourceId`, `requestId` and `entityType`\n(eg, string concatenation plus some prefix). Similarly, a cluster ID (mentioned in various places in \nin this hereby ERE service schema) can be built from an entity that is initially the only cluster member."
+            },
+            "EntityMentionPreview": {
+                "properties": {
+                    "identified_by": {
+                        "$ref": "#/components/schemas/EntityMentionIdentifier"
+                    },
+                    "parsed_representation": {
+                        "anyOf": [
+                            {
+                                "additionalProperties": true,
+                                "type": "object"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Parsed Representation"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "identified_by"
+                ],
+                "title": "EntityMentionPreview",
+                "description": "Lightweight entity mention projection for display."
+            },
+            "ErrorResponse": {
+                "properties": {
+                    "detail": {
+                        "type": "string",
+                        "title": "Detail"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "detail"
+                ],
+                "title": "ErrorResponse",
+                "description": "Standard error response body for OpenAPI documentation."
+            },
+            "HTTPValidationError": {
+                "properties": {
+                    "detail": {
+                        "items": {
+                            "$ref": "#/components/schemas/ValidationError"
+                        },
+                        "type": "array",
+                        "title": "Detail"
+                    }
+                },
+                "type": "object",
+                "title": "HTTPValidationError"
+            },
+            "LoginRequest": {
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "title": "Email"
+                    },
+                    "password": {
+                        "type": "string",
+                        "title": "Password"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "email",
+                    "password"
+                ],
+                "title": "LoginRequest",
+                "description": "Request body for user login."
+            },
+            "PaginatedResult_CanonicalEntityPreview_": {
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "title": "Count"
+                    },
+                    "previous": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Previous"
+                    },
+                    "next": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Next"
+                    },
+                    "results": {
+                        "items": {
+                            "$ref": "#/components/schemas/CanonicalEntityPreview"
+                        },
+                        "type": "array",
+                        "title": "Results"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "count",
+                    "results"
+                ],
+                "title": "PaginatedResult[CanonicalEntityPreview]"
+            },
+            "PaginatedResult_UserActionSummary_": {
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "title": "Count"
+                    },
+                    "previous": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Previous"
+                    },
+                    "next": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Next"
+                    },
+                    "results": {
+                        "items": {
+                            "$ref": "#/components/schemas/UserActionSummary"
+                        },
+                        "type": "array",
+                        "title": "Results"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "count",
+                    "results"
+                ],
+                "title": "PaginatedResult[UserActionSummary]"
+            },
+            "PaginatedResult_UserResponse_": {
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "title": "Count"
+                    },
+                    "previous": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Previous"
+                    },
+                    "next": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Next"
+                    },
+                    "results": {
+                        "items": {
+                            "$ref": "#/components/schemas/UserResponse"
+                        },
+                        "type": "array",
+                        "title": "Results"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "count",
+                    "results"
+                ],
+                "title": "PaginatedResult[UserResponse]"
+            },
+            "RefreshRequest": {
+                "properties": {
+                    "refresh_token": {
+                        "type": "string",
+                        "title": "Refresh Token"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "refresh_token"
+                ],
+                "title": "RefreshRequest",
+                "description": "Request body for token refresh."
+            },
+            "RegisterRequest": {
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "title": "Email"
+                    },
+                    "password": {
+                        "type": "string",
+                        "maxLength": 128,
+                        "minLength": 8,
+                        "title": "Password"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "email",
+                    "password"
+                ],
+                "title": "RegisterRequest",
+                "description": "Request body for user registration."
+            },
+            "RegistryStatistics": {
+                "properties": {
+                    "total_entity_mentions": {
+                        "type": "integer",
+                        "title": "Total Entity Mentions"
+                    },
+                    "total_canonical_entities": {
+                        "type": "integer",
+                        "title": "Total Canonical Entities"
+                    },
+                    "average_cluster_size": {
+                        "type": "number",
+                        "title": "Average Cluster Size"
+                    },
+                    "resolution_requests": {
+                        "type": "integer",
+                        "title": "Resolution Requests"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "total_entity_mentions",
+                    "total_canonical_entities",
+                    "average_cluster_size",
+                    "resolution_requests"
+                ],
+                "title": "RegistryStatistics",
+                "description": "Statistics about the entity registry."
+            },
+            "Statistics": {
+                "properties": {
+                    "registry": {
+                        "$ref": "#/components/schemas/RegistryStatistics"
+                    },
+                    "curation": {
+                        "$ref": "#/components/schemas/CurationStatistics"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "registry",
+                    "curation"
+                ],
+                "title": "Statistics",
+                "description": "Aggregated statistics for the curation dashboard."
+            },
+            "TokenResponse": {
+                "properties": {
+                    "access_token": {
+                        "type": "string",
+                        "title": "Access Token"
+                    },
+                    "refresh_token": {
+                        "type": "string",
+                        "title": "Refresh Token"
+                    },
+                    "token_type": {
+                        "type": "string",
+                        "title": "Token Type",
+                        "default": "bearer"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "access_token",
+                    "refresh_token"
+                ],
+                "title": "TokenResponse",
+                "description": "JWT token pair response."
+            },
+            "UserActionSummary": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "title": "Id"
+                    },
+                    "about_entity_mention": {
+                        "$ref": "#/components/schemas/EntityMentionPreview"
+                    },
+                    "candidates": {
+                        "items": {
+                            "$ref": "#/components/schemas/ClusterReference"
+                        },
+                        "type": "array",
+                        "title": "Candidates"
+                    },
+                    "selected_cluster": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/ClusterReference"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "action_type": {
+                        "$ref": "#/components/schemas/UserActionType"
+                    },
+                    "actor": {
+                        "type": "string",
+                        "title": "Actor"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "title": "Created At"
+                    },
+                    "metadata": {
+                        "anyOf": [
+                            {},
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Metadata"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "id",
+                    "about_entity_mention",
+                    "candidates",
+                    "action_type",
+                    "actor",
+                    "created_at"
+                ],
+                "title": "UserActionSummary",
+                "description": "User action summary for list display."
+            },
+            "UserActionType": {
+                "type": "string",
+                "enum": [
+                    "ACCEPT_TOP",
+                    "ACCEPT_ALTERNATIVE",
+                    "REJECT_ALL"
+                ],
+                "title": "UserActionType",
+                "description": "Types of curator actions on entity mention resolutions"
+            },
+            "UserContext": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "title": "Id"
+                    },
+                    "email": {
+                        "type": "string",
+                        "title": "Email"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "title": "Is Active"
+                    },
+                    "is_superuser": {
+                        "type": "boolean",
+                        "title": "Is Superuser"
+                    },
+                    "is_verified": {
+                        "type": "boolean",
+                        "title": "Is Verified"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "id",
+                    "email",
+                    "is_active",
+                    "is_superuser",
+                    "is_verified"
+                ],
+                "title": "UserContext",
+                "description": "Authenticated user context carried through the request lifecycle."
+            },
+            "UserPatchRequest": {
+                "properties": {
+                    "is_active": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Is Active"
+                    },
+                    "is_superuser": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Is Superuser"
+                    },
+                    "is_verified": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Is Verified"
+                    }
+                },
+                "type": "object",
+                "title": "UserPatchRequest",
+                "description": "Admin request to update user flags."
+            },
+            "UserResponse": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "title": "Id"
+                    },
+                    "email": {
+                        "type": "string",
+                        "title": "Email"
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "title": "Is Active"
+                    },
+                    "is_superuser": {
+                        "type": "boolean",
+                        "title": "Is Superuser"
+                    },
+                    "is_verified": {
+                        "type": "boolean",
+                        "title": "Is Verified"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "title": "Created At"
+                    },
+                    "updated_at": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Updated At"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "id",
+                    "email",
+                    "is_active",
+                    "is_superuser",
+                    "is_verified",
+                    "created_at"
+                ],
+                "title": "UserResponse",
+                "description": "Public user representation (no password)."
+            },
+            "ValidationError": {
+                "properties": {
+                    "loc": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "integer"
+                                }
+                            ]
+                        },
+                        "type": "array",
+                        "title": "Location"
+                    },
+                    "msg": {
+                        "type": "string",
+                        "title": "Message"
+                    },
+                    "type": {
+                        "type": "string",
+                        "title": "Error Type"
+                    },
+                    "input": {
+                        "title": "Input"
+                    },
+                    "ctx": {
+                        "type": "object",
+                        "title": "Context"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "loc",
+                    "msg",
+                    "type"
+                ],
+                "title": "ValidationError"
+            }
+        },
+        "securitySchemes": {
+            "HTTPBearer": {
+                "type": "http",
+                "scheme": "bearer"
+            }
+        }
+    }
+}

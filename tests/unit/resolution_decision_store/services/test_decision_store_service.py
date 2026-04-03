@@ -104,14 +104,13 @@ class TestQueryDecisionsPaginated:
         mock_repo.find_with_filters.return_value = CursorPage(results=[], next_cursor=None)
         await service.query_decisions_paginated(page_size=None)
         _, kwargs = mock_repo.find_with_filters.call_args
-        # Capped at CursorParams max (50), not DECISION_STORE_DEFAULT_PAGE_SIZE (250)
-        assert kwargs["cursor_params"].limit == 50
+        assert kwargs["cursor_params"].limit == config.DECISION_STORE_DEFAULT_PAGE_SIZE
 
     async def test_caps_page_size_at_system_limit(self, service, mock_repo):
         mock_repo.find_with_filters.return_value = CursorPage(results=[], next_cursor=None)
         await service.query_decisions_paginated(page_size=99999)
         _, kwargs = mock_repo.find_with_filters.call_args
-        assert kwargs["cursor_params"].limit == 50
+        assert kwargs["cursor_params"].limit == config.DECISION_STORE_MAX_PAGE_SIZE
 
     async def test_passes_cursor_to_repository(self, service, mock_repo):
         mock_repo.find_with_filters.return_value = CursorPage(results=[], next_cursor=None)

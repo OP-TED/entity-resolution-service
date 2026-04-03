@@ -40,7 +40,7 @@ class TestListDecisions:
             created_at=datetime.now(UTC),
         )
         decision_curation_service.list_decisions.return_value = CursorPage(
-            results=[summary], next_cursor=None
+            results=[summary], count=1, next_cursor=None
         )
 
         response = await client.get(BASE_URL)
@@ -49,6 +49,7 @@ class TestListDecisions:
         data = response.json()
         assert len(data["results"]) == 1
         assert data["results"][0]["id"] == "decision-1"
+        assert data["count"] == 1
         assert data["next_cursor"] is None
 
     async def test_returns_empty_list(

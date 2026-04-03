@@ -19,9 +19,6 @@ from pymongo import AsyncMongoClient
 
 from ers import config
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
-from ers.curation.adapters.entity_mention_repository import (
-    MongoEntityMentionCurationRepository,
-)
 from ers.curation.adapters.user_action_repository import (
     MongoUserActionCurationRepository,
 )

@@ -20,3 +20,8 @@ Feature: Paginated Query of Decisions
     Given a valid decision store
     When I query with page_size 9999
     Then the effective page_size does not exceed the system maximum page size
+
+  Scenario: Querying with a malformed cursor raises an error
+    Given a valid decision store
+    When I query decisions with a malformed cursor
+    Then an InvalidCursorError is raised

@@ -5,7 +5,7 @@ from erspec.models.core import ClusterReference, EntityMentionIdentifier
 from httpx import AsyncClient
 
 from ers.ers_rest_api.domain.errors import ErrorCode
-from ers.ers_rest_api.domain.lookup import LookupResponse
+from ers.ers_rest_api.domain.lookup import BulkLookupResponse, BulkLookupResult, LookupResponse
 from ers.ers_rest_api.services.exceptions import MentionNotFoundError
 
 
@@ -107,3 +107,52 @@ class TestLookupEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
+
+
+class TestLookupBulkEndpoint:
+    async def test_returns_200_with_results(
+        self,
+        client: AsyncClient,
+        lookup_service: AsyncMock,
+    ) -> None:
+        lookup_service.handle_bulk_lookup.return_value = BulkLookupResponse(
+            results=[
+                BulkLookupResult(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYS_A",
+                        request_id="req-001",
+                        entity_type="ORGANISATION",
+                    ),
+                    cluster_reference=ClusterReference(
+                        cluster_id="cluster-010",
+                        confidence_score=0.95,
+                        similarity_score=0.92,
+                    ),
+                    last_updated=datetime(2026, 3, 15, 10, 0, 0, tzinfo=UTC),
+                ),
+            ],
+        )
+
+        payload = {
+            "mentions": [
+                {
+                    "identified_by": {
+                        "source_id": "SYS_A",
+                        "request_id": "req-001",
+                        "entity_type": "ORGANISATION",
+                    },
+                },
+            ],
+        }
+
+        response = await client.post("/api/v1/lookup-bulk", json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["results"]) == 1
+        assert body["results"][0]["cluster_reference"]["cluster_id"] == "cluster-010"
+
+    async def test_empty_mentions_returns_400(self, client: AsyncClient) -> None:
+        response = await client.post("/api/v1/lookup-bulk", json={"mentions": []})
+
+        assert response.status_code == 400
