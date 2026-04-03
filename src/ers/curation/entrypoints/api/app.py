@@ -10,6 +10,7 @@ from fastapi.openapi.utils import get_openapi
 
 from ers import config
 from ers.commons.adapters.mongo_client import MongoClientManager
+from ers.commons.adapters.redis_client import RedisConnectionConfig, RedisEREClient
 from ers.curation.entrypoints.api.exception_handlers import register_exception_handlers
 from ers.curation.entrypoints.api.health import router as health_router
 from ers.curation.entrypoints.api.v1.router import v1_router
@@ -20,17 +21,26 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Manage MongoDB client lifecycle and seed admin user."""
+    """Manage MongoDB and Redis client lifecycles and seed admin user."""
     manager = MongoClientManager(config.MONGO_URI, config.MONGO_DATABASE_NAME)
     await manager.connect()
     await manager.ensure_indexes()
     app.state.mongo_db = manager.get_database()
+
+    redis_config = RedisConnectionConfig.from_settings(config)
+    redis_client = RedisEREClient(
+        config_or_client=redis_config,
+        request_channel=config.ERE_REQUEST_CHANNEL,
+        response_channel=config.ERE_RESPONSE_CHANNEL,
+    )
+    app.state.redis_client = redis_client
 
     await _seed_admin_user(app.state.mongo_db)
 
     try:
         yield
     finally:
+        await redis_client.close()
         await manager.close()
 
 

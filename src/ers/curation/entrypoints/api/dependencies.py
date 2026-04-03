@@ -5,6 +5,8 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from ers import config
 from ers.commons.adapters.hasher import Argon2PasswordHasher, ContentHasher
+from ers.commons.adapters.redis_client import RedisEREClient
+from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.curation.adapters import (
     DecisionRepository,
     EntityMentionCurationRepository,
@@ -29,6 +31,16 @@ from ers.users.services.token_service import JWTTokenService, TokenService
 
 def _get_database(request: Request) -> AsyncDatabase[Any]:
     return cast(AsyncDatabase[Any], request.app.state.mongo_db)
+
+
+def _get_redis_client(request: Request) -> RedisEREClient:
+    return cast(RedisEREClient, request.app.state.redis_client)
+
+
+async def _get_ere_publish_service(
+    client: Annotated[RedisEREClient, Depends(_get_redis_client)],
+) -> EREPublishService:
+    return EREPublishService(adapter=client)
 
 
 # Infrastructure providers
@@ -99,11 +111,13 @@ async def get_decision_curation_service(
     decision_repo: Annotated[DecisionRepository, Depends(get_decision_repository)],
     entity_repo: Annotated[EntityMentionCurationRepository, Depends(get_entity_mention_repository)],
     user_action_service: Annotated[UserActionService, Depends(get_user_action_service)],
+    ere_publish_service: Annotated[EREPublishService, Depends(_get_ere_publish_service)],
 ) -> DecisionCurationService:
     return DecisionCurationService(
         decision_repository=decision_repo,
         entity_mention_repository=entity_repo,
         user_action_service=user_action_service,
+        ere_publish_service=ere_publish_service,
     )
 
 
