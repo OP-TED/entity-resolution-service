@@ -99,6 +99,24 @@ class TestListUsers:
         assert result.count == 0
         assert result.results == []
 
+    async def test_passes_email_search_to_repository(
+        self,
+        service: UserManagementService,
+        user_repository: AsyncMock,
+    ) -> None:
+        user_repository.find_paginated.return_value = PaginatedResult(
+            count=0,
+            previous=None,
+            next=None,
+            results=[],
+        )
+
+        await service.list_users(PaginationParams(page=1, per_page=20), email_search="test")
+
+        user_repository.find_paginated.assert_called_once_with(
+            PaginationParams(page=1, per_page=20), email_search="test"
+        )
+
 
 class TestPatchUser:
     async def test_updates_user_flags(

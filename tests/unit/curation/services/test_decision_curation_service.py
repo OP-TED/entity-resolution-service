@@ -16,13 +16,13 @@ from ers.curation.domain.data_transfer_objects import (
 )
 from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.services import DecisionCurationService, UserActionService
+from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 from tests.unit.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
     EntityMentionFactory,
     EntityMentionIdentifierFactory,
 )
-from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 
 
 @pytest.fixture

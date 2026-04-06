@@ -49,7 +49,7 @@ def test_unverified_cannot_curate():
     pass
 
 
-@scenario(FEATURE, "Non-admin user cannot access user management")
+@scenario(FEATURE, "Verified user can list users")
 def test_non_admin_user_management():
     pass
 
@@ -113,7 +113,14 @@ def unverified_client(app: FastAPI) -> TestClient:
     "a verified user is authenticated but is not an administrator",
     target_fixture="test_client",
 )
-def non_admin_client(app: FastAPI) -> TestClient:
+def non_admin_client(
+    app: FastAPI,
+    user_repository: AsyncMock,
+) -> TestClient:
+    user_repository.find_paginated.return_value = PaginatedResult(
+        count=0,
+        results=[],
+    )
     return make_client_with_user(app, VERIFIED_USER)
 
 

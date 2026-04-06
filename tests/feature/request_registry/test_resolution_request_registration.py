@@ -17,14 +17,13 @@ import asyncio
 import hashlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import create_autospec, patch
+from unittest.mock import create_autospec
 
 import pytest
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 from pytest_bdd import given, parsers, scenario, then, when
 
 from ers.commons.adapters.hasher import SHA256ContentHasher
-from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
 from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
@@ -46,7 +45,7 @@ FEATURE_FILE = str(
 
 
 @scenario(FEATURE_FILE, "Register a resolution request")
-def test_register_resolution_request(mock_parse_entity_mention):
+def test_register_resolution_request():
     """Bind the 'Register a resolution request' scenario outline."""
     pass
 
@@ -80,26 +79,6 @@ def ctx():
     return {}
 
 
-@pytest.fixture
-def rdf_config() -> RDFMappingConfig:
-    return RDFMappingConfig(
-        namespaces={"ex": "http://example.org/"},
-        entity_types={
-            "organisation": EntityTypeConfig(
-                rdf_type="ex:Organization",
-                fields={"name": "ex:name"},
-            )
-        },
-    )
-
-
-@pytest.fixture
-def mock_parse_entity_mention():
-    with patch(
-        "ers.request_registry.services.request_registry_service.parse_entity_mention",
-        return_value={"name": "Acme Corp"},
-    ) as mock:
-        yield mock
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +87,7 @@ def mock_parse_entity_mention():
 
 
 @given("the Request Registry service is available")
-def request_registry_service_available(ctx, rdf_config):
+def request_registry_service_available(ctx):
     """Instantiate the RequestRegistryService with mocked repositories and a real hasher."""
     resolution_repo = create_autospec(MongoResolutionRequestRepository, instance=True)
     lookup_repo = create_autospec(MongoLookupStateRepository, instance=True)
@@ -118,7 +97,7 @@ def request_registry_service_available(ctx, rdf_config):
         resolution_repo=resolution_repo,
         lookup_repo=lookup_repo,
         hasher=hasher,
-        rdf_config=rdf_config,
+        mention_parser=lambda _em: {"name": "Acme Corp"},
     )
 
     ctx["resolution_repo"] = resolution_repo

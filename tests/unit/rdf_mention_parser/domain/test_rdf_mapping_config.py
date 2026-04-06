@@ -160,6 +160,37 @@ class TestRDFMappingConfigStructural:
 
 
 # ---------------------------------------------------------------------------
+# TC-003b — Entity type lookup by short key
+# ---------------------------------------------------------------------------
+
+
+class TestRDFMappingConfigGetEntityTypeConfig:
+    def _config(self) -> RDFMappingConfig:
+        return RDFMappingConfig(**minimal_config())
+
+    def test_returns_config_for_known_key(self):
+        config = self._config()
+        result = config.get_entity_type_config("ORGANISATION")
+
+        assert isinstance(result, EntityTypeConfig)
+        assert result.rdf_type == "org:Organization"
+
+    def test_raises_for_unknown_key(self):
+        config = self._config()
+
+        with pytest.raises(UnsupportedEntityTypeError) as exc_info:
+            config.get_entity_type_config("UNKNOWN_TYPE")
+
+        assert "UNKNOWN_TYPE" in exc_info.value.message
+
+    def test_lookup_is_case_sensitive(self):
+        config = self._config()
+
+        with pytest.raises(UnsupportedEntityTypeError):
+            config.get_entity_type_config("organisation")
+
+
+# ---------------------------------------------------------------------------
 # TC-003 — Entity type URI resolution
 # ---------------------------------------------------------------------------
 

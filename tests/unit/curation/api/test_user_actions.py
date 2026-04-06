@@ -7,6 +7,7 @@ from httpx import AsyncClient
 from ers.commons.domain.data_transfer_objects import CursorPage, PaginatedResult
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.domain.data_transfer_objects import (
+    ActorSummary,
     CanonicalEntityPreview,
     EntityMentionPreview,
     UserActionSummary,
@@ -29,6 +30,7 @@ class TestListUserActions:
             identified_by=action.about_entity_mention,
             parsed_representation='{"name": "Example Entity"}',
         )
+        actor_summary = ActorSummary(id=action.actor, email="curator@example.com")
         user_action_service.list_user_actions.return_value = CursorPage(
             results=[
                 UserActionSummary(
@@ -37,7 +39,7 @@ class TestListUserActions:
                     candidates=action.candidates,
                     selected_cluster=action.selected_cluster,
                     action_type=action.action_type,
-                    actor=action.actor,
+                    actor=actor_summary,
                     created_at=action.created_at,
                     metadata=action.metadata,
                 )
@@ -58,6 +60,8 @@ class TestListUserActions:
         assert data["results"][0]["about_entity_mention"]["parsed_representation"] == {
             "name": "Example Entity"
         }
+        assert data["results"][0]["actor"]["id"] == action.actor
+        assert data["results"][0]["actor"]["email"] == "curator@example.com"
         assert data["next_cursor"] is None
         user_action_service.list_user_actions.assert_called_once()
         cursor_params = user_action_service.list_user_actions.call_args.args[0]
@@ -74,14 +78,14 @@ class TestListUserActions:
 
         response = await client.get(
             USER_ACTIONS_URL,
-            params={"actor": "curator@test.com", "ordering": "created_at"},
+            params={"actor": "user-123", "ordering": "created_at"},
         )
 
         assert response.status_code == 200
         user_action_service.list_user_actions.assert_called_once()
         filters = user_action_service.list_user_actions.call_args.args[1]
         assert filters is not None
-        assert filters.actor == "curator@test.com"
+        assert filters.actor == "user-123"
         assert filters.ordering is not None
 
     async def test_verified_non_admin_can_access(

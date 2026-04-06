@@ -58,9 +58,10 @@ class UserManagementService:
     async def list_users(
         self,
         pagination: PaginationParams,
+        email_search: str | None = None,
     ) -> PaginatedResult[UserResponse]:
-        """Return paginated users."""
-        users = await self._user_repo.find_paginated(pagination)
+        """Return paginated users, optionally filtered by email search."""
+        users = await self._user_repo.find_paginated(pagination, email_search=email_search)
         return PaginatedResult(
             count=users.count,
             previous=users.previous,

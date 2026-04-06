@@ -23,7 +23,6 @@ from ers.request_registry.services.request_registry_service import RequestRegist
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -78,7 +77,7 @@ def registry_service(mongo_db):
         resolution_repo=resolution_repo,
         lookup_repo=lookup_repo,
         hasher=SHA256ContentHasher(),
-        rdf_config=None,
+        mention_parser=lambda _em: {},
     )
 
 

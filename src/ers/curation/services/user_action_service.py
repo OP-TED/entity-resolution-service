@@ -12,6 +12,7 @@ from ers.curation.adapters.entity_mention_repository import (
 )
 from ers.curation.adapters.user_action_repository import UserActionCurationRepository
 from ers.curation.domain.data_transfer_objects import (
+    ActorSummary,
     CanonicalEntityPreview,
     EntityMentionPreview,
     UserActionFilters,
@@ -20,6 +21,8 @@ from ers.curation.domain.data_transfer_objects import (
 from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.domain.models import UserActionFactory
 from ers.curation.services.canonical_entity_service import CanonicalEntityService
+from ers.users.adapters.user_repository import UserRepository
+from ers.users.domain.users import User
 
 
 class UserActionService:
@@ -29,9 +32,11 @@ class UserActionService:
         self,
         user_action_repository: UserActionCurationRepository,
         entity_mention_repository: EntityMentionCurationRepository,
+        user_repository: UserRepository,
     ) -> None:
         self._user_action_repository = user_action_repository
         self._entity_mention_repository = entity_mention_repository
+        self._user_repository = user_repository
 
     async def _check_not_already_curated(self, decision: Decision) -> None:
         """Raise AlreadyCuratedError if decision was already curated on its current version."""
@@ -56,8 +61,15 @@ class UserActionService:
         )
         mention_map = self._index_by_identifier(entity_mentions)
 
+        actor_ids = list({action.actor for action in page.results})
+        users = await self._user_repository.find_by_ids(actor_ids)
+        user_map = {user.id: user for user in users}
+
         return CursorPage(
-            results=[self._to_user_action_summary(action, mention_map) for action in page.results],
+            results=[
+                self._to_user_action_summary(action, mention_map, user_map)
+                for action in page.results
+            ],
             count=page.count,
             next_cursor=page.next_cursor,
         )
@@ -172,6 +184,7 @@ class UserActionService:
     def _to_user_action_summary(
         action: UserAction,
         mention_map: dict[tuple[str, str, str], EntityMention],
+        user_map: dict[str, User],
     ) -> UserActionSummary:
         identifier = action.about_entity_mention
         key = (
@@ -180,6 +193,12 @@ class UserActionService:
             identifier.entity_type,
         )
         mention = mention_map.get(key)
+
+        user = user_map.get(action.actor)
+        actor_summary = ActorSummary(
+            id=action.actor,
+            email=user.email if user is not None else action.actor,
+        )
 
         return UserActionSummary(
             id=action.id,
@@ -192,7 +211,7 @@ class UserActionService:
             candidates=action.candidates,
             selected_cluster=action.selected_cluster,
             action_type=action.action_type,
-            actor=action.actor,
+            actor=actor_summary,
             created_at=action.created_at,
             metadata=action.metadata,
         )

@@ -4,13 +4,12 @@ Repositories are mocked; SHA256ContentHasher is used real to verify hash correct
 """
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, create_autospec, patch
+from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import pytest
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 
 from ers.commons.adapters.hasher import SHA256ContentHasher
-from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
 from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
@@ -70,25 +69,8 @@ def hasher() -> SHA256ContentHasher:
 
 
 @pytest.fixture
-def rdf_config() -> RDFMappingConfig:
-    return RDFMappingConfig(
-        namespaces={"ex": "http://example.org/"},
-        entity_types={
-            "organisation": EntityTypeConfig(
-                rdf_type="ex:Organization",
-                fields={"name": "ex:name"},
-            )
-        },
-    )
-
-
-@pytest.fixture
-def mock_parse_entity_mention():
-    with patch(
-        "ers.request_registry.services.request_registry_service.parse_entity_mention",
-        return_value={"name": "Acme Corp"},
-    ) as mock:
-        yield mock
+def mock_mention_parser() -> MagicMock:
+    return MagicMock(return_value={"name": "Acme Corp"})
 
 
 @pytest.fixture
@@ -96,13 +78,13 @@ def service(
     resolution_repo: AsyncMock,
     lookup_repo: AsyncMock,
     hasher: SHA256ContentHasher,
-    rdf_config: RDFMappingConfig,
+    mock_mention_parser: MagicMock,
 ) -> RequestRegistryService:
     return RequestRegistryService(
         resolution_repo=resolution_repo,
         lookup_repo=lookup_repo,
         hasher=hasher,
-        rdf_config=rdf_config,
+        mention_parser=mock_mention_parser,
     )
 
 
@@ -116,7 +98,7 @@ class TestRegisterResolutionRequest:
         self,
         service: RequestRegistryService,
         resolution_repo: AsyncMock,
-        mock_parse_entity_mention,
+        mock_mention_parser,
     ) -> None:
         resolution_repo.find_by_triad.return_value = None
         resolution_repo.store.side_effect = lambda r: r
@@ -130,7 +112,7 @@ class TestRegisterResolutionRequest:
         self,
         service: RequestRegistryService,
         resolution_repo: AsyncMock,
-        mock_parse_entity_mention,
+        mock_mention_parser,
     ) -> None:
         resolution_repo.find_by_triad.return_value = None
         resolution_repo.store.side_effect = lambda r: r
@@ -144,7 +126,7 @@ class TestRegisterResolutionRequest:
         self,
         service: RequestRegistryService,
         resolution_repo: AsyncMock,
-        mock_parse_entity_mention,
+        mock_mention_parser,
     ) -> None:
         resolution_repo.find_by_triad.return_value = None
         resolution_repo.store.side_effect = lambda r: r
@@ -229,6 +211,36 @@ class TestRegisterResolutionRequest:
 
         resolution_repo.find_by_triad.assert_not_called()
         resolution_repo.store.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# source_has_requests
+# ---------------------------------------------------------------------------
+
+
+class TestSourceHasRequests:
+    async def test_returns_true_when_source_exists(
+        self,
+        service: RequestRegistryService,
+        resolution_repo: AsyncMock,
+    ) -> None:
+        resolution_repo.exists_by_source.return_value = True
+
+        result = await service.source_has_requests(SOURCE_ID)
+
+        assert result is True
+        resolution_repo.exists_by_source.assert_awaited_once_with(SOURCE_ID)
+
+    async def test_returns_false_when_source_absent(
+        self,
+        service: RequestRegistryService,
+        resolution_repo: AsyncMock,
+    ) -> None:
+        resolution_repo.exists_by_source.return_value = False
+
+        result = await service.source_has_requests("unknown-source")
+
+        assert result is False
 
 
 # ---------------------------------------------------------------------------

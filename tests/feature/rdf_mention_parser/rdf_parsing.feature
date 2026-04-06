@@ -5,7 +5,7 @@ Feature: Parse RDF Entity Mention into JSON Representation
 
   Background:
     Given the parser is configured for ORGANISATION with 6 field mappings
-    And the entity type URI is "http://www.w3.org/ns/org#Organization"
+    And the entity type is "ORGANISATION"
 
   Scenario Outline: Extract configured fields from valid RDF content
     Given an RDF payload in "<content_type>" format describing an Organisation with <present_count> of 6 configured fields present
@@ -45,13 +45,13 @@ Feature: Parse RDF Entity Mention into JSON Representation
 
   Scenario Outline: Reject invalid input with the appropriate error
     Given "<invalid_input>"
-    When the mention is parsed for entity type URI "<entity_type_uri>"
+    When the mention is parsed for entity type "<entity_type>"
     Then a "<error_type>" error is raised
 
     Examples:
-      | invalid_input                                                                        | entity_type_uri                         | error_type               |
-      | a payload with content type "application/json"                                        | http://www.w3.org/ns/org#Organization   | unsupported_content_type |
-      | an RDF Turtle payload with malformed syntax                                           | http://www.w3.org/ns/org#Organization   | malformed_rdf            |
-      | a valid RDF Turtle payload describing a Person, not an Organisation                   | http://www.w3.org/ns/org#Organization   | entity_type_mismatch     |
-      | a valid Organisation RDF but with none of the 6 configured fields present             | http://www.w3.org/ns/org#Organization   | empty_extraction         |
-      | a valid RDF Turtle payload describing an Organisation                                 | http://example.org/unknown#PersonEntity | unsupported_entity_type  |
+      | invalid_input                                                                        | entity_type  | error_type               |
+      | a payload with content type "application/json"                                        | ORGANISATION | unsupported_content_type |
+      | an RDF Turtle payload with malformed syntax                                           | ORGANISATION | malformed_rdf            |
+      | a valid RDF Turtle payload describing a Person, not an Organisation                   | ORGANISATION | entity_type_mismatch     |
+      | a valid Organisation RDF but with none of the 6 configured fields present             | ORGANISATION | empty_extraction         |
+      | a valid RDF Turtle payload describing an Organisation                                 | UNKNOWN_TYPE | unsupported_entity_type  |

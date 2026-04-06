@@ -3,9 +3,8 @@ from datetime import datetime
 from typing import Any
 
 import pymongo
-from pymongo.errors import ConnectionFailure, DuplicateKeyError, OperationFailure
-
 from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
+from pymongo.errors import ConnectionFailure, DuplicateKeyError, OperationFailure
 
 from ers.commons.adapters.decision_repository import (
     BaseDecisionRepository,
@@ -18,7 +17,6 @@ from ers.commons.domain.data_transfer_objects import (
     DecisionFilters,
     DecisionOrdering,
 )
-
 from ers.resolution_decision_store.adapters.provisional_id import (
     derive_provisional_cluster_id,
 )
@@ -29,6 +27,7 @@ from ers.resolution_decision_store.domain.errors import (
 )
 
 # MongoDB document field paths
+_FIELD_SOURCE_ID = "about_entity_mention.source_id"
 _FIELD_ENTITY_TYPE = "about_entity_mention.entity_type"
 _FIELD_SOURCE_ID = "about_entity_mention.source_id"
 _FIELD_CONFIDENCE = "current_placement.confidence_score"
@@ -116,6 +115,12 @@ class MongoDecisionRepository(
     def _build_query(self, filters: DecisionFilters) -> dict[str, Any]:
         query: dict[str, Any] = {}
 
+        if filters.source_id is not None:
+            query[_FIELD_SOURCE_ID] = filters.source_id
+
+        if filters.updated_since is not None:
+            query[_FIELD_UPDATED_AT] = {"$gt": filters.updated_since}
+
         if filters.entity_type is not None:
             query[_FIELD_ENTITY_TYPE] = filters.entity_type
 
@@ -152,6 +157,43 @@ class MongoDecisionRepository(
             return decision.updated_at
         return None
 
+    async def _fetch_existing_and_raise_stale(
+        self,
+        triad_hash: str,
+        identifier: EntityMentionIdentifier,
+        updated_at: datetime,
+        cause: Exception | None = None,
+    ) -> None:
+        """Fetch existing doc and raise StaleOutcomeError if it exists."""
+        existing = await self._collection.find_one({"_id": triad_hash})
+        if existing:
+            raise StaleOutcomeError(
+                identifier.source_id,
+                identifier.request_id,
+                str(identifier.entity_type),
+                stored_at=str(existing.get("updated_at")),
+                attempted_at=str(updated_at),
+            ) from cause
+
+    async def _execute_upsert(
+        self,
+        triad_hash: str,
+        update_doc: dict[str, Any],
+        updated_at: datetime,
+    ) -> dict[str, Any] | None:
+        """Execute the find_one_and_update call, translating connection errors."""
+        try:
+            return await self._collection.find_one_and_update(
+                filter={"_id": triad_hash, "updated_at": {"$lt": updated_at}},
+                update=update_doc,
+                upsert=True,
+                return_document=pymongo.ReturnDocument.AFTER,
+            )
+        except ConnectionFailure as exc:
+            raise RepositoryConnectionError(str(exc)) from exc
+
+    def _is_duplicate_key_operation_failure(self, exc: OperationFailure) -> bool:
+        return exc.code == 1 and "duplicate key" in str(exc)
 
     async def upsert_decision(
         self,
@@ -189,51 +231,17 @@ class MongoDecisionRepository(
             },
         }
         try:
-            result = await self._collection.find_one_and_update(
-                filter={"_id": triad_hash, "updated_at": {"$lt": updated_at}},
-                update=update_doc,
-                upsert=True,
-                return_document=pymongo.ReturnDocument.AFTER,
-            )
+            result = await self._execute_upsert(triad_hash, update_doc, updated_at)
         except DuplicateKeyError as exc:
-            # Concurrent upsert race: another writer inserted the same triad first.
-            existing = await self._collection.find_one({"_id": triad_hash})
-            if existing:
-                raise StaleOutcomeError(
-                    identifier.source_id,
-                    identifier.request_id,
-                    str(identifier.entity_type),
-                    stored_at=str(existing.get("updated_at")),
-                    attempted_at=str(updated_at),
-                ) from exc
+            await self._fetch_existing_and_raise_stale(triad_hash, identifier, updated_at, exc)
             raise RepositoryOperationError(str(exc)) from exc
         except OperationFailure as exc:
-            # Code 1 (InternalError) with "duplicate key" means upsert tried to insert
-            # but the _id already exists (filter didn't match due to staleness).
-            if exc.code == 1 and "duplicate key" in str(exc):
-                existing = await self._collection.find_one({"_id": triad_hash})
-                if existing:
-                    raise StaleOutcomeError(
-                        identifier.source_id,
-                        identifier.request_id,
-                        str(identifier.entity_type),
-                        stored_at=str(existing.get("updated_at")),
-                        attempted_at=str(updated_at),
-                    ) from exc
+            if self._is_duplicate_key_operation_failure(exc):
+                await self._fetch_existing_and_raise_stale(triad_hash, identifier, updated_at, exc)
             raise RepositoryOperationError(str(exc)) from exc
-        except ConnectionFailure as exc:
-            raise RepositoryConnectionError(str(exc)) from exc
 
         if result is None:
-            existing = await self._collection.find_one({"_id": triad_hash})
-            if existing:
-                raise StaleOutcomeError(
-                    identifier.source_id,
-                    identifier.request_id,
-                    str(identifier.entity_type),
-                    stored_at=str(existing.get("updated_at")),
-                    attempted_at=str(updated_at),
-                )
+            await self._fetch_existing_and_raise_stale(triad_hash, identifier, updated_at)
             raise RepositoryOperationError(
                 "Upsert returned no document and no existing record found"
             )
@@ -315,10 +323,7 @@ class MongoDecisionRepository(
             cursor_condition = self._build_cursor_condition(
                 sort_field, sort_value, last_id, ascending
             )
-            if query:
-                query = {"$and": [query, cursor_condition]}
-            else:
-                query = cursor_condition
+            query = {"$and": [query, cursor_condition]} if query else cursor_condition
 
         # Fetch page_size + 1 to detect if there are more results
         fetch_limit = cursor_params.limit + 1

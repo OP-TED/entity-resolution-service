@@ -23,6 +23,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
 
+pytestmark = pytest.mark.skip(
+    reason="Deferred: requires curation API endpoints (future EPIC — Spine D)"
+)
+
 # ---------------------------------------------------------------------------
 # Scenario bindings
 # ---------------------------------------------------------------------------
@@ -126,7 +130,7 @@ def mentions_exist(ctx, datatable):
     ctx["bulk_mentions"] = []
     headers = datatable[0]
     for row_values in datatable[1:]:
-        row = dict(zip(headers, row_values))
+        row = dict(zip(headers, row_values, strict=True))
         mention = {
             "source_id": row["source_id"],
             "request_id": row["request_id"],

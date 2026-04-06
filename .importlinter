@@ -19,12 +19,6 @@ root_packages =
 ; Pipe (|) = independent siblings at same tier level.
 ; Parentheses = optional (skipped if package doesn't exist yet).
 ;
-; TODO: two pre-existing violations break this contract and must be fixed:
-;   1. ers.resolution_coordinator.services.resolution_coordinator_service
-;      imports ers.ers_rest_api.domain.resolution (Tier 2 → Tier 3)
-;   2. ers.request_registry.services.request_registry_service
-;      imports ers.rdf_mention_parser (same-tier peer import, Tier 1 → Tier 1)
-; Until those are fixed, `lint-imports` will report this contract as BROKEN.
 [importlinter:contract:tier-hierarchy]
 name = Tier hierarchy: entrypoints > orchestration > foundation > commons
 type = layers
@@ -35,8 +29,6 @@ layers =
     ers.commons
 
 ; --- Intra-component layers: domain, adapters, services ---
-; When packages are created, add them here: ers.request_registry,
-; ers.rdf_mention_parser, ers.resolution_decision_store, ers.user_action_store
 ; Note: ers.ere_result_integrator and ers.curation have entrypoints and are
 ; covered by the layers-all contract below instead of this one.
 [importlinter:contract:layers-domain-adapters-services]
@@ -51,6 +43,9 @@ containers =
     ers.commons
     ers.ere_contract_client
     ers.resolution_decision_store
+    ers.request_registry
+    ers.rdf_mention_parser
+    ers.resolution_coordinator
 
 ; --- Intra-component layers: adapters, services ---
 
@@ -99,3 +94,59 @@ layers =
 containers =
     ers.commons
 exhaustive = true
+
+; --- Foundation tier (Tier 1): no peer imports between siblings ---
+; Prevents same-tier horizontal imports (e.g. request_registry → rdf_mention_parser).
+; The tier-hierarchy layers contract guards top-down violations but NOT same-tier ones.
+; One contract per module — import-linter forbidden type cannot have source/forbidden overlap.
+; Note: ers.user_action_store not listed — module does not yet exist; add when created.
+
+[importlinter:contract:foundation-peer-isolation-request-registry]
+name = Foundation peer isolation: request_registry must not import foundation peers
+type = forbidden
+source_modules = ers.request_registry
+forbidden_modules =
+    ers.rdf_mention_parser
+    ers.ere_contract_client
+    ers.resolution_decision_store
+    ers.users
+
+[importlinter:contract:foundation-peer-isolation-rdf-mention-parser]
+name = Foundation peer isolation: rdf_mention_parser must not import foundation peers
+type = forbidden
+source_modules = ers.rdf_mention_parser
+forbidden_modules =
+    ers.request_registry
+    ers.ere_contract_client
+    ers.resolution_decision_store
+    ers.users
+
+[importlinter:contract:foundation-peer-isolation-ere-contract-client]
+name = Foundation peer isolation: ere_contract_client must not import foundation peers
+type = forbidden
+source_modules = ers.ere_contract_client
+forbidden_modules =
+    ers.request_registry
+    ers.rdf_mention_parser
+    ers.resolution_decision_store
+    ers.users
+
+[importlinter:contract:foundation-peer-isolation-resolution-decision-store]
+name = Foundation peer isolation: resolution_decision_store must not import foundation peers
+type = forbidden
+source_modules = ers.resolution_decision_store
+forbidden_modules =
+    ers.request_registry
+    ers.rdf_mention_parser
+    ers.ere_contract_client
+    ers.users
+
+[importlinter:contract:foundation-peer-isolation-users]
+name = Foundation peer isolation: users must not import foundation peers
+type = forbidden
+source_modules = ers.users
+forbidden_modules =
+    ers.request_registry
+    ers.rdf_mention_parser
+    ers.ere_contract_client
+    ers.resolution_decision_store

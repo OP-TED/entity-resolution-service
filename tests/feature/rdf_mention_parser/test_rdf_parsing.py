@@ -230,9 +230,9 @@ def parser_configured(ctx, sample_rdf_mapping):
     ctx["config"] = config
 
 
-@given('the entity type URI is "http://www.w3.org/ns/org#Organization"')
-def default_entity_type_uri(ctx):
-    ctx["entity_type_uri"] = "http://www.w3.org/ns/org#Organization"
+@given(parsers.parse('the entity type is "{entity_type}"'))
+def default_entity_type(ctx, entity_type):
+    ctx["entity_type"] = entity_type
 
 
 # ---------------------------------------------------------------------------
@@ -318,13 +318,13 @@ def invalid_rdf_input(ctx, invalid_input):
 
 
 @when("the mention is parsed")
-def parse_mention_default_uri(ctx):
+def parse_mention_default(ctx):
     try:
         entity_mention = EntityMention(
             identifiedBy=EntityMentionIdentifier(
                 source_id="test-source",
                 request_id="test-request-001",
-                entity_type=ctx["entity_type_uri"],
+                entity_type=ctx["entity_type"],
             ),
             content=ctx["content"],
             content_type=ctx["content_type"],
@@ -336,14 +336,14 @@ def parse_mention_default_uri(ctx):
         ctx["raised_exception"] = exc
 
 
-@when(parsers.parse('the mention is parsed for entity type URI "{entity_type_uri}"'))
-def parse_mention_with_uri(ctx, entity_type_uri):
+@when(parsers.parse('the mention is parsed for entity type "{entity_type}"'))
+def parse_mention_with_type(ctx, entity_type):
     try:
         entity_mention = EntityMention(
             identifiedBy=EntityMentionIdentifier(
                 source_id="test-source",
                 request_id="test-request-001",
-                entity_type=entity_type_uri,
+                entity_type=entity_type,
             ),
             content=ctx["content"],
             content_type=ctx["content_type"],

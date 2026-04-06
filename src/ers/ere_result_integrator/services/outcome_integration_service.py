@@ -119,7 +119,7 @@ class OutcomeIntegrationService:
             )
             try:
                 await self._on_outcome_stored(triad_key)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.error(
                     "Coordinator notification failed - decision persisted but caller may hang",
                     exc_info=exc,

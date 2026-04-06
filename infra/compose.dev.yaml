@@ -50,6 +50,9 @@ services:
     command: ["ers"]
     ports:
       - "${ERS_API_PORT:-8001}:8001"
+    environment:
+      <<: *api-env
+      REDIS_HOST: "redis"
 
   postgres:
     image: ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0

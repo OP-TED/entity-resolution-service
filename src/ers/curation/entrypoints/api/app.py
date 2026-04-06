@@ -80,7 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(v1_router, prefix=config.API_V1_PREFIX)
 
-    app.openapi = lambda: _custom_openapi(app)  # type: ignore[assignment]
+    app.openapi = lambda: _custom_openapi(app)  # type: ignore[method-assign]
 
     return app
 

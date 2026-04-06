@@ -13,7 +13,7 @@ Feature: Snapshot State Management
 """
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import create_autospec
 
@@ -21,7 +21,6 @@ import pytest
 from pytest_bdd import given, parsers, scenario, then, when
 
 from ers.commons.adapters.hasher import SHA256ContentHasher
-from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
 from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
@@ -77,26 +76,13 @@ def ctx():
     return {}
 
 
-@pytest.fixture
-def rdf_config() -> RDFMappingConfig:
-    return RDFMappingConfig(
-        namespaces={"ex": "http://example.org/"},
-        entity_types={
-            "organisation": EntityTypeConfig(
-                rdf_type="ex:Organization",
-                fields={"name": "ex:name"},
-            )
-        },
-    )
-
-
 # ---------------------------------------------------------------------------
 # Background steps
 # ---------------------------------------------------------------------------
 
 
 @given("the Request Registry service is available")
-def request_registry_service_available(ctx, rdf_config):
+def request_registry_service_available(ctx):
     """Instantiate the RequestRegistryService with mocked repositories and a real hasher."""
     resolution_repo = create_autospec(MongoResolutionRequestRepository, instance=True)
     lookup_repo = create_autospec(MongoLookupStateRepository, instance=True)
@@ -108,7 +94,7 @@ def request_registry_service_available(ctx, rdf_config):
         resolution_repo=resolution_repo,
         lookup_repo=lookup_repo,
         hasher=SHA256ContentHasher(),
-        rdf_config=rdf_config,
+        mention_parser=lambda _em: {},
     )
 
     ctx["resolution_repo"] = resolution_repo

@@ -1,57 +1,41 @@
-from datetime import UTC, datetime
-
-from erspec.models.core import EntityMentionIdentifier
+"""Orchestrator for the POST /refresh-bulk endpoint."""
 
 from ers.ers_rest_api.domain.lookup import (
     LookupResponse,
     RefreshBulkRequest,
     RefreshBulkResponse,
 )
-from ers.request_registry.services.request_registry_service import RequestRegistryService
-from ers.resolution_decision_store.services.decision_store_service import DecisionStoreService
+from ers.resolution_coordinator.services.bulk_refresh_coordinator_service import (
+    BulkRefreshCoordinatorService,
+)
 
 
-class RefreshBulkService:
-    """Orchestrator for the POST /refresh-bulk endpoint."""
+class RefreshBulkService:  # pylint: disable=too-few-public-methods
+    """Orchestrator for the POST /refresh-bulk endpoint.
 
-    def __init__(
-        self,
-        decision_store: DecisionStoreService,
-        registry: RequestRegistryService,
-    ) -> None:
-        self._decision_store = decision_store
-        self._registry = registry
+    Delegates to BulkRefreshCoordinatorService (Spine C) and maps
+    the CursorPage[Decision] result to the REST API response DTO.
+    """
+
+    def __init__(self, bulk_coordinator: BulkRefreshCoordinatorService) -> None:
+        self._coordinator = bulk_coordinator
 
     async def handle_refresh_bulk(self, request: RefreshBulkRequest) -> RefreshBulkResponse:
         """Retrieve delta of changed assignments since the last synchronisation snapshot."""
-        lookup_state = await self._registry.get_lookup_state(request.source_id)
-        last_snapshot = lookup_state.last_snapshot if lookup_state else None
-
-        page = await self._decision_store.query_decisions_by_timestamp(
+        page = await self._coordinator.refresh_bulk(
             source_id=request.source_id,
-            updated_since=last_snapshot,
-            limit=request.limit,
-            continuation_cursor=request.continuation_cursor,
+            cursor=request.continuation_cursor,
+            page_size=request.limit,
         )
 
         deltas = [
             LookupResponse(
-                identified_by=EntityMentionIdentifier(
-                    source_id=d.about_entity_mention.source_id,
-                    request_id=d.about_entity_mention.request_id,
-                    entity_type=d.about_entity_mention.entity_type,
-                ),
+                identified_by=d.about_entity_mention,
                 cluster_reference=d.current_placement,
                 last_updated=d.updated_at or d.created_at,
             )
             for d in page.results
         ]
-
-        if page.next_cursor is None:
-            await self._registry.advance_snapshot(
-                request.source_id,
-                datetime.now(UTC),
-            )
 
         return RefreshBulkResponse(
             deltas=deltas,

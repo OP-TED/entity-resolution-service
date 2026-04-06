@@ -5,6 +5,7 @@ Feature: Deduplicate ERE Outcomes Using Latest Assignment Wins
 """
 
 import asyncio
+import contextlib
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, create_autospec
@@ -166,7 +167,7 @@ def ere_delivers_outcome(ctx, incoming_timestamp, incoming_cluster):
 @when("the ERE delivers outcomes for that triad in this order:")
 def ere_delivers_outcomes_in_order(ctx, datatable):
     headers = datatable[0]
-    rows = [dict(zip(headers, row)) for row in datatable[1:]]
+    rows = [dict(zip(headers, row, strict=True)) for row in datatable[1:]]
 
     identifier = EntityMentionIdentifier(
         source_id=ctx["source_id"], request_id=ctx["request_id"], entity_type="Organization"
@@ -207,10 +208,8 @@ def ere_delivers_outcomes_in_order(ctx, datatable):
             )],
             timestamp=ts,
         )
-        try:
+        with contextlib.suppress(Exception):
             asyncio.run(ctx["service"].integrate_outcome(response))
-        except Exception:
-            pass
 
 
 @then("the outcome is ignored without modifying the Decision Store")

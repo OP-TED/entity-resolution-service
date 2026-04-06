@@ -86,23 +86,23 @@ Define REST request/response data structures (separate from domain models, but a
 ### Services Layer
 
 **ResolveService** (thin orchestrator):
-- Accepts `ResolutionCoordinatorServiceABC` (injected via `Depends(get_resolution_coordinator)`)
-- Calls `coordinator.resolve(request.mention)` → returns `EntityMentionResolutionResult`
-- `status` field is already populated by the Coordinator (EPIC-06) — no re-derivation needed
+- Accepts `ResolutionCoordinatorService` (injected via `Depends(get_resolution_coordinator)`)
+- Calls `coordinator.resolve_single(request.mention)` → returns `Decision`
+- Maps `Decision` → `EntityMentionResolutionResult` with provisional detection via `derive_provisional_cluster_id`
+- `handle_bulk_resolve` uses `coordinator.resolve_bulk(mentions)` for concurrent resolution
 - Returns result directly; route handler sets HTTP 202 if `status == ResolutionOutcome.PROVISIONAL`
 
 **LookupService** (thin orchestrator):
-- Accepts `ResolutionDecisionStoreServiceABC` (injected via `Depends(get_decision_store)`)
-- Calls `decision_store.get_decision_for_mention(source_id, request_id, entity_type)` → `Decision | None`
+- Accepts `ResolutionCoordinatorService` (injected via `Depends(get_resolution_coordinator)`)
+- Calls `coordinator.lookup_by_triad(identifier)` → `Decision | None`
 - If `None`: raises `MentionNotFoundError` → handler returns 404
 - Maps `Decision` to `LookupResponse`: `identified_by`, `cluster_reference`, `last_updated` (uses `created_at` fallback if `updated_at` is None)
 
 **RefreshBulkService** (thin orchestrator):
-- Accepts `ResolutionDecisionStoreServiceABC` (injected via `Depends(get_decision_store)`)
-- Calls `decision_store.get_lookup_state(source_id)` → `LookupState | None`
-- Calls `decision_store.get_delta_for_source(source_id, last_snapshot, limit, continuation_cursor)` → `DeltaPage`
-- Calls `decision_store.advance_snapshot(source_id, datetime.now(UTC))` — advances `LookupRequestRecord.last_snapshot`
-- Maps `DeltaPage.deltas` (list of `Decision`) to `list[LookupResponse]`
+- Accepts `BulkRefreshCoordinatorService` (injected via `Depends(_get_bulk_refresh_coordinator)`)
+- Calls `coordinator.refresh_bulk(source_id, cursor, page_size)` → `CursorPage[Decision]`
+- Maps `CursorPage[Decision]` to `RefreshBulkResponse` (deltas, has_more, continuation_cursor)
+- Snapshot advancement is handled internally by the coordinator
 
 ### Entrypoints Layer
 
@@ -298,14 +298,14 @@ Feature: Bulk Refresh of Changed Assignments (Delta)
 
 ### Incoming (services called by this epic)
 
-- **Resolution Coordinator (EPIC-06):** `ResolutionCoordinatorServiceABC.resolve(entity_mention)` → `EntityMentionResolutionResult`; injected via `Depends(get_resolution_coordinator)`
-- **Resolution Decision Store (EPIC-04) via `ResolutionDecisionStoreServiceABC`:**
-  - `get_decision_for_mention(source_id, request_id, entity_type)` → `Decision | None`
-  - `get_delta_for_source(source_id, last_snapshot, limit, continuation_cursor)` → `DeltaPage`
-  - `get_lookup_state(source_id)` → `LookupState | None`
-  - `advance_snapshot(source_id, snapshot)` → `None`
-- **ERE Result Integrator (EPIC-05):** `OutcomeIntegrationWorker` started in lifespan; `AsyncResolutionWaiter` wired between EPIC-05 and EPIC-06 via callback
+- **Resolution Coordinator (EPIC-06) — sole gateway for all REST API services:**
+  - `ResolutionCoordinatorService.resolve_single(mention)` → `Decision` (resolve)
+  - `ResolutionCoordinatorService.resolve_bulk(mentions)` → `list[Decision | Exception]` (bulk resolve)
+  - `ResolutionCoordinatorService.lookup_by_triad(identifier)` → `Decision | None` (lookup)
+  - `BulkRefreshCoordinatorService.refresh_bulk(source_id, cursor, page_size)` → `CursorPage[Decision]` (refresh-bulk)
+- **ERE Result Integrator (EPIC-05):** `OutcomeIntegrationWorker` started in lifespan; `AsyncResolutionWaiter` wired between EPIC-05 and EPIC-06 via `on_outcome_stored` callback
 - **er-spec models:** `EntityMention`, `EntityMentionIdentifier`, `ClusterReference`, `Decision`
+- **Note:** `ResolutionDecisionStoreServiceABC` has been retired. All Decision Store access goes through the Coordinator.
 
 ### Outgoing (components that import from this epic)
 
@@ -396,7 +396,7 @@ This EPIC synthesizes requirements from:
 ## Architectural Constraints (Non-Negotiable)
 
 1. **No auth logic in this EPIC.** Entirely out of scope. No placeholder stubs.
-2. **Resolve endpoint always returns 200 OK**, even for provisional IDs. Status field carries the semantic.
+2. **Resolve endpoint returns 200 for canonical, 202 for provisional.** HTTP 202 Accepted signals "accepted but not yet final". The `status` field also carries the semantic.
 3. **Decision Store cursor is opaque.** Don't inspect or reconstruct; pass through as-is.
 4. **lastSeenTimestamp managed internally via LookupState watermark** (EPIC-01). REST caller does NOT pass it.
 5. **No caching at API layer.** Each request hits Decision Store fresh.
@@ -420,7 +420,13 @@ This EPIC synthesizes requirements from:
 ## Next Actions
 
 1. ✅ **EPIC-07 core implementation** — Routes, services, models, DI, exception handlers implemented
-2. ✅ **Gherkin feature files** — Under `tests/feature/ers_rest_api/` and `tests/steps/ers_rest_api/`
+2. ✅ **Gherkin feature files** — Under `tests/feature/ers_rest_api/`
 3. ✅ **EPIC-04 complete** — Decision Store available
-4. **Pending:** EPIC-05 and EPIC-06 implementation (see `coordination-work.md` for remaining wiring work)
-5. **Pending:** Resolve open concerns (see `concerns.md`)
+4. ✅ **EPIC-05 and EPIC-06 wired** — T6.7 wired all services, lifespan, and coordinator gateway
+5. ✅ **Open concerns resolved** — All 4 concerns in `concerns.md` resolved (2026-04-01)
+6. ✅ **Dead code removed** — `ResolutionDecisionStoreServiceABC`, `DeltaPage`, `USE_MOCK_SERVICES` deleted
+7. ✅ **BDD feature tests wired** — 51 scenarios across `test_resolve_entity_mention.py` + `test_lookup_cluster_assignment.py`
+8. ✅ **E2E UC-B1.1 wired** — 19 scenarios in `test_ucb11_resolve_entity_mention.py` (task 6X)
+9. **Deferred:** E2E resolution cycle (`test_e2e_resolution_cycle.py`) — requires cross-endpoint state coordination; feature file updated, skip marker added
+10. **Deferred:** E2E curation tests (`test_ucb21`, `test_ucb22`) — requires curation API (future EPIC, Spine D)
+11. **Deferred:** E2E statistics test (`test_ucw4`) — requires statistics endpoint (future EPIC)

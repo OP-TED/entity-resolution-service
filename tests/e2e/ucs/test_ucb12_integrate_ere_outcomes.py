@@ -410,7 +410,7 @@ def ere_emits_outcome_with_score_table(ctx, cluster_id, datatable):
     ctx["outcome_alternatives"] = []
     headers = datatable[0]
     for row_values in datatable[1:]:
-        row = dict(zip(headers, row_values))
+        row = dict(zip(headers, row_values, strict=True))
         ctx["outcome_alternatives"].append(
             {
                 "cluster_id": row["cluster_id"],
@@ -603,7 +603,7 @@ def scores_match_table(ctx, count, datatable):
     assert len(call_kwargs["candidates"]) == count
     headers = datatable[0]
     for i, row_values in enumerate(datatable[1:]):
-        row = dict(zip(headers, row_values))
+        row = dict(zip(headers, row_values, strict=True))
         candidate = call_kwargs["candidates"][i]
         assert candidate.cluster_id == row["cluster_id"]
         assert candidate.confidence_score == float(row["confidence"])

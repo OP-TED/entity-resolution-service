@@ -16,7 +16,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.curation.domain.data_transfer_objects import UserActionSummary
 from ers.curation.services import UserActionService
-from tests.unit.factories import EntityMentionFactory, UserActionFactory
+from tests.unit.factories import EntityMentionFactory, UserActionFactory, UserFactory
 
 FEATURE = str(Path(__file__).resolve().parent / "user_action_listing.feature")
 
@@ -85,6 +85,7 @@ def n_actions_at_different_times(
     count: int,
     user_action_repository: MagicMock,
     entity_mention_repository: MagicMock,
+    user_repository: MagicMock,
 ) -> list[UserAction]:
     actions = _build_actions(count)
     user_action_repository.find_with_cursor.return_value = CursorPage(
@@ -92,6 +93,7 @@ def n_actions_at_different_times(
         next_cursor=None,
     )
     entity_mention_repository.find_by_identifiers.return_value = []
+    user_repository.find_by_ids.return_value = []
     return actions
 
 
@@ -103,9 +105,11 @@ def n_actions_recorded(
     count: int,
     user_action_repository: MagicMock,
     entity_mention_repository: MagicMock,
+    user_repository: MagicMock,
 ) -> list[UserAction]:
     actions = _build_actions(count)
     entity_mention_repository.find_by_identifiers.return_value = []
+    user_repository.find_by_ids.return_value = []
     user_action_repository._all_actions = actions
     return actions
 
@@ -114,12 +118,14 @@ def n_actions_recorded(
 def no_actions(
     user_action_repository: MagicMock,
     entity_mention_repository: MagicMock,
+    user_repository: MagicMock,
 ) -> None:
     user_action_repository.find_with_cursor.return_value = CursorPage(
         results=[],
         next_cursor=None,
     )
     entity_mention_repository.find_by_identifiers.return_value = []
+    user_repository.find_by_ids.return_value = []
 
 
 @given("a user action exists for an entity mention with a parsed representation")
@@ -127,6 +133,7 @@ def action_with_parsed_mention(
     ctx: dict[str, Any],
     user_action_repository: MagicMock,
     entity_mention_repository: MagicMock,
+    user_repository: MagicMock,
 ) -> None:
     action = UserActionFactory.build()
     mention = EntityMentionFactory.build(
@@ -137,6 +144,7 @@ def action_with_parsed_mention(
         next_cursor=None,
     )
     entity_mention_repository.find_by_identifiers.return_value = [mention]
+    user_repository.find_by_ids.return_value = []
     ctx["action"] = action
     ctx["mention"] = mention
 
@@ -146,6 +154,7 @@ def action_with_missing_mention(
     ctx: dict[str, Any],
     user_action_repository: MagicMock,
     entity_mention_repository: MagicMock,
+    user_repository: MagicMock,
 ) -> None:
     action = UserActionFactory.build()
     user_action_repository.find_with_cursor.return_value = CursorPage(
@@ -153,6 +162,7 @@ def action_with_missing_mention(
         next_cursor=None,
     )
     entity_mention_repository.find_by_identifiers.return_value = []
+    user_repository.find_by_ids.return_value = []
     ctx["action"] = action
 
 
@@ -297,17 +307,18 @@ def diverse_actions_recorded(
     ctx: dict[str, Any],
     user_action_repository: MagicMock,
     entity_mention_repository: MagicMock,
+    user_repository: MagicMock,
 ) -> None:
     from erspec.models.core import UserActionType
 
     now = datetime.now(UTC)
     accept_action = UserActionFactory.build(
-        actor="curator@example.com",
+        actor="curator-id-1",
         action_type=UserActionType.ACCEPT_TOP,
         created_at=now - timedelta(days=2),
     )
     reject_action = UserActionFactory.build(
-        actor="other@example.com",
+        actor="curator-id-2",
         action_type=UserActionType.REJECT_ALL,
         created_at=now - timedelta(days=10),
     )
@@ -339,6 +350,10 @@ def diverse_actions_recorded(
 
     user_action_repository.find_with_cursor.side_effect = side_effect_with_cursor
     entity_mention_repository.find_by_identifiers.return_value = []
+    user_repository.find_by_ids.return_value = [
+        UserFactory.build(id="curator-id-1", email="curator@example.com"),
+        UserFactory.build(id="curator-id-2", email="other@example.com"),
+    ]
 
 
 @when(

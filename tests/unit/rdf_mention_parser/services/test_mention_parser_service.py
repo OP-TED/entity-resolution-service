@@ -48,10 +48,10 @@ _ORG_FIELDS = {
     "thoroughfare": "cccev:registeredAddress/locn:thoroughfare",
 }
 
-_ORG_URI = "http://www.w3.org/ns/org#Organization"
+_ORG_KEY = "ORGANISATION"
 
 
-def _make_entity_mention(content: str, content_type: str = "text/turtle", entity_type: str = _ORG_URI) -> EntityMention:
+def _make_entity_mention(content: str, content_type: str = "text/turtle", entity_type: str = _ORG_KEY) -> EntityMention:
     return EntityMention(
         identifiedBy=EntityMentionIdentifier(
             source_id="test-source",
@@ -205,7 +205,7 @@ class TestEntityTypeMismatch:
 
         with pytest.raises(EntityTypeMismatchError) as exc_info:
             service.parse(_make_entity_mention("turtle content"))
-        assert _ORG_URI in exc_info.value.message
+        assert _ORG_KEY in exc_info.value.message
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +270,7 @@ class TestEmptyExtraction:
 
         with pytest.raises(EmptyExtractionError) as exc_info:
             service.parse(_make_entity_mention("turtle content"))
-        assert _ORG_URI in exc_info.value.message
+        assert _ORG_KEY in exc_info.value.message
 
     def test_raises_when_sparql_returns_no_rows(self, service, adapter_mock):
         adapter_mock.execute_sparql.return_value = []
@@ -304,9 +304,9 @@ class TestErrorPropagation:
         with pytest.raises(UnsupportedContentTypeError):
             service.parse(_make_entity_mention("{}", content_type="application/json"))
 
-    def test_raises_unsupported_entity_type_for_unknown_uri(self, service):
+    def test_raises_unsupported_entity_type_for_unknown_key(self, service):
         with pytest.raises(UnsupportedEntityTypeError):
-            service.parse(_make_entity_mention("content", entity_type="http://example.org/Unknown#Type"))
+            service.parse(_make_entity_mention("content", entity_type="UNKNOWN_TYPE"))
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +357,7 @@ class TestParseEntityMention:
             patch(f"{_SERVICE_MODULE}.RDFParserAdapter"),
             patch(f"{_SERVICE_MODULE}.MentionParserService") as mock_service_cls,
         ):
-            mock_service_cls.return_value.parse.side_effect = EntityTypeMismatchError(_ORG_URI)
+            mock_service_cls.return_value.parse.side_effect = EntityTypeMismatchError(_ORG_KEY)
 
             with pytest.raises(EntityTypeMismatchError):
                 parse_entity_mention(entity_mention, config)

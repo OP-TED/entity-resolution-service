@@ -26,7 +26,6 @@ from ers.commons.adapters.redis_messages import (
     get_response_from_message,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -198,6 +197,16 @@ class TestGetResponseFromMessage:
         result = get_response_from_message(raw)
 
         assert result.error_type == "ers.SomeError"
+
+    def test_parses_linkml_json_dumper_format(self, sample_response):
+        """JSONDumper (LinkML) emits @type instead of type — must still parse."""
+        payload = {"@type": "EntityMentionResolutionResponse", **sample_response.model_dump()}
+        raw = json.dumps(payload).encode("utf-8")
+
+        result = get_response_from_message(raw)
+
+        assert isinstance(result, EntityMentionResolutionResponse)
+        assert result.ere_request_id == sample_response.ere_request_id
 
     def test_raises_on_missing_type_field(self):
         raw = b'{"ere_request_id": "req:001"}'

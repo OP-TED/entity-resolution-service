@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,6 +29,8 @@ class FrozenDTO(BaseModel):
 class DecisionFilters(FrozenDTO):
     """Filtering criteria for decision queries."""
 
+    source_id: str | None = None
+    updated_since: datetime | None = None
     entity_type: str | None = None
     confidence_min: float | None = None
     confidence_max: float | None = None

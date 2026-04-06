@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from erspec.models.core import EntityMentionIdentifier
+from erspec.models.ere import EntityMention, EntityMentionResolutionRequest
 
 from ers.commons.adapters.redis_client import AbstractClient
 from ers.ere_contract_client.domain.errors import (
@@ -20,8 +22,6 @@ from ers.ere_contract_client.services.ere_publish_service import (
     EREPublishService,
     publish_request,
 )
-from erspec.models.core import EntityMentionIdentifier
-from erspec.models.ere import EntityMention, EntityMentionResolutionRequest
 
 
 def make_request(
@@ -191,7 +191,6 @@ class TestPublishRequestAdapterErrors:
 class TestPublishRequestSerializationError:
     async def test_serialization_failure_raises_serialization_error(self, service):
         """Pre-serialization failure → SerializationError before adapter is called."""
-        identifier = make_request().entity_mention.identifiedBy
         # Inject a non-serializable value via model_construct to bypass Pydantic validation
         from erspec.models.core import EntityMentionIdentifier
         from erspec.models.ere import EntityMention

@@ -1,4 +1,5 @@
 import json
+from typing import cast
 
 from dotenv import load_dotenv
 
@@ -22,7 +23,7 @@ class CurationAppConfig:
 
     @env_property(default_value='["*"]')
     def CORS_ORIGINS(self, config_value: str) -> list[str]:
-        return json.loads(config_value)
+        return cast(list[str], json.loads(config_value))
 
 
 class JWTConfig:
@@ -74,7 +75,7 @@ class RDFMentionParserConfig:
     def ERS_PARSER_MAX_CONTENT_LENGTH(self, config_value: str) -> int:
         return int(config_value)
 
-    @env_property(default_value="rdf_mention_config.yaml")
+    @env_property(default_value="tests/test_data/sample_rdf_mapping.yaml")
     def RDF_MENTION_CONFIG_FILE(self, config_value: str) -> str:
         return config_value
 
@@ -91,11 +92,6 @@ class ERSRestApiConfig:
     @env_property(default_value="8001")
     def ERS_API_PORT(self, config_value: str) -> int:
         return int(config_value)
-
-    @env_property(default_value="false")
-    def USE_MOCK_SERVICES(self, config_value: str) -> bool:
-        """Enable factory-generated mock responses (temporary dev)."""
-        return config_value.lower() == "true"
 
 
 class EREConfig:
@@ -116,6 +112,10 @@ class RedisConfig:
     @env_property(default_value="0")
     def REDIS_DB(self, config_value: str) -> int:
         return int(config_value)
+
+    @env_property(default_value="changeme")
+    def REDIS_PASSWORD(self, config_value: str) -> str:
+        return config_value
 
     @env_property(default_value="ere_requests")
     def ERE_REQUEST_CHANNEL(self, config_value: str) -> str:
@@ -165,6 +165,25 @@ class ObservabilityConfig:
         return config_value
 
 
+class ResolutionCoordinatorConfig:
+    @env_property(default_value="30")
+    def ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET(self, config_value: str) -> float:
+        """Maximum time budget for a single-mention resolution response.
+
+        Also serves as the ERE wait window — if ERE does not respond within
+        this budget, a provisional identifier is issued and returned to the client.
+        """
+        return float(config_value)
+
+    @env_property(default_value="120")
+    def ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET(self, config_value: str) -> float:
+        """Maximum time budget for a bulk resolution response (all mentions combined).
+
+        Each mention waits up to SINGLE_REQUEST_TIME_BUDGET for ERE internally.
+        """
+        return float(config_value)
+
+
 class ERSConfigResolver(
     CurationAppConfig,
     JWTConfig,
@@ -177,6 +196,7 @@ class ERSConfigResolver(
     EREConfig,
     DecisionStoreConfig,
     ObservabilityConfig,
+    ResolutionCoordinatorConfig,
 ):
     """Aggregates all ERS configuration.
 

@@ -6,7 +6,7 @@ from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifi
 
 from ers import config
 from ers.commons.adapters.tracing import trace_function
-from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
+from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams, DecisionFilters
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 
 _log = logging.getLogger(__name__)
@@ -19,11 +19,11 @@ class DecisionStoreService:
         self._repository = repository
 
     async def store_decision(
-        self,
-        identifier: EntityMentionIdentifier,
-        current: ClusterReference,
-        candidates: list[ClusterReference],
-        updated_at: datetime,
+            self,
+            identifier: EntityMentionIdentifier,
+            current: ClusterReference,
+            candidates: list[ClusterReference],
+            updated_at: datetime,
     ) -> Decision:
         """Store or atomically replace a decision, truncating excess candidates.
 
@@ -55,7 +55,7 @@ class DecisionStoreService:
         )
 
     async def get_decision_by_triad(
-        self, identifier: EntityMentionIdentifier
+            self, identifier: EntityMentionIdentifier
     ) -> Decision | None:
         """Return the current decision for a triad, or None if not stored.
 
@@ -67,35 +67,10 @@ class DecisionStoreService:
         """
         return await self._repository.find_by_triad(identifier)
 
-    async def query_decisions_by_timestamp(
-        self,
-        source_id: str,
-        updated_since: datetime | None,
-        limit: int,
-        continuation_cursor: str | None,
-    ) -> CursorPage[Decision]:
-        """Return decisions for a source changed after updated_since, cursor-paginated.
-
-        Args:
-            source_id: Filter to this source system.
-            updated_since: Return decisions updated after this timestamp, or all if None.
-            limit: Max decisions per page. Capped at DECISION_STORE_MAX_PAGE_SIZE.
-            continuation_cursor: Opaque pagination token from a previous response, or None.
-
-        Returns:
-            A CursorPage with matching decisions and an optional next_cursor.
-        """
-        effective_limit = min(limit, config.DECISION_STORE_MAX_PAGE_SIZE)
-        return await self._repository.find_delta_for_source(
-            source_id=source_id,
-            updated_since=updated_since,
-            cursor_params=CursorParams(cursor=continuation_cursor, limit=effective_limit),
-        )
-
     async def query_decisions_paginated(
-        self,
-        cursor: str | None = None,
-        page_size: int | None = None,
+            self,
+            cursor: str | None = None,
+            page_size: int | None = None,
     ) -> CursorPage[Decision]:
         """Cursor-paginated traversal of all stored decisions (bulk sync mode).
 
@@ -119,17 +94,55 @@ class DecisionStoreService:
             cursor_params=CursorParams(cursor=cursor, limit=effective_size),
         )
 
+    async def query_decisions_delta(
+            self,
+            source_id: str,
+            updated_since: datetime | None,
+            cursor: str | None = None,
+            page_size: int | None = None,
+    ) -> CursorPage[Decision]:
+        """Return decisions for a source updated after updated_since, paginated by cursor.
+
+        Used by BulkRefreshCoordinatorService to compute the delta since the last
+        snapshot for a given source system.
+
+        Args:
+            source_id: The source system identifier to filter by.
+            updated_since: If provided, only decisions with updated_at > updated_since
+                are returned. If None, all decisions for the source are returned
+                (first-time lookup — source has no snapshot yet).
+            cursor: Opaque pagination token from a previous response, or None for
+                the first page.
+            page_size: Max results per page. Capped at the system pagination limit.
+
+        Returns:
+            A CursorPage with matching Decisions and an optional next_cursor.
+
+        Raises:
+            InvalidCursorError: If the cursor string cannot be decoded.
+            RepositoryConnectionError: On MongoDB connection failure.
+        """
+        effective_size = min(
+            page_size if page_size is not None else config.DECISION_STORE_DEFAULT_PAGE_SIZE,
+            config.DECISION_STORE_MAX_PAGE_SIZE,
+        )
+        filters = DecisionFilters(source_id=source_id, updated_since=updated_since)
+        return await self._repository.find_with_filters(
+            filters=filters,
+            cursor_params=CursorParams(cursor=cursor, limit=effective_size),
+        )
+
 
 # ── Public API (traced at the service boundary) ───────────────────────────────
 
 
 @trace_function(span_name="decision_store.store_decision")
 async def store_decision(
-    identifier: EntityMentionIdentifier,
-    current: ClusterReference,
-    candidates: list[ClusterReference],
-    updated_at: datetime,
-    service: DecisionStoreService,
+        identifier: EntityMentionIdentifier,
+        current: ClusterReference,
+        candidates: list[ClusterReference],
+        updated_at: datetime,
+        service: DecisionStoreService,
 ) -> Decision:
     """Store or atomically replace a resolution decision.
 
@@ -153,8 +166,8 @@ async def store_decision(
 
 @trace_function(span_name="decision_store.get_decision_by_triad")
 async def get_decision_by_triad(
-    identifier: EntityMentionIdentifier,
-    service: DecisionStoreService,
+        identifier: EntityMentionIdentifier,
+        service: DecisionStoreService,
 ) -> Decision | None:
     """Retrieve the current decision for an entity mention triad.
 
@@ -170,9 +183,9 @@ async def get_decision_by_triad(
 
 @trace_function(span_name="decision_store.query_paginated")
 async def query_decisions_paginated(
-    service: DecisionStoreService,
-    cursor: str | None = None,
-    page_size: int | None = None,
+        service: DecisionStoreService,
+        cursor: str | None = None,
+        page_size: int | None = None,
 ) -> CursorPage[Decision]:
     """Cursor-paginated traversal of all stored decisions for bulk sync.
 
@@ -190,29 +203,34 @@ async def query_decisions_paginated(
     return await service.query_decisions_paginated(cursor=cursor, page_size=page_size)
 
 
-@trace_function(span_name="decision_store.query_by_timestamp")
-async def query_decisions_by_timestamp(
-    source_id: str,
-    updated_since: datetime | None,
-    limit: int,
-    continuation_cursor: str | None,
-    service: DecisionStoreService,
+@trace_function(span_name="decision_store.query_delta")
+async def query_decisions_delta(
+        source_id: str,
+        updated_since: datetime | None,
+        service: DecisionStoreService,
+        cursor: str | None = None,
+        page_size: int | None = None,
 ) -> CursorPage[Decision]:
-    """Return decisions for a source changed after updated_since, cursor-paginated.
+    """Return the delta of changed decisions for a source since a snapshot point.
 
     Args:
-        source_id: Filter to this source system.
-        updated_since: Return decisions updated after this timestamp, or all if None.
-        limit: Max decisions per page. Capped at DECISION_STORE_MAX_PAGE_SIZE.
-        continuation_cursor: Opaque pagination token from a previous response, or None.
+        source_id: The source system to query.
+        updated_since: Lower-bound timestamp (exclusive). None means all decisions
+            for the source (first-time lookup).
         service: The DecisionStoreService instance.
+        cursor: Pagination cursor, or None for first page.
+        page_size: Max results per page.
 
     Returns:
-        A CursorPage with matching decisions and an optional next_cursor.
+        A CursorPage of matching Decisions.
+
+    Raises:
+        InvalidCursorError: If the cursor is malformed.
+        RepositoryConnectionError: On MongoDB connection failure.
     """
-    return await service.query_decisions_by_timestamp(
+    return await service.query_decisions_delta(
         source_id=source_id,
         updated_since=updated_since,
-        limit=limit,
-        continuation_cursor=continuation_cursor,
+        cursor=cursor,
+        page_size=page_size,
     )

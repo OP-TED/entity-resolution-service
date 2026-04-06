@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from erspec.models.core import ClusterReference, EntityMentionIdentifier
 from erspec.models.ere import (
-    EREErrorResponse,
     EntityMentionResolutionResponse,
+    EREErrorResponse,
 )
 
 from ers.commons.adapters.redis_client import AbstractClient
@@ -131,9 +131,8 @@ class TestRedisOutcomeListenerResilience:
         client.pull_response = AsyncMock(side_effect=ConnectionError("Redis down"))
 
         listener = RedisOutcomeListener(client=client)
-        with caplog.at_level(logging.ERROR, logger="ers.ere_result_integrator"):
-            with pytest.raises(ConnectionError):
-                await collect_n(listener.consume(), 1)
+        with caplog.at_level(logging.ERROR, logger="ers.ere_result_integrator"), pytest.raises(ConnectionError):
+            await collect_n(listener.consume(), 1)
 
         assert any("connection" in r.message.lower() for r in caplog.records)
 

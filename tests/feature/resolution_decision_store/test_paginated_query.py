@@ -1,6 +1,6 @@
 """Step definitions for: paginated_query.feature"""
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -8,9 +8,9 @@ from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifi
 from pytest_bdd import given, scenario, then, when
 
 from ers import config
-from ers.commons.domain.exceptions import InvalidCursorError
 from ers.commons.domain.cursor import encode_cursor
 from ers.commons.domain.data_transfer_objects import CursorPage
+from ers.commons.domain.exceptions import InvalidCursorError
 from ers.resolution_decision_store.services.decision_store_service import query_decisions_paginated
 
 FEATURE_FILE = str(Path(__file__).parent / "paginated_query.feature")
@@ -75,7 +75,7 @@ def make_decision(now, source_id="s1"):
 
 
 def build_decisions(count=5):
-    base = datetime.now(timezone.utc)
+    base = datetime.now(UTC)
     return [
         make_decision(base + timedelta(seconds=i), source_id=f"s{i}")
         for i in range(count)

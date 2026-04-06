@@ -14,12 +14,12 @@ from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
 )
-from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
-from ers.request_registry.services.exceptions import (
+from ers.request_registry.domain.errors import (
     DuplicateTriadError,
     RepositoryConnectionError,
     RepositoryOperationError,
 )
+from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
 
 # ---------------------------------------------------------------------------
 # Shared test data

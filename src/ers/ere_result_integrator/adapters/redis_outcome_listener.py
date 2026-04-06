@@ -14,7 +14,7 @@ in a polling loop with the following message-handling rules:
 import logging
 from collections.abc import AsyncGenerator
 
-from erspec.models.ere import EREErrorResponse, EntityMentionResolutionResponse
+from erspec.models.ere import EntityMentionResolutionResponse, EREErrorResponse
 
 from ers.commons.adapters.redis_client import AbstractClient
 from ers.ere_result_integrator.adapters.outcome_listener import AsyncOutcomeListener

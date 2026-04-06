@@ -4,7 +4,6 @@ import logging
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
-import pytest
 from erspec.models.core import ClusterReference, EntityMentionIdentifier
 from erspec.models.ere import EntityMentionResolutionResponse
 

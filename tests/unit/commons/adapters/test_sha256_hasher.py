@@ -1,6 +1,5 @@
 """Unit tests for SHA256ContentHasher."""
 
-import pytest
 
 from ers.commons.adapters.hasher import SHA256ContentHasher
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from erspec.models.core import EntityMention, LookupState, EntityMentionIdentifier
+from erspec.models.core import EntityMention, EntityMentionIdentifier, LookupState
 from pydantic import Field, field_validator, model_validator
 
 from ers.commons.domain.data_transfer_objects import FrozenDTO

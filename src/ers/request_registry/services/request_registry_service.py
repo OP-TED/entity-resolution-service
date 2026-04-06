@@ -1,14 +1,14 @@
 """Request Registry service — orchestrates registration, lookup, and snapshot management."""
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 
 from ers.commons.adapters.hasher import ContentHasher
 from ers.commons.adapters.tracing import trace_function
-from ers.rdf_mention_parser.domain.rdf_mapping_config import RDFMappingConfig
-from ers.rdf_mention_parser.services.mention_parser_service import parse_entity_mention
 from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
@@ -32,12 +32,12 @@ class RequestRegistryService:
         resolution_repo: MongoResolutionRequestRepository,
         lookup_repo: MongoLookupStateRepository,
         hasher: ContentHasher,
-        rdf_config: RDFMappingConfig,
+        mention_parser: Callable[[EntityMention], dict[str, Any]],
     ) -> None:
         self._resolution_repo = resolution_repo
         self._lookup_repo = lookup_repo
         self._hasher = hasher
-        self._rdf_config = rdf_config
+        self._mention_parser = mention_parser
 
     async def register_resolution_request(
         self, entity_mention: EntityMention
@@ -75,7 +75,7 @@ class RequestRegistryService:
                 return existing
             raise IdempotencyConflictError(identifier)
 
-        parsed = parse_entity_mention(entity_mention, self._rdf_config)
+        parsed = self._mention_parser(entity_mention)
         record = ResolutionRequestRecord(
             **entity_mention.model_dump(exclude={"parsed_representation"}),
             content_hash=content_hash,
@@ -96,6 +96,17 @@ class RequestRegistryService:
             The matching ResolutionRequestRecord, or None.
         """
         return await self._resolution_repo.find_by_triad(identifier)
+
+    async def source_has_requests(self, source_id: str) -> bool:
+        """Return True if at least one resolution request exists for the given source.
+
+        Args:
+            source_id: The source system identifier.
+
+        Returns:
+            True if any record with this source_id exists in the registry.
+        """
+        return await self._resolution_repo.exists_by_source(source_id)
 
     async def get_lookup_state(self, source_id: str) -> LookupRequestRecord | None:
         """Return the current snapshot state for a source, or None if unknown.
@@ -186,6 +197,23 @@ async def get_resolution_request(
         The matching ResolutionRequestRecord, or None.
     """
     return await service.get_resolution_request(identifier)
+
+
+@trace_function(span_name="request_registry.source_has_requests")
+async def source_has_requests(
+    source_id: str,
+    service: RequestRegistryService,
+) -> bool:
+    """Return True if at least one resolution request exists for the given source.
+
+    Args:
+        source_id: The source system identifier.
+        service: The RequestRegistryService instance.
+
+    Returns:
+        True if any record with this source_id exists in the registry.
+    """
+    return await service.source_has_requests(source_id)
 
 
 @trace_function(span_name="request_registry.get_lookup_state")

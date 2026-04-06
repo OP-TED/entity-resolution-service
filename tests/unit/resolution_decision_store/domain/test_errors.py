@@ -1,11 +1,11 @@
+from ers.commons.services.exceptions import ApplicationError
 from ers.resolution_decision_store.domain.errors import (
-    DecisionStoreError,
-    StaleOutcomeError,
     DecisionNotFoundError,
+    DecisionStoreError,
     RepositoryConnectionError,
     RepositoryOperationError,
+    StaleOutcomeError,
 )
-from ers.commons.services.exceptions import ApplicationError
 
 
 def test_all_errors_inherit_from_base():
