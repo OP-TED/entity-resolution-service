@@ -92,8 +92,8 @@ class RDFMappingConfig(BaseModel):
         """
         try:
             return self.entity_types[name]
-        except KeyError:
-            raise UnsupportedEntityTypeError(name)
+        except KeyError as e:
+            raise UnsupportedEntityTypeError(name) from e
 
     def resolve_entity_type(self, uri: str) -> EntityTypeConfig:
         """Return the EntityTypeConfig whose rdf_type expands to the given full URI.
