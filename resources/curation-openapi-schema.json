@@ -1303,7 +1303,7 @@
           "Users"
         ],
         "summary": "List Users",
-        "description": "List all users (admin only).",
+        "description": "List all users (verified users).",
         "operationId": "list_users_api_v1_users_get",
         "security": [
           {
@@ -1311,6 +1311,24 @@
           }
         ],
         "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Partial email match",
+              "title": "Email"
+            },
+            "description": "Partial email match"
+          },
           {
             "name": "page",
             "in": "query",
@@ -1501,6 +1519,25 @@
   },
   "components": {
     "schemas": {
+      "ActorSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email"
+        ],
+        "title": "ActorSummary",
+        "description": "Embedded actor info for user action display."
+      },
       "AssignRequest": {
         "properties": {
           "cluster_id": {
@@ -2200,8 +2237,7 @@
             "$ref": "#/components/schemas/UserActionType"
           },
           "actor": {
-            "type": "string",
-            "title": "Actor"
+            "$ref": "#/components/schemas/ActorSummary"
           },
           "created_at": {
             "type": "string",
