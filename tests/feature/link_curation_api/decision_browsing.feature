@@ -14,10 +14,10 @@ Feature: Decision browsing and filtering
     Then a paginated list of decision summaries is returned
     And each summary includes the entity mention preview, current placement, and timestamps
 
-  Scenario: Decisions default to showing low-confidence items
-    Given decisions exist with confidence scores above and below the curation threshold
+  Scenario: All decisions are listed when no confidence filters are provided
+    Given multiple decisions exist in the decision store
     When the curator requests the decision list without specifying confidence filters
-    Then only decisions with confidence at or below the threshold are returned
+    Then all decisions are returned
 
   # --- Filtering ---
 

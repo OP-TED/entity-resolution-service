@@ -94,7 +94,6 @@ Coverage is complete:
 | Issue | Severity | Detail |
 |-------|----------|--------|
 | **Missing: combined filters** | LOW | No scenario tests multiple filters applied simultaneously. |
-| **"Low-confidence items" default is good** | — | Correctly reflects the curation threshold concept. |
 
 Dropped items (confirmed out of scope): filter by curation status, filter by source ID.
 

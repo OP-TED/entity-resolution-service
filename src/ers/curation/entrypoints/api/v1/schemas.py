@@ -4,7 +4,6 @@ from typing import Annotated
 from fastapi import Depends, Query
 from pydantic import BaseModel
 
-from ers import config
 from ers.commons.domain.data_transfer_objects import (
     DEFAULT_PER_PAGE,
     MAX_PER_PAGE,
@@ -41,7 +40,7 @@ def get_decision_filters(
     ] = None,
     confidence_max: Annotated[
         float | None, Query(ge=0, le=1, description="Maximum confidence")
-    ] = config.CURATION_CONFIDENCE_THRESHOLD,
+    ] = None,
     similarity_min: Annotated[
         float | None, Query(ge=0, le=1, description="Minimum similarity")
     ] = None,

@@ -1,9 +1,6 @@
-import pytest
-
 from ers import (
     AdminConfig,
     CurationAppConfig,
-    CurationConfig,
     JWTConfig,
     MongoDBConfig,
     ObservabilityConfig,
@@ -69,16 +66,6 @@ class TestMongoDBConfig:
         assert MongoDBConfig().MONGO_DATABASE_NAME == "mydb"
 
 
-class TestCurationConfig:
-    def test_threshold_default_is_float(self, monkeypatch):
-        monkeypatch.delenv("CURATION_CONFIDENCE_THRESHOLD", raising=False)
-        assert pytest.approx(0.85) == CurationConfig().CURATION_CONFIDENCE_THRESHOLD
-
-    def test_threshold_from_env(self, monkeypatch):
-        monkeypatch.setenv("CURATION_CONFIDENCE_THRESHOLD", "0.75")
-        assert pytest.approx(0.75) == CurationConfig().CURATION_CONFIDENCE_THRESHOLD
-
-
 class TestRDFMentionParserConfig:
     def test_max_content_length_default(self, monkeypatch):
         monkeypatch.delenv("ERS_PARSER_MAX_CONTENT_LENGTH", raising=False)
@@ -109,6 +96,5 @@ class TestAppConfigResolverSingleton:
         assert isinstance(config.ADMIN_EMAIL, str)
         assert isinstance(config.ADMIN_PASSWORD, str)
         assert isinstance(config.MONGO_URI, str)
-        assert isinstance(config.CURATION_CONFIDENCE_THRESHOLD, float)
         assert isinstance(config.ERS_PARSER_MAX_CONTENT_LENGTH, int)
         assert isinstance(config.TRACING_ENABLED, bool)

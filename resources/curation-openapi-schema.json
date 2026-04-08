@@ -255,7 +255,6 @@
                 }
               ],
               "description": "Maximum confidence",
-              "default": 0.85,
               "title": "Confidence Max"
             },
             "description": "Maximum confidence"
