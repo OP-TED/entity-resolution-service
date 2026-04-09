@@ -40,8 +40,8 @@ def test_list_default():
     pass
 
 
-@scenario(FEATURE, "Decisions default to showing low-confidence items")
-def test_default_low_confidence():
+@scenario(FEATURE, "All decisions are listed when no confidence filters are provided")
+def test_default_no_confidence_filter():
     pass
 
 
@@ -134,16 +134,6 @@ def multiple_decisions(
     entity_mention_repository: AsyncMock,
 ) -> None:
     _setup_decisions(decision_repository, entity_mention_repository, 3)
-
-
-@given(
-    "decisions exist with confidence scores above and below the curation threshold",
-)
-def decisions_above_below_threshold(
-    decision_repository: AsyncMock,
-    entity_mention_repository: AsyncMock,
-) -> None:
-    _setup_decisions(decision_repository, entity_mention_repository, 1, prefix="d-low")
 
 
 @given("decisions exist with varying confidence scores")
@@ -353,15 +343,15 @@ def summary_includes_fields(response: Any) -> None:
         assert "created_at" in item
 
 
-@then("only decisions with confidence at or below the threshold are returned")
-def only_low_confidence(
+@then("all decisions are returned")
+def all_decisions_returned(
     response: Any,
     decision_repository: AsyncMock,
 ) -> None:
     assert response.status_code == 200
     call_args = decision_repository.find_with_filters.call_args
     filters = call_args.kwargs["filters"]
-    assert filters.confidence_max is not None
+    assert filters.confidence_max is None
 
 
 @then("only decisions within the confidence range are returned")

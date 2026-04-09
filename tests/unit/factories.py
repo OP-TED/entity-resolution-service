@@ -1,5 +1,6 @@
 import hashlib
 import json
+import random
 from datetime import UTC, datetime
 
 from erspec.models.core import (
@@ -69,13 +70,17 @@ class EntityMentionFactory(ModelFactory):
     def _payload(cls) -> dict:
         faker = cls.__faker__
 
-        return {
-            "name": faker.company(),
+        payload: dict = {"name": faker.company()}
+        optional_fields = {
             "registration_number": faker.bothify(text="??########"),
             "country": faker.country_code(),
             "city": faker.city(),
             "email": faker.company_email(),
         }
+        for key, value in optional_fields.items():
+            if random.random() > 0.5:
+                payload[key] = value
+        return payload
 
     @classmethod
     def parsed_representation(cls) -> str:

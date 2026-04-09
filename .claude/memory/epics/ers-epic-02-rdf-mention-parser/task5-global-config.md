@@ -53,14 +53,13 @@ One class per infrastructure concern:
 | `AppConfig` | `APP_NAME`, `DEBUG`, `API_V1_PREFIX`, `CORS_ORIGINS` (JSON-decoded list) |
 | `JWTConfig` | `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_MINUTES` |
 | `AdminConfig` | `ADMIN_EMAIL`, `ADMIN_PASSWORD` |
-| `CurationConfig` | `CURATION_CONFIDENCE_THRESHOLD` (float, validated in method body) |
 | `MongoDBConfig` | `MONGO_URI`, `MONGO_DATABASE_NAME` |
 | `RDFMentionParserConfig` | `ERS_PARSER_MAX_CONTENT_LENGTH` (int) |
 
 Aggregated via multiple inheritance:
 
 ```python
-class AppConfigResolver(AppConfig, JWTConfig, AdminConfig, CurationConfig,
+class AppConfigResolver(AppConfig, JWTConfig, AdminConfig,
                         MongoDBConfig, RDFMentionParserConfig):
     """Aggregates all ERS configuration."""
 
@@ -90,7 +89,6 @@ load_dotenv()  # no-op if .env absent; pre-set env vars win
 | `settings.mongo_uri` | `config.MONGO_URI` |
 | `settings.jwt_secret_key` | `config.JWT_SECRET_KEY` |
 | `settings.cors_origins` | `config.CORS_ORIGINS` |
-| `settings.curation_confidence_threshold` | `config.CURATION_CONFIDENCE_THRESHOLD` |
 | `Depends(get_settings)` | `Depends(lambda: config)` or direct use |
 | `os.environ.get("ERS_PARSER_MAX_CONTENT_LENGTH", …)` in service | `config.ERS_PARSER_MAX_CONTENT_LENGTH` |
 | `src/ers/config.py` | deleted |

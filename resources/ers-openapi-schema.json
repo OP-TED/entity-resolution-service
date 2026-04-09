@@ -18,11 +18,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object",
-                  "title": "Response Health Health Get"
+                  "$ref": "#/components/schemas/HealthResponse"
                 }
               }
             }
@@ -95,7 +91,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "All canonical",
             "content": {
               "application/json": {
                 "schema": {
@@ -103,6 +99,12 @@
                 }
               }
             }
+          },
+          "202": {
+            "description": "All provisional"
+          },
+          "207": {
+            "description": "Mixed outcomes"
           },
           "400": {
             "description": "Validation error",
@@ -706,13 +708,35 @@
         "title": "EntityMentionResolutionResult",
         "description": "Result of resolving a single entity mention.\n\nUsed as the API response for POST /resolve, as the internal coordinator\nreturn value, and as the per-item result in bulk resolve responses.\n\nFor single /resolve, this is always a success (errors become ErrorResponse\nvia exception handlers).  In bulk context, individual items may carry\nerror_code + detail instead of success fields.\n\nIf the coordinator later needs to carry extra metadata, extract a\ndedicated internal model at that point."
       },
+      "EntityTypeInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "rdf_type": {
+            "type": "string",
+            "title": "Rdf Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "rdf_type"
+        ],
+        "title": "EntityTypeInfo",
+        "description": "A supported entity type exposed by this ERS instance."
+      },
       "ErrorCode": {
         "type": "string",
         "enum": [
           "VALIDATION_ERROR",
           "IDEMPOTENCY_CONFLICT",
+          "PARSING_FAILED",
           "MENTION_NOT_FOUND",
-          "SERVICE_ERROR"
+          "SOURCE_NOT_FOUND",
+          "SERVICE_ERROR",
+          "SERVICE_TIMEOUT"
         ],
         "title": "ErrorCode",
         "description": "Machine-readable error codes returned in error responses."
@@ -747,6 +771,28 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "supported_entity_types": {
+            "items": {
+              "$ref": "#/components/schemas/EntityTypeInfo"
+            },
+            "type": "array",
+            "title": "Supported Entity Types"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "supported_entity_types"
+        ],
+        "title": "HealthResponse",
+        "description": "Response model for the health endpoint."
       },
       "LookupRequest": {
         "properties": {

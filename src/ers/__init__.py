@@ -54,12 +54,6 @@ class AdminConfig:
         return config_value
 
 
-class CurationConfig:
-    @env_property(default_value="0.85")
-    def CURATION_CONFIDENCE_THRESHOLD(self, config_value: str) -> float:
-        return float(config_value)
-
-
 class MongoDBConfig:
     @env_property(default_value="mongodb://username:password@localhost:27017")
     def MONGO_URI(self, config_value: str) -> str:
@@ -188,7 +182,6 @@ class ERSConfigResolver(
     CurationAppConfig,
     JWTConfig,
     AdminConfig,
-    CurationConfig,
     MongoDBConfig,
     RedisConfig,
     RDFMentionParserConfig,
