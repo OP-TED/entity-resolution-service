@@ -39,6 +39,11 @@
 - **[2026-03-31] Code review fixes** — derive_provisional_cluster_id moved to ers.commons.adapters, resolve_bulk return type widened, exception chain preserved, ABC removal fallout fixed across ResolveService + dependencies.
 - **Next:** T6.4 (Decision Store delta) + T6.5 (BulkRefreshCoordinator) are independent — can be parallelized.
 
+### Fix1: Curation API ERE Forwarding (branch: `feature/ERS1-145-fix1`)
+
+- **[2026-04-03] Parts 1-3 complete** — DecisionCurationService publishes ERE re-evaluation requests after accept/reject/assign. Redis client wired into curation app lifespan + DI. All unit/feature tests updated.
+- **[2026-04-09] Part 4 complete** — 6 e2e acceptance tests created and passing. 1003 unit+feature tests green. Fix1 is **COMPLETE** — ready for PR.
+
 ## Project Automation
 
 - [project-automation.md](project-automation.md) — Toolchain, config files, Makefile targets, quality-control layers
