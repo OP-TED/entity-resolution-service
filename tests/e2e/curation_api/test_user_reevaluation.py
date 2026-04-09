@@ -163,7 +163,7 @@ async def test_placement_recommendation() -> None:
 
     assert response.status_code == 204
     ere_adapter.push_request.assert_awaited_once()
-    published = ere_adapter.push_request.call_args[0][0]
+    published = ere_adapter.push_request.call_args.args[0]
     assert published.entity_mention == entity_mention
     assert published.proposed_cluster_ids == ["cl-top"]
     assert published.excluded_cluster_ids == []
@@ -198,7 +198,7 @@ async def test_exclusion_recommendation() -> None:
 
     assert response.status_code == 204
     ere_adapter.push_request.assert_awaited_once()
-    published = ere_adapter.push_request.call_args[0][0]
+    published = ere_adapter.push_request.call_args.args[0]
     assert published.entity_mention == entity_mention
     assert set(published.excluded_cluster_ids) == set(cluster_ids)
     assert published.proposed_cluster_ids == []
