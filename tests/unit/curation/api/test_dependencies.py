@@ -98,8 +98,9 @@ class TestServiceProviders:
         mock_decision_repo = MagicMock()
         mock_entity_repo = MagicMock()
         mock_user_action_service = MagicMock()
+        mock_ere_publish_service = MagicMock()
         result = await get_decision_curation_service(
-            mock_decision_repo, mock_entity_repo, mock_user_action_service
+            mock_decision_repo, mock_entity_repo, mock_user_action_service, mock_ere_publish_service
         )
         assert isinstance(result, DecisionCurationService)
 

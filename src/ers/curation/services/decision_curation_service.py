@@ -1,8 +1,10 @@
 import asyncio
+import logging
 from collections.abc import Callable, Collection, Coroutine
 from typing import Any
 
 from erspec.models.core import Decision, EntityMention
+from erspec.models.ere import EntityMentionResolutionRequest
 
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.commons.services.exceptions import NotFoundError
@@ -19,7 +21,10 @@ from ers.curation.domain.data_transfer_objects import (
 )
 from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.services.user_action_service import UserActionService
+from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
+
+log = logging.getLogger(__name__)
 
 
 class DecisionCurationService:
@@ -32,16 +37,60 @@ class DecisionCurationService:
         decision_repository: DecisionRepository,
         entity_mention_repository: EntityMentionCurationRepository,
         user_action_service: UserActionService,
+        ere_publish_service: EREPublishService,
     ) -> None:
         self._decision_repository = decision_repository
         self._entity_mention_repository = entity_mention_repository
         self._user_action_service = user_action_service
+        self._ere_publish_service = ere_publish_service
 
     async def _get_decision_or_raise(self, decision_id: str) -> Decision:
         decision = await self._decision_repository.find_by_id(decision_id)
         if decision is None:
             raise NotFoundError("Decision", decision_id)
         return decision
+
+    async def _publish_reevaluation(
+        self,
+        decision: Decision,
+        proposed_cluster_ids: list[str] | None = None,
+        excluded_cluster_ids: list[str] | None = None,
+    ) -> None:
+        """Publish an ERE re-evaluation request after a curation action.
+
+        Fetches the entity mention from the repository and publishes a
+        re-evaluation request to ERE. Skips silently if the entity mention
+        is not found. Swallows ERE publish errors so the curation action
+        response is not affected.
+
+        Args:
+            decision: The curated decision (provides entity mention identifier).
+            proposed_cluster_ids: Clusters to propose (resolveConsideringRecommendation).
+            excluded_cluster_ids: Clusters to exclude (resolveWithExclusions).
+        """
+        mentions = await self._entity_mention_repository.find_by_identifiers(
+            [decision.about_entity_mention]
+        )
+        if not mentions:
+            log.warning(
+                "Entity mention not found for ERE re-evaluation: decision=%s identifier=%s",
+                decision.id,
+                decision.about_entity_mention,
+            )
+            return
+
+        request = EntityMentionResolutionRequest(
+            entity_mention=mentions[0],
+            ere_request_id="",
+            proposed_cluster_ids=proposed_cluster_ids or [],
+            excluded_cluster_ids=excluded_cluster_ids or [],
+        )
+        try:
+            await self._ere_publish_service.publish_request(request)
+        except Exception:
+            log.exception(
+                "Failed to publish ERE re-evaluation for decision %s", decision.id
+            )
 
     async def list_decisions(
         self,
@@ -90,15 +139,25 @@ class DecisionCurationService:
     async def accept_decision(self, decision_id: str, actor: str) -> None:
         """Accept the top candidate for a decision.
 
+        After recording the user action, forwards a resolveConsideringRecommendation
+        request to ERE for re-evaluation with the current placement as the proposed cluster.
+
         Raises:
             NotFoundError: If the decision does not exist.
             AlreadyCuratedError: If already curated on current version.
         """
         decision = await self._get_decision_or_raise(decision_id)
         await self._user_action_service.record_accept(actor=actor, decision=decision)
+        await self._publish_reevaluation(
+            decision,
+            proposed_cluster_ids=[decision.current_placement.cluster_id],
+        )
 
     async def reject_decision(self, decision_id: str, actor: str) -> None:
         """Reject all candidates for a decision.
+
+        After recording the user action, forwards a resolveWithExclusions
+        request to ERE for re-evaluation excluding all current candidates.
 
         Raises:
             NotFoundError: If the decision does not exist.
@@ -106,9 +165,16 @@ class DecisionCurationService:
         """
         decision = await self._get_decision_or_raise(decision_id)
         await self._user_action_service.record_reject(actor=actor, decision=decision)
+        await self._publish_reevaluation(
+            decision,
+            excluded_cluster_ids=[c.cluster_id for c in decision.candidates],
+        )
 
     async def assign_decision(self, decision_id: str, cluster_id: str, actor: str) -> None:
         """Assign a decision to an alternative cluster.
+
+        After recording the user action, forwards a resolveConsideringRecommendation
+        request to ERE for re-evaluation with the assigned cluster as the proposed cluster.
 
         Raises:
             NotFoundError: If the decision does not exist.
@@ -118,6 +184,10 @@ class DecisionCurationService:
         decision = await self._get_decision_or_raise(decision_id)
         await self._user_action_service.record_assign(
             actor=actor, decision=decision, cluster_id=cluster_id
+        )
+        await self._publish_reevaluation(
+            decision,
+            proposed_cluster_ids=[cluster_id],
         )
 
     async def bulk_accept_decisions(
