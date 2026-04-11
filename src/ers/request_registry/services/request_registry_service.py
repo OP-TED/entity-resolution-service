@@ -84,6 +84,20 @@ class RequestRegistryService:
         )
         return await self._resolution_repo.store(record)
 
+    async def get_contexts_for_triads(
+        self, identifiers: list[EntityMentionIdentifier]
+    ) -> dict[tuple[str, str, str], str | None]:
+        """Return context values for a batch of mention triads.
+
+        Args:
+            identifiers: The list of triads to look up.
+
+        Returns:
+            A dict mapping (source_id, request_id, entity_type) to the stored
+            context, or None if the field is absent on the record.
+        """
+        return await self._resolution_repo.find_contexts_by_triads(identifiers)
+
     async def get_resolution_request(
         self, identifier: EntityMentionIdentifier
     ) -> ResolutionRequestRecord | None:
@@ -253,3 +267,20 @@ async def advance_snapshot(
         SnapshotRegressionError: If snapshot_time <= current last_snapshot.
     """
     return await service.advance_snapshot(source_id, snapshot_time)
+
+
+@trace_function(span_name="request_registry.get_contexts_for_triads")
+async def get_contexts_for_triads(
+    identifiers: list[EntityMentionIdentifier],
+    service: RequestRegistryService,
+) -> dict[tuple[str, str, str], str | None]:
+    """Return context values for a batch of mention triads.
+
+    Args:
+        identifiers: The list of triads to look up.
+        service: The RequestRegistryService instance.
+
+    Returns:
+        A dict mapping (source_id, request_id, entity_type) to the stored context.
+    """
+    return await service.get_contexts_for_triads(identifiers)
