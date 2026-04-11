@@ -10,6 +10,7 @@ from ers.ers_rest_api.domain.lookup import (
     LookupResponse,
 )
 from ers.ers_rest_api.services.exceptions import MentionNotFoundError
+from ers.request_registry.services.request_registry_service import RequestRegistryService
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
     ResolutionCoordinatorService,
 )
@@ -18,11 +19,17 @@ from ers.resolution_coordinator.services.resolution_coordinator_service import (
 class LookupService:
     """Orchestrator for the GET /lookup and POST /lookup-bulk endpoints.
 
-    Uses the Resolution Coordinator as the sole gateway to the Decision Store.
+    Uses the Resolution Coordinator as the sole gateway to the Decision Store,
+    and the Request Registry to enrich responses with the original context.
     """
 
-    def __init__(self, resolution_coordinator: ResolutionCoordinatorService) -> None:
+    def __init__(
+        self,
+        resolution_coordinator: ResolutionCoordinatorService,
+        registry_service: RequestRegistryService,
+    ) -> None:
         self._coordinator = resolution_coordinator
+        self._registry_service = registry_service
 
     async def handle_lookup(
         self,
@@ -41,10 +48,14 @@ class LookupService:
         if decision is None:
             raise MentionNotFoundError(source_id, request_id, entity_type)
 
+        contexts = await self._registry_service.get_contexts_for_triads([identifier])
+        context = contexts.get((source_id, request_id, str(entity_type)))
+
         return LookupResponse(
             identified_by=decision.about_entity_mention,
             cluster_reference=decision.current_placement,
             last_updated=decision.updated_at or decision.created_at,
+            context=context,
         )
 
     async def handle_bulk_lookup(
@@ -66,6 +77,7 @@ class LookupService:
                         identified_by=lookup.identified_by,
                         cluster_reference=lookup.cluster_reference,
                         last_updated=lookup.last_updated,
+                        context=lookup.context,
                     )
                 )
             except MentionNotFoundError:
