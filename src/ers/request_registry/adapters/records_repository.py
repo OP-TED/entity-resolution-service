@@ -46,6 +46,12 @@ class ResolutionRequestRepository(
     async def exists_by_source(self, source_id: str) -> bool:
         """Return True if at least one resolution request exists for the given source."""
 
+    @abstractmethod
+    async def find_contexts_by_triads(
+        self, identifiers: list[EntityMentionIdentifier]
+    ) -> dict[tuple[str, str, str], str | None]:
+        """Return {(source_id, request_id, entity_type): context} for a batch of triads."""
+
 
 class MongoResolutionRequestRepository(
     BaseMongoRepository[ResolutionRequestRecord, str],
@@ -111,6 +117,34 @@ class MongoResolutionRequestRepository(
             projection={"_id": 1},
         )
         return doc is not None
+
+    async def find_contexts_by_triads(
+        self, identifiers: list[EntityMentionIdentifier]
+    ) -> dict[tuple[str, str, str], str | None]:
+        """Return {(source_id, request_id, entity_type): context} for a batch of triads.
+
+        Args:
+            identifiers: The mention triads to look up.
+
+        Returns:
+            A dict mapping each triad tuple to its stored context value, or None
+            if the context field is absent on the document (legacy records).
+        """
+        if not identifiers:
+            return {}
+        id_to_tuple: dict[str, tuple[str, str, str]] = {
+            self._triad_id(i): (i.source_id, i.request_id, str(i.entity_type))
+            for i in identifiers
+        }
+        cursor = self._collection.find(
+            {"_id": {"$in": list(id_to_tuple.keys())}},
+            {"_id": 1, "context": 1},
+        )
+        result: dict[tuple[str, str, str], str | None] = {}
+        async for doc in cursor:
+            key = id_to_tuple[doc["_id"]]
+            result[key] = doc.get("context")
+        return result
 
 
 class MongoLookupStateRepository(BaseMongoRepository[LookupRequestRecord, str]):

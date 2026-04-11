@@ -58,8 +58,9 @@ def _record() -> ResolutionRequestRecord:
 @pytest.fixture
 def async_collection() -> AsyncMock:
     col = AsyncMock()
-    # make find() return an async iterable that yields nothing by default
-    col.find.return_value = _async_iter([])
+    # Motor's find() is synchronous (returns a cursor, not a coroutine).
+    # Explicitly replace with MagicMock so async for ... works in tests.
+    col.find = MagicMock(return_value=_async_iter([]))
     return col
 
 
@@ -309,3 +310,78 @@ class TestMongoLookupStateRepository:
 
         assert result is not None
         assert result.source_id == SOURCE_ID
+
+
+# ---------------------------------------------------------------------------
+# MongoResolutionRequestRepository — find_contexts_by_triads
+# ---------------------------------------------------------------------------
+
+
+class TestFindContextsByTriads:
+    async def test_returns_empty_dict_for_empty_input(
+        self,
+        repo: MongoResolutionRequestRepository,
+        async_collection: AsyncMock,
+    ) -> None:
+        result = await repo.find_contexts_by_triads([])
+        assert result == {}
+        async_collection.find.assert_not_called()
+
+    async def test_returns_context_for_known_triad(
+        self,
+        repo: MongoResolutionRequestRepository,
+        async_collection: AsyncMock,
+    ) -> None:
+        ident = _identifier()
+        triad_id = repo._triad_id(ident)
+        async_collection.find.return_value = _async_iter(
+            [{"_id": triad_id, "context": "procurement ctx"}]
+        )
+
+        result = await repo.find_contexts_by_triads([ident])
+
+        assert result[(SOURCE_ID, REQUEST_ID, ENTITY_TYPE)] == "procurement ctx"
+
+    async def test_returns_none_for_absent_context_field(
+        self,
+        repo: MongoResolutionRequestRepository,
+        async_collection: AsyncMock,
+    ) -> None:
+        ident = _identifier()
+        triad_id = repo._triad_id(ident)
+        async_collection.find.return_value = _async_iter(
+            [{"_id": triad_id}]  # legacy record — no context field
+        )
+
+        result = await repo.find_contexts_by_triads([ident])
+
+        assert result[(SOURCE_ID, REQUEST_ID, ENTITY_TYPE)] is None
+
+    async def test_queries_with_id_in(
+        self,
+        repo: MongoResolutionRequestRepository,
+        async_collection: AsyncMock,
+    ) -> None:
+        ident = _identifier()
+        triad_id = repo._triad_id(ident)
+        async_collection.find.return_value = _async_iter([])
+
+        await repo.find_contexts_by_triads([ident])
+
+        call_args = async_collection.find.call_args
+        assert "$in" in call_args[0][0]["_id"]
+        assert triad_id in call_args[0][0]["_id"]["$in"]
+
+    async def test_projects_only_id_and_context(
+        self,
+        repo: MongoResolutionRequestRepository,
+        async_collection: AsyncMock,
+    ) -> None:
+        ident = _identifier()
+        async_collection.find.return_value = _async_iter([])
+
+        await repo.find_contexts_by_triads([ident])
+
+        call_args = async_collection.find.call_args
+        projection = call_args[0][1] if len(call_args[0]) > 1 else call_args[1]["projection"]
+        assert projection == {"_id": 1, "context": 1}
