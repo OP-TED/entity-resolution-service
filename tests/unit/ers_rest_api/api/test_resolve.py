@@ -354,3 +354,51 @@ class TestResolveBulkEndpoint:
         response = await client.post("/api/v1/resolve-bulk", json={"mentions": []})
 
         assert response.status_code == 400
+
+
+class TestResolveContextField:
+    async def test_context_in_mention_accepted_in_request(
+        self,
+        client: AsyncClient,
+        resolve_service: AsyncMock,
+    ) -> None:
+        resolve_service.handle_resolve.return_value = EntityMentionResolutionResult(
+            identified_by=EntityMentionIdentifier(
+                source_id="SYSTEM_A", request_id="req-001", entity_type="ORGANISATION"
+            ),
+            canonical_entity_id="cluster-010",
+            status=ResolutionOutcome.CANONICAL,
+        )
+        payload = {
+            "mention": {
+                "identifiedBy": {
+                    "source_id": "SYSTEM_A",
+                    "request_id": "req-001",
+                    "entity_type": "ORGANISATION",
+                },
+                "content": '{"name": "Acme Corp"}',
+                "content_type": "application/ld+json",
+                "context": "procurement round 3",
+            },
+        }
+        response = await client.post("/api/v1/resolve", json=payload)
+        assert response.status_code == 200
+        call_arg = resolve_service.handle_resolve.call_args[0][0]
+        assert call_arg.mention.context == "procurement round 3"
+
+    async def test_context_absent_in_mention_defaults_to_none(
+        self,
+        client: AsyncClient,
+        resolve_service: AsyncMock,
+    ) -> None:
+        resolve_service.handle_resolve.return_value = EntityMentionResolutionResult(
+            identified_by=EntityMentionIdentifier(
+                source_id="SYSTEM_A", request_id="req-001", entity_type="ORGANISATION"
+            ),
+            canonical_entity_id="cluster-010",
+            status=ResolutionOutcome.CANONICAL,
+        )
+        response = await client.post("/api/v1/resolve", json=VALID_RESOLVE_PAYLOAD)
+        assert response.status_code == 200
+        call_arg = resolve_service.handle_resolve.call_args[0][0]
+        assert call_arg.mention.context is None
