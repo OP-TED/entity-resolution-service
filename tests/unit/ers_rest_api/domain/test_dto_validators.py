@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
 from ers.ers_rest_api.domain.errors import ErrorCode, ErrorResponse
-from ers.ers_rest_api.domain.lookup import BulkLookupResult, RefreshBulkResponse
+from ers.ers_rest_api.domain.lookup import BulkLookupResult, LookupResponse, RefreshBulkResponse
 from ers.ers_rest_api.domain.resolution import EntityMentionResolutionResult
 
 IDENT = EntityMentionIdentifier(
@@ -64,6 +64,44 @@ class TestBulkLookupResultValidator:
     def test_rejects_neither_success_nor_error(self) -> None:
         with pytest.raises(ValidationError, match="not both or neither"):
             BulkLookupResult(identified_by=IDENT)
+
+
+class TestLookupResponseContext:
+    def test_context_defaults_to_none(self) -> None:
+        resp = LookupResponse(
+            identified_by=IDENT,
+            cluster_reference=CLUSTER,
+            last_updated=datetime(2026, 3, 15, tzinfo=UTC),
+        )
+        assert resp.context is None
+
+    def test_context_accepts_string(self) -> None:
+        resp = LookupResponse(
+            identified_by=IDENT,
+            cluster_reference=CLUSTER,
+            last_updated=datetime(2026, 3, 15, tzinfo=UTC),
+            context="procurement context",
+        )
+        assert resp.context == "procurement context"
+
+
+class TestBulkLookupResultContext:
+    def test_context_defaults_to_none_on_success(self) -> None:
+        result = BulkLookupResult(
+            identified_by=IDENT,
+            cluster_reference=CLUSTER,
+            last_updated=datetime(2026, 3, 15, tzinfo=UTC),
+        )
+        assert result.context is None
+
+    def test_context_accepts_string_on_success(self) -> None:
+        result = BulkLookupResult(
+            identified_by=IDENT,
+            cluster_reference=CLUSTER,
+            last_updated=datetime(2026, 3, 15, tzinfo=UTC),
+            context="procurement context",
+        )
+        assert result.context == "procurement context"
 
 
 class TestRefreshBulkResponseValidator:
