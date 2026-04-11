@@ -197,3 +197,64 @@ class TestRefreshBulkEndpoint:
         assert response.status_code == 200
         call_args = refresh_bulk_service.handle_refresh_bulk.call_args
         assert call_args[0][0].limit == 1000
+
+    async def test_context_field_in_delta_json_response(
+        self,
+        client: AsyncClient,
+        refresh_bulk_service: AsyncMock,
+    ) -> None:
+        refresh_bulk_service.handle_refresh_bulk.return_value = RefreshBulkResponse(
+            deltas=[
+                LookupResponse(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYSTEM_C",
+                        request_id="req-001",
+                        entity_type="ORGANISATION",
+                    ),
+                    cluster_reference=ClusterReference(
+                        cluster_id="cluster-010",
+                        confidence_score=0.9,
+                        similarity_score=0.85,
+                    ),
+                    last_updated=datetime(2026, 3, 15, 10, 0, 0, tzinfo=UTC),
+                    context="procurement round 3",
+                ),
+            ],
+            has_more=False,
+            continuation_cursor=None,
+        )
+
+        response = await client.post("/api/v1/refresh-bulk", json=VALID_REFRESH_BULK_PAYLOAD)
+
+        assert response.status_code == 200
+        assert response.json()["deltas"][0]["context"] == "procurement round 3"
+
+    async def test_context_null_in_delta_json_when_absent(
+        self,
+        client: AsyncClient,
+        refresh_bulk_service: AsyncMock,
+    ) -> None:
+        refresh_bulk_service.handle_refresh_bulk.return_value = RefreshBulkResponse(
+            deltas=[
+                LookupResponse(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SYSTEM_C",
+                        request_id="req-001",
+                        entity_type="ORGANISATION",
+                    ),
+                    cluster_reference=ClusterReference(
+                        cluster_id="cluster-010",
+                        confidence_score=0.9,
+                        similarity_score=0.85,
+                    ),
+                    last_updated=datetime(2026, 3, 15, 10, 0, 0, tzinfo=UTC),
+                ),
+            ],
+            has_more=False,
+            continuation_cursor=None,
+        )
+
+        response = await client.post("/api/v1/refresh-bulk", json=VALID_REFRESH_BULK_PAYLOAD)
+
+        assert response.status_code == 200
+        assert response.json()["deltas"][0]["context"] is None

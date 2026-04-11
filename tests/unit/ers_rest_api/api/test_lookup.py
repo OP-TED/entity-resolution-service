@@ -156,3 +156,31 @@ class TestLookupBulkEndpoint:
         response = await client.post("/api/v1/lookup-bulk", json={"mentions": []})
 
         assert response.status_code == 400
+
+    async def test_context_field_in_lookup_json_response(
+        self,
+        client: AsyncClient,
+        lookup_service: AsyncMock,
+    ) -> None:
+        lookup_service.handle_lookup.return_value = LookupResponse(
+            identified_by=EntityMentionIdentifier(
+                source_id="SYSTEM_A", request_id="req-001", entity_type="ORGANISATION"
+            ),
+            cluster_reference=ClusterReference(
+                cluster_id="cluster-010", confidence_score=0.9, similarity_score=0.85
+            ),
+            last_updated=datetime(2026, 3, 15, 10, 0, 0, tzinfo=UTC),
+            context="procurement round 3",
+        )
+
+        response = await client.get(
+            "/api/v1/lookup",
+            params={
+                "source_id": "SYSTEM_A",
+                "request_id": "req-001",
+                "entity_type": "ORGANISATION",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["context"] == "procurement round 3"
