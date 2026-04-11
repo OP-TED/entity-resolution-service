@@ -14,13 +14,16 @@ from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
 )
-from ers.request_registry.domain.records import TriadKey
 from ers.request_registry.domain.errors import (
     DuplicateTriadError,
     RepositoryConnectionError,
     RepositoryOperationError,
 )
-from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
+from ers.request_registry.domain.records import (
+    LookupRequestRecord,
+    ResolutionRequestRecord,
+    TriadKey,
+)
 
 # ---------------------------------------------------------------------------
 # Shared test data

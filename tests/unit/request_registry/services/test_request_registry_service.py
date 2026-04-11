@@ -14,7 +14,11 @@ from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
 )
-from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord, TriadKey
+from ers.request_registry.domain.records import (
+    LookupRequestRecord,
+    ResolutionRequestRecord,
+    TriadKey,
+)
 from ers.request_registry.services.exceptions import (
     IdempotencyConflictError,
     SnapshotRegressionError,

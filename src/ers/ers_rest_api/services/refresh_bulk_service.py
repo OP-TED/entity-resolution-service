@@ -42,7 +42,7 @@ class RefreshBulkService:  # pylint: disable=too-few-public-methods
         )
 
         identifiers = [d.about_entity_mention for d in page.results]
-        contexts = await get_contexts_for_triads(identifiers, self._registry_service)
+        contexts: dict[TriadKey, str | None] = await get_contexts_for_triads(identifiers, self._registry_service)
 
         def _ctx(d: Decision) -> str | None:
             return contexts.get(TriadKey.from_identifier(d.about_entity_mention))

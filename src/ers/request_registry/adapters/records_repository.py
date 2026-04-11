@@ -17,7 +17,11 @@ from ers.request_registry.domain.errors import (
     RepositoryConnectionError,
     RepositoryOperationError,
 )
-from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord, TriadKey
+from ers.request_registry.domain.records import (
+    LookupRequestRecord,
+    ResolutionRequestRecord,
+    TriadKey,
+)
 
 
 class ResolutionRequestRepository(
