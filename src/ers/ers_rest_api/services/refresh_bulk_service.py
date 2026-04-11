@@ -7,7 +7,11 @@ from ers.ers_rest_api.domain.lookup import (
     RefreshBulkRequest,
     RefreshBulkResponse,
 )
-from ers.request_registry.services.request_registry_service import RequestRegistryService
+from ers.request_registry.domain.records import TriadKey
+from ers.request_registry.services.request_registry_service import (
+    RequestRegistryService,
+    get_contexts_for_triads,
+)
 from ers.resolution_coordinator.services.bulk_refresh_coordinator_service import (
     BulkRefreshCoordinatorService,
 )
@@ -38,15 +42,10 @@ class RefreshBulkService:  # pylint: disable=too-few-public-methods
         )
 
         identifiers = [d.about_entity_mention for d in page.results]
-        contexts = await self._registry_service.get_contexts_for_triads(identifiers)
+        contexts = await get_contexts_for_triads(identifiers, self._registry_service)
 
         def _ctx(d: Decision) -> str | None:
-            key = (
-                d.about_entity_mention.source_id,
-                d.about_entity_mention.request_id,
-                str(d.about_entity_mention.entity_type),
-            )
-            return contexts.get(key)
+            return contexts.get(TriadKey.from_identifier(d.about_entity_mention))
 
         deltas = [
             LookupResponse(

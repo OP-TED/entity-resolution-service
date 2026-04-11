@@ -13,6 +13,7 @@ from erspec.models.core import (
 from ers.commons.domain.data_transfer_objects import CursorPage
 from ers.ers_rest_api.domain.lookup import RefreshBulkRequest
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
+from ers.request_registry.domain.records import TriadKey
 from ers.request_registry.services.request_registry_service import RequestRegistryService
 from ers.resolution_coordinator.services.bulk_refresh_coordinator_service import (
     BulkRefreshCoordinatorService,
@@ -176,7 +177,7 @@ class TestRefreshBulkServiceContext:
             results=[decision], count=1, next_cursor=None
         )
         registry_service.get_contexts_for_triads.return_value = {
-            ("SYSTEM_C", "req-001", "ORGANISATION"): "procurement ctx"
+            TriadKey("SYSTEM_C", "req-001", "ORGANISATION"): "procurement ctx"
         }
 
         result = await service.handle_refresh_bulk(

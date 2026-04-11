@@ -13,7 +13,7 @@ from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
 )
-from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
+from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord, TriadKey
 from ers.request_registry.services.exceptions import (
     IdempotencyConflictError,
     SnapshotRegressionError,
@@ -86,15 +86,15 @@ class RequestRegistryService:
 
     async def get_contexts_for_triads(
         self, identifiers: list[EntityMentionIdentifier]
-    ) -> dict[tuple[str, str, str], str | None]:
+    ) -> dict[TriadKey, str | None]:
         """Return context values for a batch of mention triads.
 
         Args:
             identifiers: The list of triads to look up.
 
         Returns:
-            A dict mapping (source_id, request_id, entity_type) to the stored
-            context, or None if the field is absent on the record.
+            A dict mapping each TriadKey to the stored context, or None if the
+            field is absent on the record (legacy records).
         """
         return await self._resolution_repo.find_contexts_by_triads(identifiers)
 
@@ -273,7 +273,7 @@ async def advance_snapshot(
 async def get_contexts_for_triads(
     identifiers: list[EntityMentionIdentifier],
     service: RequestRegistryService,
-) -> dict[tuple[str, str, str], str | None]:
+) -> dict[TriadKey, str | None]:
     """Return context values for a batch of mention triads.
 
     Args:
@@ -281,6 +281,6 @@ async def get_contexts_for_triads(
         service: The RequestRegistryService instance.
 
     Returns:
-        A dict mapping (source_id, request_id, entity_type) to the stored context.
+        A dict mapping each TriadKey to the stored context, or None if absent.
     """
     return await service.get_contexts_for_triads(identifiers)

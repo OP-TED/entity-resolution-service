@@ -14,6 +14,7 @@ from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
 )
+from ers.request_registry.domain.records import TriadKey
 from ers.request_registry.domain.errors import (
     DuplicateTriadError,
     RepositoryConnectionError,
@@ -340,7 +341,7 @@ class TestFindContextsByTriads:
 
         result = await repo.find_contexts_by_triads([ident])
 
-        assert result[(SOURCE_ID, REQUEST_ID, ENTITY_TYPE)] == "procurement ctx"
+        assert result[TriadKey(SOURCE_ID, REQUEST_ID, ENTITY_TYPE)] == "procurement ctx"
 
     async def test_returns_none_for_absent_context_field(
         self,
@@ -355,7 +356,7 @@ class TestFindContextsByTriads:
 
         result = await repo.find_contexts_by_triads([ident])
 
-        assert result[(SOURCE_ID, REQUEST_ID, ENTITY_TYPE)] is None
+        assert result[TriadKey(SOURCE_ID, REQUEST_ID, ENTITY_TYPE)] is None
 
     async def test_queries_with_id_in(
         self,

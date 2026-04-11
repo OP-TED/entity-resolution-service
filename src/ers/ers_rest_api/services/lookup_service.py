@@ -10,7 +10,11 @@ from ers.ers_rest_api.domain.lookup import (
     LookupResponse,
 )
 from ers.ers_rest_api.services.exceptions import MentionNotFoundError
-from ers.request_registry.services.request_registry_service import RequestRegistryService
+from ers.request_registry.domain.records import TriadKey
+from ers.request_registry.services.request_registry_service import (
+    RequestRegistryService,
+    get_contexts_for_triads,
+)
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
     ResolutionCoordinatorService,
 )
@@ -48,8 +52,8 @@ class LookupService:
         if decision is None:
             raise MentionNotFoundError(source_id, request_id, entity_type)
 
-        contexts = await self._registry_service.get_contexts_for_triads([identifier])
-        context = contexts.get((source_id, request_id, str(entity_type)))
+        contexts = await get_contexts_for_triads([identifier], self._registry_service)
+        context = contexts.get(TriadKey.from_identifier(identifier))
 
         return LookupResponse(
             identified_by=decision.about_entity_mention,
@@ -63,21 +67,24 @@ class LookupService:
         request: BulkLookupRequest,
     ) -> BulkLookupResponse:
         """Look up cluster assignments for multiple mentions, collecting per-item results."""
+        identifiers = [item.identified_by for item in request.mentions]
+        contexts = await get_contexts_for_triads(identifiers, self._registry_service)
+
         results: list[BulkLookupResult] = []
         for item in request.mentions:
             ident = item.identified_by
             try:
-                lookup = await self.handle_lookup(
-                    source_id=ident.source_id,
-                    request_id=ident.request_id,
-                    entity_type=ident.entity_type,
-                )
+                # Call the coordinator directly rather than handle_lookup: handle_lookup fetches
+                # context per-item, which would undo the batch pre-fetch above.
+                decision = await self._coordinator.lookup_by_triad(ident)
+                if decision is None:
+                    raise MentionNotFoundError(ident.source_id, ident.request_id, ident.entity_type)
                 results.append(
                     BulkLookupResult(
-                        identified_by=lookup.identified_by,
-                        cluster_reference=lookup.cluster_reference,
-                        last_updated=lookup.last_updated,
-                        context=lookup.context,
+                        identified_by=decision.about_entity_mention,
+                        cluster_reference=decision.current_placement,
+                        last_updated=decision.updated_at or decision.created_at,
+                        context=contexts.get(TriadKey.from_identifier(ident)),
                     )
                 )
             except MentionNotFoundError:

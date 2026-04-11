@@ -14,7 +14,7 @@ from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
 )
-from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
+from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord, TriadKey
 from ers.request_registry.services.exceptions import (
     IdempotencyConflictError,
     SnapshotRegressionError,
@@ -324,7 +324,7 @@ class TestGetContextsForTriads:
         resolution_repo: AsyncMock,
     ) -> None:
         ident = _identifier()
-        expected = {(SOURCE_ID, REQUEST_ID, ENTITY_TYPE): "some ctx"}
+        expected = {TriadKey(SOURCE_ID, REQUEST_ID, ENTITY_TYPE): "some ctx"}
         resolution_repo.find_contexts_by_triads.return_value = expected
 
         result = await service.get_contexts_for_triads([ident])
