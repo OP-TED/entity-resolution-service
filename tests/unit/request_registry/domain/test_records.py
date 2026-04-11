@@ -115,6 +115,35 @@ class TestResolutionRequestRecord:
                 received_at=datetime(2024, 1, 1),  # naive — no tzinfo
             )
 
+    def test_context_defaults_to_none(
+        self,
+        identifier: EntityMentionIdentifier,
+        now: datetime,
+    ) -> None:
+        record = ResolutionRequestRecord(
+            identifiedBy=identifier,
+            content='{"name": "Acme Corp"}',
+            content_type="application/ld+json",
+            content_hash=VALID_HASH,
+            received_at=now,
+        )
+        assert record.context is None
+
+    def test_context_accepts_string(
+        self,
+        identifier: EntityMentionIdentifier,
+        now: datetime,
+    ) -> None:
+        record = ResolutionRequestRecord(
+            identifiedBy=identifier,
+            content='{"name": "Acme Corp"}',
+            content_type="application/ld+json",
+            content_hash=VALID_HASH,
+            received_at=now,
+            context="procurement round 3",
+        )
+        assert record.context == "procurement round 3"
+
 
 # ---------------------------------------------------------------------------
 # LookupRequestRecord (per-source snapshot marker)
