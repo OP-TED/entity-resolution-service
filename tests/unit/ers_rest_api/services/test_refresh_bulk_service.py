@@ -13,6 +13,8 @@ from erspec.models.core import (
 from ers.commons.domain.data_transfer_objects import CursorPage
 from ers.ers_rest_api.domain.lookup import RefreshBulkRequest
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
+from ers.request_registry.domain.records import TriadKey
+from ers.request_registry.services.request_registry_service import RequestRegistryService
 from ers.resolution_coordinator.services.bulk_refresh_coordinator_service import (
     BulkRefreshCoordinatorService,
 )
@@ -45,8 +47,18 @@ def bulk_coordinator() -> AsyncMock:
 
 
 @pytest.fixture
-def service(bulk_coordinator: AsyncMock) -> RefreshBulkService:
-    return RefreshBulkService(bulk_coordinator=bulk_coordinator)
+def registry_service() -> AsyncMock:
+    mock = create_autospec(RequestRegistryService, instance=True)
+    mock.get_contexts_for_triads.return_value = {}
+    return mock
+
+
+@pytest.fixture
+def service(bulk_coordinator: AsyncMock, registry_service: AsyncMock) -> RefreshBulkService:
+    return RefreshBulkService(
+        bulk_coordinator=bulk_coordinator,
+        registry_service=registry_service,
+    )
 
 
 class TestRefreshBulkService:
@@ -149,3 +161,79 @@ class TestRefreshBulkService:
             await service.handle_refresh_bulk(
                 RefreshBulkRequest(source_id="SYSTEM_H", limit=1000),
             )
+
+
+class TestRefreshBulkServiceContext:
+    async def test_context_in_delta_when_registry_returns_it(
+        self,
+        service: RefreshBulkService,
+        bulk_coordinator: AsyncMock,
+        registry_service: AsyncMock,
+    ) -> None:
+        decision = _make_decision(
+            "SYSTEM_C", "req-001", "cluster-010", datetime(2026, 3, 15, tzinfo=UTC)
+        )
+        bulk_coordinator.refresh_bulk.return_value = CursorPage(
+            results=[decision], count=1, next_cursor=None
+        )
+        registry_service.get_contexts_for_triads.return_value = {
+            TriadKey("SYSTEM_C", "req-001", "ORGANISATION"): "procurement ctx"
+        }
+
+        result = await service.handle_refresh_bulk(
+            RefreshBulkRequest(source_id="SYSTEM_C", limit=1000)
+        )
+
+        assert result.deltas[0].context == "procurement ctx"
+
+    async def test_context_is_none_when_triad_not_in_registry(
+        self,
+        service: RefreshBulkService,
+        bulk_coordinator: AsyncMock,
+        registry_service: AsyncMock,
+    ) -> None:
+        decision = _make_decision(
+            "SYSTEM_C", "req-001", "cluster-010", datetime(2026, 3, 15, tzinfo=UTC)
+        )
+        bulk_coordinator.refresh_bulk.return_value = CursorPage(
+            results=[decision], count=1, next_cursor=None
+        )
+        registry_service.get_contexts_for_triads.return_value = {}
+
+        result = await service.handle_refresh_bulk(
+            RefreshBulkRequest(source_id="SYSTEM_C", limit=1000)
+        )
+
+        assert result.deltas[0].context is None
+
+    async def test_get_contexts_called_with_decision_identifiers(
+        self,
+        service: RefreshBulkService,
+        bulk_coordinator: AsyncMock,
+        registry_service: AsyncMock,
+    ) -> None:
+        decision = _make_decision(
+            "SYSTEM_C", "req-001", "cluster-010", datetime(2026, 3, 15, tzinfo=UTC)
+        )
+        bulk_coordinator.refresh_bulk.return_value = CursorPage(
+            results=[decision], count=1, next_cursor=None
+        )
+
+        await service.handle_refresh_bulk(RefreshBulkRequest(source_id="SYSTEM_C", limit=1000))
+
+        identifiers_passed = registry_service.get_contexts_for_triads.call_args[0][0]
+        assert decision.about_entity_mention in identifiers_passed
+
+    async def test_empty_delta_calls_registry_with_empty_list(
+        self,
+        service: RefreshBulkService,
+        bulk_coordinator: AsyncMock,
+        registry_service: AsyncMock,
+    ) -> None:
+        bulk_coordinator.refresh_bulk.return_value = CursorPage(
+            results=[], count=0, next_cursor=None
+        )
+
+        await service.handle_refresh_bulk(RefreshBulkRequest(source_id="SYSTEM_C", limit=1000))
+
+        registry_service.get_contexts_for_triads.assert_awaited_once_with([])

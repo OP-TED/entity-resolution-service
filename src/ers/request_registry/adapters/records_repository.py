@@ -17,7 +17,11 @@ from ers.request_registry.domain.errors import (
     RepositoryConnectionError,
     RepositoryOperationError,
 )
-from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
+from ers.request_registry.domain.records import (
+    LookupRequestRecord,
+    ResolutionRequestRecord,
+    TriadKey,
+)
 
 
 class ResolutionRequestRepository(
@@ -45,6 +49,20 @@ class ResolutionRequestRepository(
     @abstractmethod
     async def exists_by_source(self, source_id: str) -> bool:
         """Return True if at least one resolution request exists for the given source."""
+
+    @abstractmethod
+    async def find_contexts_by_triads(
+        self, identifiers: list[EntityMentionIdentifier]
+    ) -> dict[TriadKey, str | None]:
+        """Return context values keyed by triad for a batch of identifiers.
+
+        Args:
+            identifiers: The mention triads to look up.
+
+        Returns:
+            A dict mapping each TriadKey to its stored context value, or None
+            if the context field is absent on the record (legacy records).
+        """
 
 
 class MongoResolutionRequestRepository(
@@ -111,6 +129,34 @@ class MongoResolutionRequestRepository(
             projection={"_id": 1},
         )
         return doc is not None
+
+    async def find_contexts_by_triads(
+        self, identifiers: list[EntityMentionIdentifier]
+    ) -> dict[TriadKey, str | None]:
+        """Return context values keyed by triad for a batch of identifiers.
+
+        Args:
+            identifiers: The mention triads to look up.
+
+        Returns:
+            A dict mapping each TriadKey to its stored context value, or None
+            if the context field is absent on the document (legacy records).
+        """
+        if not identifiers:
+            return {}
+        id_to_key: dict[str, TriadKey] = {
+            self._triad_id(i): TriadKey.from_identifier(i)
+            for i in identifiers
+        }
+        cursor = self._collection.find(
+            {"_id": {"$in": list(id_to_key.keys())}},
+            {"_id": 1, "context": 1},
+        )
+        result: dict[TriadKey, str | None] = {}
+        async for doc in cursor:
+            key = id_to_key[doc["_id"]]
+            result[key] = doc.get("context")
+        return result
 
 
 class MongoLookupStateRepository(BaseMongoRepository[LookupRequestRecord, str]):

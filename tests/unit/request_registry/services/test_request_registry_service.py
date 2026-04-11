@@ -14,7 +14,11 @@ from ers.request_registry.adapters.records_repository import (
     MongoLookupStateRepository,
     MongoResolutionRequestRepository,
 )
-from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
+from ers.request_registry.domain.records import (
+    LookupRequestRecord,
+    ResolutionRequestRecord,
+    TriadKey,
+)
 from ers.request_registry.services.exceptions import (
     IdempotencyConflictError,
     SnapshotRegressionError,
@@ -310,3 +314,60 @@ class TestAdvanceSnapshot:
             await service.advance_snapshot(SOURCE_ID, t1)  # equal — also a regression
 
         lookup_repo.upsert.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# TestGetContextsForTriads
+# ---------------------------------------------------------------------------
+
+
+class TestGetContextsForTriads:
+    async def test_delegates_to_repo(
+        self,
+        service: RequestRegistryService,
+        resolution_repo: AsyncMock,
+    ) -> None:
+        ident = _identifier()
+        expected = {TriadKey(SOURCE_ID, REQUEST_ID, ENTITY_TYPE): "some ctx"}
+        resolution_repo.find_contexts_by_triads.return_value = expected
+
+        result = await service.get_contexts_for_triads([ident])
+
+        assert result == expected
+        resolution_repo.find_contexts_by_triads.assert_awaited_once_with([ident])
+
+    async def test_returns_empty_for_empty_input(
+        self,
+        service: RequestRegistryService,
+        resolution_repo: AsyncMock,
+    ) -> None:
+        resolution_repo.find_contexts_by_triads.return_value = {}
+
+        result = await service.get_contexts_for_triads([])
+
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# TestRegisterContextFlow
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterContextFlow:
+    async def test_context_stored_when_mention_has_context(
+        self,
+        service: RequestRegistryService,
+        resolution_repo: AsyncMock,
+    ) -> None:
+        resolution_repo.find_by_triad.return_value = None
+        resolution_repo.store.side_effect = lambda r: r
+        mention = EntityMention(
+            identifiedBy=_identifier(),
+            content=CONTENT,
+            content_type=CONTENT_TYPE,
+            context="procurement round 3",
+        )
+
+        result = await service.register_resolution_request(mention)
+
+        assert result.context == "procurement round 3"

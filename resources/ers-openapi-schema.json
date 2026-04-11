@@ -354,6 +354,18 @@
             "title": "Last Updated",
             "description": "Timestamp of the most recent assignment update."
           },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context",
+            "description": "Optional context originally submitted with the resolution request."
+          },
           "error": {
             "anyOf": [
               {
@@ -823,6 +835,18 @@
             "format": "date-time",
             "title": "Last Updated",
             "description": "Timestamp of the most recent assignment update."
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context",
+            "description": "Optional context originally submitted with the resolution request."
           }
         },
         "type": "object",

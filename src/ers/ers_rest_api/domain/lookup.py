@@ -44,6 +44,10 @@ class LookupResponse(ERSResponse):
         ...,
         description="Timestamp of the most recent assignment update.",
     )
+    context: str | None = Field(
+        default=None,
+        description="Optional context originally submitted with the resolution request.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +85,11 @@ class BulkLookupResult(ERSResponse):
     last_updated: datetime | None = Field(
         default=None,
         description="Timestamp of the most recent assignment update.",
+    )
+
+    context: str | None = Field(
+        default=None,
+        description="Optional context originally submitted with the resolution request.",
     )
 
     # Error fields (present when the mention failed)

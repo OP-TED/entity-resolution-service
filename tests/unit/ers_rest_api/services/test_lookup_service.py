@@ -10,6 +10,8 @@ from ers.ers_rest_api.domain.errors import ErrorCode
 from ers.ers_rest_api.domain.lookup import BulkLookupRequest, LookupRequest
 from ers.ers_rest_api.services.exceptions import MentionNotFoundError
 from ers.ers_rest_api.services.lookup_service import LookupService
+from ers.request_registry.domain.records import TriadKey
+from ers.request_registry.services.request_registry_service import RequestRegistryService
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
     ResolutionCoordinatorService,
 )
@@ -21,8 +23,15 @@ def coordinator() -> AsyncMock:
 
 
 @pytest.fixture
-def service(coordinator: AsyncMock) -> LookupService:
-    return LookupService(resolution_coordinator=coordinator)
+def registry_service() -> AsyncMock:
+    mock = create_autospec(RequestRegistryService, instance=True)
+    mock.get_contexts_for_triads.return_value = {}
+    return mock
+
+
+@pytest.fixture
+def service(coordinator: AsyncMock, registry_service: AsyncMock) -> LookupService:
+    return LookupService(resolution_coordinator=coordinator, registry_service=registry_service)
 
 
 def _make_decision(
@@ -172,3 +181,69 @@ class TestBulkLookupService:
         assert len(result.results) == 2
         assert all(r.error is not None for r in result.results)
         assert all(r.error.error_code == ErrorCode.MENTION_NOT_FOUND for r in result.results)
+
+
+class TestLookupServiceContext:
+    async def test_context_included_when_registry_returns_it(
+        self, service: LookupService, coordinator: AsyncMock, registry_service: AsyncMock
+    ) -> None:
+        decision = _make_decision("SYSTEM_A", "req-001", cluster_id="cluster-010")
+        coordinator.lookup_by_triad.return_value = decision
+        registry_service.get_contexts_for_triads.return_value = {
+            TriadKey("SYSTEM_A", "req-001", "ORGANISATION"): "procurement ctx"
+        }
+
+        result = await service.handle_lookup("SYSTEM_A", "req-001", "ORGANISATION")
+
+        assert result.context == "procurement ctx"
+
+    async def test_context_is_none_when_not_in_registry(
+        self, service: LookupService, coordinator: AsyncMock, registry_service: AsyncMock
+    ) -> None:
+        coordinator.lookup_by_triad.return_value = _make_decision("SYSTEM_A", "req-001")
+        registry_service.get_contexts_for_triads.return_value = {}
+
+        result = await service.handle_lookup("SYSTEM_A", "req-001", "ORGANISATION")
+
+        assert result.context is None
+
+    async def test_context_propagates_into_bulk_result(
+        self, service: LookupService, coordinator: AsyncMock, registry_service: AsyncMock
+    ) -> None:
+        coordinator.lookup_by_triad.return_value = _make_decision("SRC_A", "req-001")
+        registry_service.get_contexts_for_triads.return_value = {
+            TriadKey("SRC_A", "req-001", "ORGANISATION"): "bulk ctx"
+        }
+
+        result = await service.handle_bulk_lookup(
+            BulkLookupRequest(
+                mentions=[LookupRequest(
+                    identified_by=EntityMentionIdentifier(
+                        source_id="SRC_A", request_id="req-001", entity_type="ORGANISATION"
+                    )
+                )]
+            )
+        )
+
+        assert result.results[0].context == "bulk ctx"
+
+    async def test_get_contexts_called_once_for_all_mentions(
+        self, service: LookupService, coordinator: AsyncMock, registry_service: AsyncMock
+    ) -> None:
+        coordinator.lookup_by_triad.side_effect = [
+            _make_decision("SRC_A", "req-001"),
+            _make_decision("SRC_B", "req-002"),
+        ]
+        registry_service.get_contexts_for_triads.return_value = {}
+
+        await service.handle_bulk_lookup(BULK_REQUEST)
+
+        registry_service.get_contexts_for_triads.assert_awaited_once()
+        identifiers_passed = registry_service.get_contexts_for_triads.call_args[0][0]
+        assert len(identifiers_passed) == 2
+        assert EntityMentionIdentifier(
+            source_id="SRC_A", request_id="req-001", entity_type="ORGANISATION"
+        ) in identifiers_passed
+        assert EntityMentionIdentifier(
+            source_id="SRC_B", request_id="req-002", entity_type="ORGANISATION"
+        ) in identifiers_passed

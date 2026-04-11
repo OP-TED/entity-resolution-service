@@ -7,11 +7,40 @@ by the Request Registry service. No I/O, no service logic, no framework deps.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import NamedTuple
 
 from erspec.models.core import EntityMention, EntityMentionIdentifier, LookupState
 from pydantic import Field, field_validator, model_validator
 
 from ers.commons.domain.data_transfer_objects import FrozenDTO
+
+
+class TriadKey(NamedTuple):
+    """Hashable dict key for a mention triad (source_id, request_id, entity_type).
+
+    NamedTuple gives named fields for readability and hashability for use as a
+    dict key. Compares equal to a plain tuple with the same values.
+    """
+
+    source_id: str
+    request_id: str
+    entity_type: str
+
+    @classmethod
+    def from_identifier(cls, identifier: EntityMentionIdentifier) -> TriadKey:
+        """Build a TriadKey from an EntityMentionIdentifier.
+
+        Args:
+            identifier: The mention identifier to convert.
+
+        Returns:
+            A TriadKey with the same source_id, request_id, and entity_type.
+        """
+        return cls(
+            source_id=identifier.source_id,
+            request_id=identifier.request_id,
+            entity_type=identifier.entity_type,
+        )
 
 
 class LookupRequestRecord(FrozenDTO, LookupState):

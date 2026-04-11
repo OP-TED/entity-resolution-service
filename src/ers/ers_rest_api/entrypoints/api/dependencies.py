@@ -146,13 +146,15 @@ async def get_lookup_service(
     coordinator: Annotated[
         ResolutionCoordinatorService, Depends(get_resolution_coordinator)
     ],
+    registry: Annotated[RequestRegistryService, Depends(_get_request_registry_service)],
 ) -> LookupService:
-    return LookupService(resolution_coordinator=coordinator)
+    return LookupService(resolution_coordinator=coordinator, registry_service=registry)
 
 
 async def get_refresh_bulk_service(
     coordinator: Annotated[
         BulkRefreshCoordinatorService, Depends(_get_bulk_refresh_coordinator)
     ],
+    registry: Annotated[RequestRegistryService, Depends(_get_request_registry_service)],
 ) -> RefreshBulkService:
-    return RefreshBulkService(bulk_coordinator=coordinator)
+    return RefreshBulkService(bulk_coordinator=coordinator, registry_service=registry)
