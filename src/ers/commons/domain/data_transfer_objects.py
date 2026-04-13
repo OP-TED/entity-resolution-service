@@ -92,8 +92,13 @@ class CursorPage[T](FrozenDTO):
 class ResolutionOutcome(StrEnum):
     """Possible outcomes of a single entity mention resolution.
 
-    CANONICAL — the cluster ID was produced by the Entity Resolution Engine.
-    PROVISIONAL — the cluster ID was derived deterministically (singleton).
+    CANONICAL — the assignment was produced by the Entity Resolution Engine,
+        or an existing decision is being replayed (the stored answer is
+        authoritative regardless of how it was originally written).
+    PROVISIONAL — the cluster ID was issued by ERS as a deterministic draft
+        identifier because ERE did not respond within the execution window.
+        This is a short-lived state; ERE will process the mention
+        asynchronously and may supersede it via the delta-sync channel.
     """
 
     CANONICAL = "CANONICAL"

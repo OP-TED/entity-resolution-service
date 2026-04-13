@@ -25,6 +25,7 @@ from erspec.models.core import (
 from pytest_bdd import given, parsers, scenario, then, when
 
 from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
+from ers.commons.domain.data_transfer_objects import ResolutionOutcome
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.rdf_mention_parser.domain.exceptions import MalformedRDFError
 from ers.request_registry.services.request_registry_service import RequestRegistryService
@@ -113,12 +114,6 @@ def _make_decision(identifier: EntityMentionIdentifier, cluster_id: str) -> Deci
         candidates=[cluster],
         created_at=now,
         updated_at=now,
-    )
-
-
-def _is_provisional(decision: Decision) -> bool:
-    return decision.current_placement.cluster_id == derive_provisional_cluster_id(
-        decision.about_entity_mention
     )
 
 
@@ -310,19 +305,20 @@ def mention_at_position_returns(ctx, position, result_type):
     idx = int(position) - 1
     result = ctx["results"][idx]
     if result_type == "canonical cluster identifier":
-        assert isinstance(result, Decision), f"Expected Decision at index {idx}, got {type(result)}"
-        assert not _is_provisional(result), (
-            f"Expected canonical at index {idx}, got provisional: "
-            f"{result.current_placement.cluster_id}"
+        assert isinstance(result, tuple), f"Expected (Decision, outcome) at index {idx}, got {type(result)}"
+        _, outcome = result
+        assert outcome == ResolutionOutcome.CANONICAL, (
+            f"Expected CANONICAL at index {idx}, got: {outcome}"
         )
     elif result_type == "parsing failure error":
         assert isinstance(result, ParsingFailedError), (
             f"Expected ParsingFailedError at index {idx}, got {type(result).__name__}"
         )
     elif result_type == "provisional singleton identifier":
-        assert isinstance(result, Decision), f"Expected Decision at index {idx}, got {type(result)}"
-        assert _is_provisional(result), (
-            f"Expected provisional at index {idx}, got: {result.current_placement.cluster_id}"
+        assert isinstance(result, tuple), f"Expected (Decision, outcome) at index {idx}, got {type(result)}"
+        _, outcome = result
+        assert outcome == ResolutionOutcome.PROVISIONAL, (
+            f"Expected PROVISIONAL at index {idx}, got: {outcome}"
         )
     else:
         raise ValueError(f"Unknown result_type: {result_type!r}")

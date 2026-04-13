@@ -15,6 +15,7 @@ from erspec.models.core import (
     EntityMentionIdentifier,
 )
 
+from ers.commons.domain.data_transfer_objects import ResolutionOutcome
 from ers.ere_contract_client.domain.errors import (
     ChannelUnavailableError,
     RedisConnectionError,
@@ -169,8 +170,9 @@ class TestResolveSingleHappyPath:
             await real_waiter.notify(triad_key)
 
         asyncio.create_task(signal_ere())
-        result = await svc.resolve_single(make_entity_mention())
-        assert result.current_placement.cluster_id == "cl-canonical"
+        decision, outcome = await svc.resolve_single(make_entity_mention())
+        assert decision.current_placement.cluster_id == "cl-canonical"
+        assert outcome == ResolutionOutcome.CANONICAL
         publish_svc.publish_request.assert_called_once()
 
 
@@ -198,8 +200,9 @@ class TestResolveSingleTimeout:
         provisional_decision = make_decision(cluster_id="provisional-hash")
         decision_svc.store_decision.return_value = provisional_decision
 
-        result = await svc.resolve_single(make_entity_mention())
-        assert result.current_placement.cluster_id == "provisional-hash"
+        decision, outcome = await svc.resolve_single(make_entity_mention())
+        assert decision.current_placement.cluster_id == "provisional-hash"
+        assert outcome == ResolutionOutcome.PROVISIONAL
         decision_svc.store_decision.assert_called_once()
 
 
@@ -216,8 +219,9 @@ class TestResolveSinglePublishFailure:
         provisional = make_decision(cluster_id="prov-redis")
         decision_svc.store_decision.return_value = provisional
 
-        result = await coordinator.resolve_single(make_entity_mention())
-        assert result.current_placement.cluster_id == "prov-redis"
+        decision, outcome = await coordinator.resolve_single(make_entity_mention())
+        assert decision.current_placement.cluster_id == "prov-redis"
+        assert outcome == ResolutionOutcome.PROVISIONAL
         decision_svc.store_decision.assert_called_once()
 
     async def test_channel_unavailable_issues_provisional(
@@ -228,8 +232,9 @@ class TestResolveSinglePublishFailure:
         provisional = make_decision(cluster_id="prov-channel")
         decision_svc.store_decision.return_value = provisional
 
-        result = await coordinator.resolve_single(make_entity_mention())
-        assert result.current_placement.cluster_id == "prov-channel"
+        decision, outcome = await coordinator.resolve_single(make_entity_mention())
+        assert decision.current_placement.cluster_id == "prov-channel"
+        assert outcome == ResolutionOutcome.PROVISIONAL
 
 
 # ---------------------------------------------------------------------------
@@ -243,8 +248,9 @@ class TestResolveSingleIdempotent:
         existing = make_decision(cluster_id="cl-existing")
         decision_svc.get_decision_by_triad.return_value = existing
 
-        result = await coordinator.resolve_single(make_entity_mention())
-        assert result.current_placement.cluster_id == "cl-existing"
+        decision, outcome = await coordinator.resolve_single(make_entity_mention())
+        assert decision.current_placement.cluster_id == "cl-existing"
+        assert outcome == ResolutionOutcome.CANONICAL
         publish_svc.publish_request.assert_not_called()
         waiter.get_or_create.assert_not_called()
 
@@ -258,8 +264,9 @@ class TestResolveSingleIdempotent:
         event = waiter.get_or_create.return_value
         event.set()
 
-        result = await coordinator.resolve_single(make_entity_mention())
-        assert result.current_placement.cluster_id == "cl-canonical"
+        decision, outcome = await coordinator.resolve_single(make_entity_mention())
+        assert decision.current_placement.cluster_id == "cl-canonical"
+        assert outcome == ResolutionOutcome.CANONICAL
         publish_svc.publish_request.assert_called_once()
 
 
@@ -341,8 +348,9 @@ class TestResolveSingleStaleOutcome:
             "SRC", "req-001", "Organization", "2026-01-01", "2025-12-31"
         )
 
-        result = await coordinator.resolve_single(make_entity_mention())
-        assert result.current_placement.cluster_id == "cl-ere-winner"
+        decision, outcome = await coordinator.resolve_single(make_entity_mention())
+        assert decision.current_placement.cluster_id == "cl-ere-winner"
+        assert outcome == ResolutionOutcome.CANONICAL
 
 
 # ---------------------------------------------------------------------------
@@ -362,7 +370,8 @@ class TestResolveBulk:
 
         results = await coordinator.resolve_bulk(mentions)
         assert len(results) == 3
-        assert all(isinstance(r, Decision) for r in results)
+        assert all(isinstance(r, tuple) for r in results)
+        assert all(outcome == ResolutionOutcome.CANONICAL for _, outcome in results)
 
     async def test_partial_parse_failure(
         self, coordinator, registry_svc, decision_svc, waiter
@@ -382,9 +391,9 @@ class TestResolveBulk:
 
         results = await coordinator.resolve_bulk(mentions)
         assert len(results) == 3
-        assert isinstance(results[0], Decision)
+        assert isinstance(results[0], tuple)
         assert isinstance(results[1], ParsingFailedError)
-        assert isinstance(results[2], Decision)
+        assert isinstance(results[2], tuple)
 
     async def test_empty_input(self, coordinator):
         results = await coordinator.resolve_bulk([])

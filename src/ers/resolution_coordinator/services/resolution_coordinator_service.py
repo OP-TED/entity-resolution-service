@@ -16,6 +16,7 @@ from opentelemetry import trace
 from ers import config
 from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.commons.adapters.tracing import trace_function
+from ers.commons.domain.data_transfer_objects import ResolutionOutcome
 from ers.ere_contract_client.domain.errors import (
     ChannelUnavailableError,
     RedisConnectionError,
@@ -109,18 +110,23 @@ class ResolutionCoordinatorService:
 
     async def resolve_single(
         self, entity_mention: EntityMention
-    ) -> Decision:
-        """Resolve a single entity mention and return a Decision.
+    ) -> tuple[Decision, ResolutionOutcome]:
+        """Resolve a single entity mention and return a Decision with its outcome.
 
         Registers the mention, checks for an existing decision, publishes to
         ERE, and waits for a response within the time budget. If ERE does not
         respond or Redis is unavailable, issues a provisional identifier.
 
+        Replays always return CANONICAL: once a decision exists in the store,
+        regardless of how it was originally created, it is the authoritative answer.
+
         Args:
             entity_mention: The entity mention to resolve.
 
         Returns:
-            A Decision with a canonical or provisional cluster assignment.
+            A tuple of (Decision, ResolutionOutcome). Outcome is CANONICAL when
+            the decision came from ERE or is a replay; PROVISIONAL when ERS
+            issued the draft identifier due to a timeout.
 
         Raises:
             ParsingFailedError: If registration fails due to invalid content.
@@ -138,13 +144,13 @@ class ResolutionCoordinatorService:
         except DuplicateTriadError:
             pass  # Concurrent registration — another coroutine inserted first; proceed.
 
-        # 2. Check existing decision — instant return for replays
+        # 2. Check existing decision — instant return for replays (always CANONICAL)
         identifier = entity_mention.identifiedBy
         existing = await self._decision_store_service.get_decision_by_triad(
             identifier
         )
         if existing is not None:
-            return existing
+            return existing, ResolutionOutcome.CANONICAL
 
         # 3+4+5. Publish → wait → provisional fallback
         triad_key = (
@@ -168,7 +174,7 @@ class ResolutionCoordinatorService:
                     identifier
                 )
                 if decision is not None:
-                    return decision
+                    return decision, ResolutionOutcome.CANONICAL
             except (TimeoutError, RedisConnectionError, ChannelUnavailableError):
                 pass
 
@@ -179,7 +185,7 @@ class ResolutionCoordinatorService:
 
     async def resolve_bulk(
         self, entity_mentions: list[EntityMention]
-    ) -> list[Decision | Exception]:
+    ) -> list[tuple[Decision, ResolutionOutcome] | BaseException]:
         """Resolve multiple entity mentions concurrently.
 
         Each mention is resolved independently via ``resolve_single``.
@@ -195,7 +201,8 @@ class ResolutionCoordinatorService:
             entity_mentions: The list of entity mentions to resolve.
 
         Returns:
-            A list of Decision or Exception in input order.
+            A list of (Decision, ResolutionOutcome) tuples or BaseException in
+            input order.
 
         Raises:
             ResolutionTimeoutError: If the bulk time budget is exceeded.
@@ -216,14 +223,16 @@ class ResolutionCoordinatorService:
 
     async def _issue_provisional(
         self, identifier: EntityMentionIdentifier
-    ) -> Decision:
+    ) -> tuple[Decision, ResolutionOutcome]:
         """Derive and persist a provisional singleton decision.
 
         Args:
             identifier: The entity mention triad.
 
         Returns:
-            The persisted provisional Decision.
+            A tuple of (Decision, ResolutionOutcome.PROVISIONAL) when ERS writes
+            the draft identifier, or (Decision, ResolutionOutcome.CANONICAL) when
+            ERE has already written a decision (StaleOutcomeError race).
 
         Raises:
             ResolutionTimeoutError: If the Decision Store is unreachable.
@@ -235,12 +244,13 @@ class ResolutionCoordinatorService:
             similarity_score=0.0,
         )
         try:
-            return await self._decision_store_service.store_decision(
+            decision = await self._decision_store_service.store_decision(
                 identifier=identifier,
                 current=cluster_ref,
                 candidates=[cluster_ref],
                 updated_at=datetime.now(UTC),
             )
+            return decision, ResolutionOutcome.PROVISIONAL
         except StaleOutcomeError as exc:
             decision = await self._decision_store_service.get_decision_by_triad(
                 identifier
@@ -249,7 +259,7 @@ class ResolutionCoordinatorService:
                 raise ResolutionTimeoutError(
                     "Decision vanished after StaleOutcomeError"
                 ) from exc
-            return decision
+            return decision, ResolutionOutcome.CANONICAL
         except RepositoryConnectionError as exc:
             raise ResolutionTimeoutError(
                 f"Cannot persist provisional decision: {exc}"
@@ -269,7 +279,7 @@ async def lookup_by_triad(
 async def resolve_single(
     entity_mention: EntityMention,
     service: ResolutionCoordinatorService,
-) -> Decision:
+) -> tuple[Decision, ResolutionOutcome]:
     """Traced entry point for single-mention resolution."""
     return await service.resolve_single(entity_mention)
 
@@ -278,7 +288,7 @@ async def resolve_single(
 async def resolve_bulk(
     entity_mentions: list[EntityMention],
     service: ResolutionCoordinatorService,
-) -> list[Decision | Exception]:
+) -> list[tuple[Decision, ResolutionOutcome] | BaseException]:
     """Traced entry point for bulk resolution."""
     trace.get_current_span().set_attribute(
         "entity_mention.bulk_count", len(entity_mentions)

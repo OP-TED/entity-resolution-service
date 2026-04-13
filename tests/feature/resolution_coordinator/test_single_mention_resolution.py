@@ -23,6 +23,7 @@ from erspec.models.core import (
 from pytest_bdd import given, parsers, scenario, then, when
 
 from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
+from ers.commons.domain.data_transfer_objects import ResolutionOutcome
 from ers.ere_contract_client.domain.errors import ChannelUnavailableError
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.rdf_mention_parser.domain.exceptions import MalformedRDFError
@@ -123,6 +124,7 @@ def ctx():
         "mention": None,
         "ere_notification_task": None,
         "result": None,
+        "outcome": None,
         "raised_exception": None,
     }
 
@@ -157,12 +159,6 @@ def _triad_key(mention: EntityMention) -> str:
     return f"{i.source_id}{i.request_id}{i.entity_type}"
 
 
-def _is_provisional(decision: Decision) -> bool:
-    return decision.current_placement.cluster_id == derive_provisional_cluster_id(
-        decision.about_entity_mention
-    )
-
-
 def _run_resolve(ctx) -> None:
     notify_fn = ctx.pop("ere_notification_task", None)
 
@@ -173,10 +169,11 @@ def _run_resolve(ctx) -> None:
 
     try:
         with patch(_CONFIG_PATH, _FAST_CONFIG):
-            ctx["result"] = asyncio.run(_call())
+            ctx["result"], ctx["outcome"] = asyncio.run(_call())
         ctx["raised_exception"] = None
     except Exception as exc:  # pylint: disable=broad-exception-caught
         ctx["result"] = None
+        ctx["outcome"] = None
         ctx["raised_exception"] = exc
 
 
@@ -376,10 +373,11 @@ def submit_conflicting(ctx):
 
     try:
         with patch(_CONFIG_PATH, _FAST_CONFIG):
-            ctx["result"] = asyncio.run(_call())
+            ctx["result"], ctx["outcome"] = asyncio.run(_call())
         ctx["raised_exception"] = None
     except Exception as exc:  # pylint: disable=broad-exception-caught
         ctx["result"] = None
+        ctx["outcome"] = None
         ctx["raised_exception"] = exc
 
 
@@ -391,20 +389,18 @@ def submit_conflicting(ctx):
 @then("the canonical cluster identifier is returned")
 def canonical_returned(ctx):
     assert ctx["raised_exception"] is None, f"Unexpected exception: {ctx['raised_exception']}"
-    result = ctx["result"]
-    assert result is not None
-    assert not _is_provisional(result), (
-        f"Expected canonical, got provisional: {result.current_placement.cluster_id}"
+    assert ctx["result"] is not None
+    assert ctx["outcome"] == ResolutionOutcome.CANONICAL, (
+        f"Expected CANONICAL outcome, got: {ctx['outcome']}"
     )
 
 
 @then("a provisional singleton identifier is returned")
 def provisional_returned(ctx):
     assert ctx["raised_exception"] is None, f"Unexpected exception: {ctx['raised_exception']}"
-    result = ctx["result"]
-    assert result is not None
-    assert _is_provisional(result), (
-        f"Expected provisional, got: {result.current_placement.cluster_id}"
+    assert ctx["result"] is not None
+    assert ctx["outcome"] == ResolutionOutcome.PROVISIONAL, (
+        f"Expected PROVISIONAL outcome, got: {ctx['outcome']}"
     )
 
 
@@ -417,10 +413,9 @@ def cluster_persisted(ctx):
 @then("the stale provisional is discarded and the existing ERE decision is returned")
 def stale_provisional_discarded(ctx):
     assert ctx["raised_exception"] is None, f"Unexpected exception: {ctx['raised_exception']}"
-    result = ctx["result"]
-    assert result is not None
-    assert not _is_provisional(result), (
-        f"Expected ERE decision, got provisional: {result.current_placement.cluster_id}"
+    assert ctx["result"] is not None
+    assert ctx["outcome"] == ResolutionOutcome.CANONICAL, (
+        f"Expected CANONICAL outcome for ERE decision, got: {ctx['outcome']}"
     )
 
 

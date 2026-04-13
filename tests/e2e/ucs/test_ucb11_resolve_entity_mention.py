@@ -489,16 +489,20 @@ def original_content_with_context(ctx, content_fixture, context):
 
 @given(
     parsers.parse(
-        'the original resolution returned "{cluster_id}" with status '
+        'the original resolution returned "{cluster_id}" with initial status '
         '"{status}"'
     )
 )
 def original_resolution(ctx, cluster_id, status):
-    """Seed the Decision Store with the prior resolution result."""
+    """Seed the Decision Store with the prior resolution result.
+
+    Use ``TRIAD_HASH`` as cluster_id to seed with the SHA-256 derived
+    identifier for the current triad (i.e. the provisional cluster ID).
+    """
     identifier = _make_identifier(
         ctx["source_id"], ctx["request_id"], ctx["entity_type"]
     )
-    if status == "PROVISIONAL":
+    if cluster_id == "TRIAD_HASH":
         cluster_id = derive_provisional_cluster_id(identifier)
     existing = _make_decision(identifier, cluster_id=cluster_id)
     ctx["original_cluster_id"] = cluster_id
@@ -697,15 +701,15 @@ def submit_second_identical(ctx, source_id, request_id, entity_type):
 def response_returns_cluster_and_status(ctx, cluster_id, expected_status):
     """Assert HTTP response contains expected cluster and status.
 
-    Use ``DERIVE_PROVISIONAL`` as cluster_id to assert the SHA-256 derived
-    provisional identifier for the current triad.
+    Use ``TRIAD_HASH`` as cluster_id to assert the SHA-256 derived
+    identifier for the current triad.
     """
     resp = ctx["response"]
     assert resp.status_code in (200, 202), (
         f"Expected 200 or 202, got {resp.status_code}: {resp.text}"
     )
     data = resp.json()
-    if cluster_id == "DERIVE_PROVISIONAL":
+    if cluster_id == "TRIAD_HASH":
         identifier = _make_identifier(
             ctx["source_id"], ctx["request_id"], ctx["entity_type"]
         )
