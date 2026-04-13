@@ -231,8 +231,8 @@ class ResolutionCoordinatorService:
         provisional_id = derive_provisional_cluster_id(identifier)
         cluster_ref = ClusterReference(
             cluster_id=provisional_id,
-            confidence_score=1.0,
-            similarity_score=1.0,
+            confidence_score=0.0,
+            similarity_score=0.0,
         )
         try:
             return await self._decision_store_service.store_decision(

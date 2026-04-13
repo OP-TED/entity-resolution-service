@@ -269,7 +269,7 @@ def decision_store_holds_provisional(ctx, draft_id):
         entity_type=ctx["entity_type"],
     )
     provisional_ref = ClusterReference(
-        cluster_id=draft_id, confidence_score=1.0, similarity_score=1.0
+        cluster_id=draft_id, confidence_score=0.0, similarity_score=0.0
     )
     ctx["decisions"].store_decision = AsyncMock(
         return_value=_make_decision(identifier, provisional_ref, [])

@@ -49,7 +49,7 @@ Feature: UC-B1.1 — Resolve Entity Mention via ERS API
     And the draft identifier equals SHA256 of "<source_id>", "<request_id>", "<entity_type>"
     And the request is registered in the Request Registry with triad "<source_id>", "<request_id>", "<entity_type>"
     And the Decision Store contains a provisional singleton decision for that triad
-    And the Decision Store decision has confidence 1.0 and similarity 1.0
+    And the Decision Store decision has confidence 0.0 and similarity 0.0
     And the entity mention was published to ERE
 
     Examples:

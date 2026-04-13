@@ -431,8 +431,8 @@ def ere_timeout(ctx):
     prov_decision = _make_decision(
         identifier,
         cluster_id=prov_id,
-        confidence=1.0,
-        similarity=1.0,
+        confidence=0.0,
+        similarity=0.0,
     )
     ctx["decision_svc"].get_decision_by_triad = AsyncMock(return_value=None)
     ctx["decision_svc"].store_decision = AsyncMock(return_value=prov_decision)
@@ -582,7 +582,7 @@ def ere_messaging_unavailable_for_publishing(ctx):
     )
     prov_id = derive_provisional_cluster_id(identifier)
     prov_decision = _make_decision(
-        identifier, cluster_id=prov_id, confidence=1.0, similarity=1.0
+        identifier, cluster_id=prov_id, confidence=0.0, similarity=0.0
     )
     ctx["decision_svc"].get_decision_by_triad = AsyncMock(return_value=None)
     ctx["decision_svc"].store_decision = AsyncMock(return_value=prov_decision)
@@ -669,7 +669,7 @@ def submit_second_identical(ctx, source_id, request_id, entity_type):
     identifier = _make_identifier(source_id, request_id, entity_type)
     prov_id = derive_provisional_cluster_id(identifier)
     prov_decision = _make_decision(
-        identifier, cluster_id=prov_id, confidence=1.0, similarity=1.0
+        identifier, cluster_id=prov_id, confidence=0.0, similarity=0.0
     )
     ctx["decision_svc"].get_decision_by_triad = AsyncMock(
         return_value=prov_decision
@@ -874,16 +874,16 @@ def decision_store_has_provisional(ctx):
     # In provisional scenarios, store_decision is called with the provisional ID
     ctx["decision_svc"].store_decision.assert_called()
     call_kwargs = ctx["decision_svc"].store_decision.call_args.kwargs
-    assert call_kwargs["current"].confidence_score == 1.0
-    assert call_kwargs["current"].similarity_score == 1.0
+    assert call_kwargs["current"].confidence_score == 0.0
+    assert call_kwargs["current"].similarity_score == 0.0
 
 
-@then("the Decision Store decision has confidence 1.0 and similarity 1.0")
-def decision_has_full_scores(ctx):
-    """Assert provisional decision has confidence=1.0 and similarity=1.0."""
+@then("the Decision Store decision has confidence 0.0 and similarity 0.0")
+def decision_has_provisional_scores(ctx):
+    """Assert provisional decision has confidence=0.0 and similarity=0.0 (singleton contract)."""
     call_kwargs = ctx["decision_svc"].store_decision.call_args.kwargs
-    assert call_kwargs["current"].confidence_score == 1.0
-    assert call_kwargs["current"].similarity_score == 1.0
+    assert call_kwargs["current"].confidence_score == 0.0
+    assert call_kwargs["current"].similarity_score == 0.0
 
 
 @then(
