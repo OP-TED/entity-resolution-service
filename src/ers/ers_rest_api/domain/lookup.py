@@ -146,6 +146,7 @@ class RefreshBulkRequest(ERSRequest):
         if not v.strip():
             raise ValueError("source_id must not be blank or whitespace-only")
         return v
+
     limit: int = Field(
         default=config.REFRESH_BULK_MAX_LIMIT,
         gt=0,
