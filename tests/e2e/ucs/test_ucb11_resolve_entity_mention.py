@@ -534,6 +534,12 @@ def invalid_resolve_request(ctx, violation):
         del identified_by["entity_type"]
     elif violation == "content absent":
         del mention["content"]
+    elif violation == "source_id blank":
+        identified_by["source_id"] = "   "
+    elif violation == "request_id blank":
+        identified_by["request_id"] = "   "
+    elif violation == "entity_type blank":
+        identified_by["entity_type"] = "   "
     elif 'entity_type set to "UNKNOWN_TYPE"' in violation:
         identified_by["entity_type"] = "UNKNOWN_TYPE"
         # This passes Pydantic but fails RDF parsing — configure mock

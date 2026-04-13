@@ -159,6 +159,19 @@ class TestRefreshBulkEndpoint:
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
 
+    async def test_whitespace_only_source_id_returns_400(
+        self, client: AsyncClient
+    ) -> None:
+        response = await client.post(
+            "/api/v1/refresh-bulk",
+            json={"source_id": "   ", "limit": 100},
+        )
+
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
+        assert "source_id" in body["detail"]
+
     async def test_zero_limit_returns_400(self, client: AsyncClient) -> None:
         response = await client.post(
             "/api/v1/refresh-bulk",

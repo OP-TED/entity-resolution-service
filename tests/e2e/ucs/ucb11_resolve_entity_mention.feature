@@ -122,6 +122,9 @@ Feature: UC-B1.1 — Resolve Entity Mention via ERS API
       | request_id absent                  | VALIDATION_ERROR |
       | entity_type absent                 | VALIDATION_ERROR |
       | content absent                     | VALIDATION_ERROR |
+      | source_id blank                    | VALIDATION_ERROR |
+      | request_id blank                   | VALIDATION_ERROR |
+      | entity_type blank                  | VALIDATION_ERROR |
 
   Scenario: Reject request with unsupported entity type during registration
     Given an invalid resolve request with entity_type set to "UNKNOWN_TYPE"
