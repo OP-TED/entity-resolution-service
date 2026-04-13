@@ -74,9 +74,8 @@ async def test_it003_created_at_preserved_on_replacement(repo):
     updated = await repo.upsert_decision(
         make_identifier(), make_cluster("c2"), [], t2
     )
-    # MongoDB strips timezone; compare naive datetimes
-    assert updated.created_at == t1.replace(tzinfo=None)
-    assert updated.updated_at == t2.replace(tzinfo=None)
+    assert updated.created_at == t1
+    assert updated.updated_at == t2
     assert updated.current_placement.cluster_id == "c2"
 
 
