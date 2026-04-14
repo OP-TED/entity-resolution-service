@@ -15,9 +15,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
      POETRY_VIRTUALENVS_IN_PROJECT=true \
      POETRY_NO_INTERACTION=1
  
-# Install git for private/git dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
- 
 RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
  
 WORKDIR /app
