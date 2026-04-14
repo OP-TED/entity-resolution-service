@@ -11,10 +11,15 @@ The system is engine-authoritative: the ERE determines canonical identity, ERS n
 ---
 
 ## Requirements
-
+ 
 - Python 3.12+
 - Docker + Docker Compose
 - [Poetry](https://python-poetry.org/) 2.x
+- **External Infrastructure:**
+  - Redis (for ERE orchestration)
+  - MongoDB (via FerretDB)
+  - PostgreSQL (backend for FerretDB)
+
 
 ---
 
