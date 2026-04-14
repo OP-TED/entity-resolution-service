@@ -78,7 +78,7 @@ class CreateUserRequest(FrozenDTO):
 
 
 class UserPatchRequest(FrozenDTO):
-    """Admin request to update user flags."""
+    """Admin request to update user attributes."""
 
     is_active: bool | None = Field(
         default=None, description="Set to true to enable the account or false to disable it."
@@ -88,6 +88,12 @@ class UserPatchRequest(FrozenDTO):
     )
     is_verified: bool | None = Field(
         default=None, description="Set to true to mark the email as verified or false to unverify."
+    )
+    password: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=128,
+        description="New plain-text password (8–128 characters); stored hashed.",
     )
 
 

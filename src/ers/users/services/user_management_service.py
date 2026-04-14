@@ -82,6 +82,9 @@ class UserManagementService:
         updates = dto.model_dump(exclude_none=True)
         if updates:
             await self._guard_last_admin(user, updates)
+            password = updates.pop("password", None)
+            if password is not None:
+                updates["hashed_password"] = self._hasher.hash(password)
             updates["updated_at"] = datetime.now(UTC)
             user = user.model_copy(update=updates)
             await self._user_repo.save(user)

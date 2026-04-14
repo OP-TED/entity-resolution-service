@@ -49,6 +49,16 @@ def test_update_not_found():
     pass
 
 
+@scenario(FEATURE, "Reset a user's password")
+def test_reset_password():
+    pass
+
+
+@scenario(FEATURE, "Reject a password that is too short")
+def test_reject_short_password():
+    pass
+
+
 @scenario(FEATURE, "Deactivate a user")
 def test_deactivate_user():
     pass
@@ -238,6 +248,21 @@ def admin_patches_nonexistent(
     )
 
 
+@when(
+    parsers.parse('the administrator resets the user\'s password to "{new_password}"'),
+    target_fixture="response",
+)
+def admin_resets_password(
+    client: TestClient,
+    user_id: str,
+    new_password: str,
+) -> Any:
+    return client.patch(
+        f"{USERS_URL}/{user_id}",
+        json={"password": new_password},
+    )
+
+
 @when("the administrator deactivates the user", target_fixture="response")
 def admin_deactivates_user(client: TestClient, user_id: str) -> Any:
     return client.patch(
@@ -334,6 +359,24 @@ def flag_updated(response: Any) -> None:
 @then("the system responds with a not found error")
 def not_found(response: Any) -> None:
     assert response.status_code == 404
+
+
+@then("the user record is updated successfully")
+def user_record_updated(response: Any) -> None:
+    assert response.status_code == 200
+
+
+@then("the new password is stored as a hash")
+def password_stored_hashed(
+    response: Any,
+    password_hasher: Any,
+) -> None:
+    password_hasher.hash.assert_called_once_with("mynewsecurepass")
+
+
+@then("the request is rejected with a validation error")
+def validation_error(response: Any) -> None:
+    assert response.status_code == 400
 
 
 @then("the user record is preserved with active set to false")

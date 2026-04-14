@@ -174,6 +174,43 @@ class TestPatchUser:
         assert response.json()["is_verified"] is True
 
 
+class TestResetPasswordViaPatch:
+    async def test_admin_can_reset_user_password(
+        self,
+        client: AsyncClient,
+        user_management_service: AsyncMock,
+    ) -> None:
+        user_management_service.patch_user.return_value = UserResponse(
+            id="u-1",
+            email="a@example.com",
+            is_active=True,
+            is_superuser=False,
+            is_verified=True,
+            created_at=datetime.now(UTC),
+        )
+
+        response = await client.patch(
+            f"{USERS_URL}/u-1",
+            json={"password": "newsecurepassword"},
+        )
+
+        assert response.status_code == 200
+        call_args = user_management_service.patch_user.call_args
+        assert call_args.args[0] == "u-1"
+        assert call_args.args[1].password == "newsecurepassword"
+
+    async def test_password_too_short_returns_400(
+        self,
+        client: AsyncClient,
+    ) -> None:
+        response = await client.patch(
+            f"{USERS_URL}/u-1",
+            json={"password": "short"},
+        )
+
+        assert response.status_code == 400
+
+
 class TestDeactivateViaPatch:
     async def test_admin_can_deactivate_user_via_patch(
         self,

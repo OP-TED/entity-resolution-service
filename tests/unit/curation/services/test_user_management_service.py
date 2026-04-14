@@ -157,6 +157,59 @@ class TestPatchUser:
             await service.patch_user("missing-id", UserPatchRequest(is_active=False))
 
 
+class TestPatchUserPassword:
+    async def test_patch_password_hashes_and_stores(
+        self,
+        service: UserManagementService,
+        user_repository: AsyncMock,
+        password_hasher: AsyncMock,
+    ) -> None:
+        user = UserFactory.build()
+        user_repository.find_by_id.return_value = user
+        user_repository.save.side_effect = lambda u: u
+        password_hasher.hash.return_value = "hashed:newpassword"
+
+        result = await service.patch_user(user.id, UserPatchRequest(password="newpassword"))
+
+        password_hasher.hash.assert_called_once_with("newpassword")
+        saved_user = user_repository.save.call_args.args[0]
+        assert saved_user.hashed_password == "hashed:newpassword"
+        assert result.email == user.email
+
+    async def test_patch_password_with_flags(
+        self,
+        service: UserManagementService,
+        user_repository: AsyncMock,
+        password_hasher: AsyncMock,
+    ) -> None:
+        user = UserFactory.build(is_verified=False)
+        user_repository.find_by_id.return_value = user
+        user_repository.save.side_effect = lambda u: u
+        password_hasher.hash.return_value = "hashed:newpassword"
+
+        result = await service.patch_user(
+            user.id, UserPatchRequest(password="newpassword", is_verified=True)
+        )
+
+        saved_user = user_repository.save.call_args.args[0]
+        assert saved_user.hashed_password == "hashed:newpassword"
+        assert result.is_verified is True
+
+    async def test_patch_without_password_does_not_hash(
+        self,
+        service: UserManagementService,
+        user_repository: AsyncMock,
+        password_hasher: AsyncMock,
+    ) -> None:
+        user = UserFactory.build()
+        user_repository.find_by_id.return_value = user
+        user_repository.save.side_effect = lambda u: u
+
+        await service.patch_user(user.id, UserPatchRequest(is_verified=True))
+
+        password_hasher.hash.assert_not_called()
+
+
 class TestLastAdminGuard:
     async def test_patch_deactivate_last_admin_raises(
         self,

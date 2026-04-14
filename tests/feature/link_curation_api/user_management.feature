@@ -43,6 +43,19 @@ Feature: User management
     When the administrator attempts to update a user that does not exist
     Then the system responds with a not found error
 
+  # --- Reset user password ---
+
+  Scenario: Reset a user's password
+    Given a user account exists
+    When the administrator resets the user's password to "mynewsecurepass"
+    Then the user record is updated successfully
+    And the new password is stored as a hash
+
+  Scenario: Reject a password that is too short
+    Given a user account exists
+    When the administrator resets the user's password to "short"
+    Then the request is rejected with a validation error
+
   # --- Deactivate / reactivate user ---
 
   Scenario: Deactivate a user
