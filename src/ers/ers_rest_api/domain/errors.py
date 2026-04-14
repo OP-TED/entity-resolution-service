@@ -2,6 +2,8 @@
 
 from enum import StrEnum
 
+from pydantic import Field
+
 from ers.commons.domain.data_transfer_objects import FrozenDTO
 
 
@@ -21,4 +23,4 @@ class ErrorResponse(FrozenDTO):
     """Standard error response body returned by all ERS REST API endpoints."""
 
     error_code: ErrorCode
-    detail: str
+    detail: str = Field(description="Human-readable explanation of the error.")

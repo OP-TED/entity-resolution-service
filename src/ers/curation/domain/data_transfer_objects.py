@@ -49,64 +49,90 @@ class EntityMentionPreview(FrozenDTO):
     """Lightweight entity mention projection for display."""
 
     identified_by: EntityMentionIdentifier
-    parsed_representation: Json[dict[str, Any]] | None = None
+    parsed_representation: Json[dict[str, Any]] | None = Field(
+        default=None, description="Parsed key-value representation of the entity mention."
+    )
 
 
 class DecisionSummary(FrozenDTO):
     """Decision summary for list display."""
 
-    id: str
+    id: str = Field(description="Unique identifier of the curation decision.")
     about_entity_mention: EntityMentionPreview
     current_placement: ClusterReference
-    created_at: datetime
-    updated_at: datetime | None = None
+    created_at: datetime = Field(description="Timestamp when the decision was created.")
+    updated_at: datetime | None = Field(
+        default=None, description="Timestamp of the last update to this decision."
+    )
 
 
 class ActorSummary(FrozenDTO):
     """Embedded actor info for user action display."""
 
-    id: str
-    email: str
+    id: str = Field(description="Unique identifier of the actor.")
+    email: str = Field(description="Email address of the actor.")
 
 
 class UserActionSummary(FrozenDTO):
     """User action summary for list display."""
 
-    id: str
+    id: str = Field(description="Unique identifier of the user action.")
     about_entity_mention: EntityMentionPreview
-    candidates: list[ClusterReference]
+    candidates: list[ClusterReference] = Field(
+        description="Candidate clusters presented to the curator."
+    )
     selected_cluster: ClusterReference | None = None
     action_type: UserActionType
     actor: ActorSummary
-    created_at: datetime
-    metadata: Any | None = None
+    created_at: datetime = Field(description="Timestamp when the user action was recorded.")
+    metadata: Any | None = Field(
+        default=None, description="Optional additional metadata attached to the action."
+    )
 
 
 class CanonicalEntityPreview(FrozenDTO):
     """Cluster preview with top entity mentions for display."""
 
-    cluster_id: str
-    confidence_score: float
-    similarity_score: float
-    top_entities: list[EntityMentionPreview]
+    cluster_id: str = Field(description="Unique identifier of the canonical entity cluster.")
+    confidence_score: float = Field(
+        description="Model confidence that this cluster is the correct match."
+    )
+    similarity_score: float = Field(
+        description="Similarity score between the entity mention and the cluster."
+    )
+    top_entities: list[EntityMentionPreview] = Field(
+        description="Representative entity mentions from this cluster."
+    )
 
 
 class CurationStatistics(FrozenDTO):
     """Statistics about the curation process based on UserAction counts."""
 
-    total_decisions: int
-    selected_top: int
-    selected_alternative: int
-    rejected_all: int
+    total_decisions: int = Field(description="Total number of curation decisions recorded.")
+    selected_top: int = Field(
+        description="Number of decisions where the top-ranked candidate was accepted."
+    )
+    selected_alternative: int = Field(
+        description="Number of decisions where an alternative candidate was selected."
+    )
+    rejected_all: int = Field(description="Number of decisions where all candidates were rejected.")
 
 
 class RegistryStatistics(FrozenDTO):
     """Statistics about the entity registry."""
 
-    total_entity_mentions: int
-    total_canonical_entities: int
-    average_cluster_size: float
-    resolution_requests: int
+    total_entity_mentions: int = Field(
+        description="Total number of entity mentions stored in the registry."
+    )
+    total_canonical_entities: int = Field(
+        description="Total number of distinct canonical entity clusters."
+    )
+    average_cluster_size: float = Field(
+        description="Average number of entity mentions per canonical entity cluster."
+    )
+    resolution_requests: int = Field(
+        description="Total number of entity resolution requests processed."
+    )
 
 
 class Statistics(FrozenDTO):
@@ -119,7 +145,9 @@ class Statistics(FrozenDTO):
 class AssignRequest(FrozenDTO):
     """Request body for assigning an entity to an alternative cluster."""
 
-    cluster_id: str
+    cluster_id: str = Field(
+        description="Identifier of the target canonical entity cluster to assign the mention to."
+    )
 
 
 class BulkItemStatus(StrEnum):
@@ -134,18 +162,27 @@ class BulkItemStatus(StrEnum):
 class BulkItemResult(FrozenDTO):
     """Result of a single decision within a bulk action."""
 
-    decision_id: str
+    decision_id: str = Field(description="Identifier of the decision this result refers to.")
     status: BulkItemStatus
-    detail: str | None = None
+    detail: str | None = Field(
+        default=None, description="Human-readable explanation when the status is not success."
+    )
 
 
 class BulkActionRequest(FrozenDTO):
     """Request body for bulk accept/reject operations."""
 
-    decision_ids: set[str] = Field(..., min_length=1, max_length=BULK_ACTION_MAX_SIZE)
+    decision_ids: set[str] = Field(
+        ...,
+        min_length=1,
+        max_length=BULK_ACTION_MAX_SIZE,
+        description="Set of decision identifiers to process in a single bulk operation.",
+    )
 
 
 class BulkActionResponse(FrozenDTO):
     """Response body for bulk accept/reject operations."""
 
-    results: list[BulkItemResult]
+    results: list[BulkItemResult] = Field(
+        description="Per-decision outcomes for the bulk operation."
+    )

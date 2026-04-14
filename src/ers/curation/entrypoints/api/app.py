@@ -79,6 +79,13 @@ def create_app() -> FastAPI:
     """Application factory for the FastAPI instance."""
     app = FastAPI(
         title=config.APP_NAME,
+        description=(
+            "The Curation REST API enables human-in-the-loop review of entity resolution"
+            " decisions. Curators can browse low-confidence matches, accept or reject"
+            " proposed canonical entities, assign mentions to alternative clusters, and"
+            " perform bulk curation actions. The API also provides authentication,"
+            " user management, audit trails, and registry/curation statistics."
+        ),
         debug=config.DEBUG,
         lifespan=lifespan,
     )

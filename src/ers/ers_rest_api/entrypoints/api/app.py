@@ -148,6 +148,13 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title=config.ERS_API_NAME,
+        description=(
+            "The Entity Resolution Service (ERS) REST API provides endpoints for resolving"
+            " entity mentions to canonical cluster identifiers, looking up existing cluster"
+            " assignments, and synchronising assignment deltas. It serves as the primary"
+            " integration point for external systems that need to resolve, deduplicate, or"
+            " track entity mentions across multiple sources."
+        ),
         debug=config.DEBUG,
         lifespan=lifespan,
     )

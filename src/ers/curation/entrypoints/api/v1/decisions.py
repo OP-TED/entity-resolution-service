@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Path, Response, status
 
 from ers.commons.domain.data_transfer_objects import CursorPage, PaginatedResult
 from ers.curation.domain.data_transfer_objects import (
@@ -32,6 +32,7 @@ router = APIRouter(prefix="/curation/decisions", tags=["Decisions"])
 @router.get(
     "",
     responses={400: {"model": ErrorResponse}},
+    response_description="Cursor-paginated list of curation decisions.",
 )
 async def list_decisions(
     filters: DecisionFiltersDep,
@@ -46,9 +47,10 @@ async def list_decisions(
 @router.get(
     "/{decision_id}/proposed-canonical-entity",
     responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    response_description="The proposed canonical entity cluster for the given decision.",
 )
 async def get_proposed_canonical_entity(
-    decision_id: str,
+    decision_id: Annotated[str, Path(description="Unique identifier of the curation decision.")],
     user: VerifiedUser,
     service: Annotated[CanonicalEntityService, Depends(get_canonical_entity_service)],
 ) -> CanonicalEntityPreview:
@@ -59,9 +61,10 @@ async def get_proposed_canonical_entity(
 @router.get(
     "/{decision_id}/alternative-canonical-entities",
     responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    response_description="Paginated list of alternative canonical entity clusters for the given decision.",
 )
 async def get_alternative_canonical_entities(
-    decision_id: str,
+    decision_id: Annotated[str, Path(description="Unique identifier of the curation decision.")],
     pagination: Pagination,
     user: VerifiedUser,
     service: Annotated[CanonicalEntityService, Depends(get_canonical_entity_service)],
@@ -78,9 +81,10 @@ async def get_alternative_canonical_entities(
         404: {"model": ErrorResponse},
         409: {"model": ErrorResponse},
     },
+    response_description="Decision accepted; no content returned.",
 )
 async def accept_decision(
-    decision_id: str,
+    decision_id: Annotated[str, Path(description="Unique identifier of the curation decision.")],
     user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> Response:
@@ -97,9 +101,10 @@ async def accept_decision(
         404: {"model": ErrorResponse},
         409: {"model": ErrorResponse},
     },
+    response_description="Decision rejected; no content returned.",
 )
 async def reject_decision(
-    decision_id: str,
+    decision_id: Annotated[str, Path(description="Unique identifier of the curation decision.")],
     user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> Response:
@@ -116,9 +121,10 @@ async def reject_decision(
         404: {"model": ErrorResponse},
         409: {"model": ErrorResponse},
     },
+    response_description="Decision assigned to the specified cluster; no content returned.",
 )
 async def assign_decision(
-    decision_id: str,
+    decision_id: Annotated[str, Path(description="Unique identifier of the curation decision.")],
     body: AssignRequest,
     user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
@@ -135,6 +141,7 @@ async def assign_decision(
 @router.post(
     "/bulk-accept",
     responses={400: {"model": ErrorResponse}},
+    response_description="Per-decision results for the bulk accept operation.",
 )
 async def bulk_accept_decisions(
     body: BulkActionRequest,
@@ -148,6 +155,7 @@ async def bulk_accept_decisions(
 @router.post(
     "/bulk-reject",
     responses={400: {"model": ErrorResponse}},
+    response_description="Per-decision results for the bulk reject operation.",
 )
 async def bulk_reject_decisions(
     body: BulkActionRequest,

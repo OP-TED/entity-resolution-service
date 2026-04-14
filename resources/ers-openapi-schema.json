@@ -2,6 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ERS REST API",
+    "description": "The Entity Resolution Service (ERS) REST API provides endpoints for resolving entity mentions to canonical cluster identifiers, looking up existing cluster assignments, and synchronising assignment deltas. It serves as the primary integration point for external systems that need to resolve, deduplicate, or track entity mentions across multiple sources.",
     "version": "0.1.0"
   },
   "paths": {
@@ -11,6 +12,7 @@
           "Health"
         ],
         "summary": "Health",
+        "description": "Returns service liveness status and the entity types supported by this ERS instance.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -167,7 +169,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Current cluster assignment for the requested mention.",
             "content": {
               "application/json": {
                 "schema": {
@@ -219,7 +221,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Cluster assignments for all requested mentions.",
             "content": {
               "application/json": {
                 "schema": {
@@ -261,7 +263,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Delta of cluster assignment changes since the last synchronisation cursor.",
             "content": {
               "application/json": {
                 "schema": {
@@ -724,11 +726,13 @@
         "properties": {
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Human-readable name of the entity type (e.g. 'person', 'organization')."
           },
           "rdf_type": {
             "type": "string",
-            "title": "Rdf Type"
+            "title": "Rdf Type",
+            "description": "RDF class URI mapped to this entity type."
           }
         },
         "type": "object",
@@ -760,7 +764,8 @@
           },
           "detail": {
             "type": "string",
-            "title": "Detail"
+            "title": "Detail",
+            "description": "Human-readable explanation of the error."
           }
         },
         "type": "object",
@@ -788,14 +793,16 @@
         "properties": {
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "description": "Service liveness status; always 'ok' when the service is up."
           },
           "supported_entity_types": {
             "items": {
               "$ref": "#/components/schemas/EntityTypeInfo"
             },
             "type": "array",
-            "title": "Supported Entity Types"
+            "title": "Supported Entity Types",
+            "description": "List of entity types this ERS instance is configured to resolve."
           }
         },
         "type": "object",

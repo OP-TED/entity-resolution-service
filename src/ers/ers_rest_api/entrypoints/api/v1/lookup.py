@@ -23,6 +23,7 @@ router = APIRouter(tags=["Lookup"])
 @router.get(
     "/lookup",
     responses={
+        200: {"description": "Current cluster assignment for the requested mention."},
         400: {"model": ErrorResponse, "description": "Validation error"},
         404: {"model": ErrorResponse, "description": "Mention not found"},
     },
@@ -40,6 +41,7 @@ async def lookup(
 @router.post(
     "/lookup-bulk",
     responses={
+        200: {"description": "Cluster assignments for all requested mentions."},
         400: {"model": ErrorResponse, "description": "Validation error"},
     },
 )
@@ -54,6 +56,9 @@ async def lookup_bulk(
 @router.post(
     "/refresh-bulk",
     responses={
+        200: {
+            "description": "Delta of cluster assignment changes since the last synchronisation cursor."
+        },
         400: {"model": ErrorResponse, "description": "Validation error"},
     },
 )

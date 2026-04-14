@@ -14,6 +14,7 @@ class DecisionOrdering(StrEnum):
     UPDATED_AT_ASC = "updated_at"
     UPDATED_AT_DESC = "-updated_at"
 
+
 # FIXME: the below values need to be reconciled with the pagination limits in
 # the global config
 MAX_PER_PAGE = 50
@@ -68,10 +69,14 @@ class PaginationParams(FrozenDTO):
 class PaginatedResult[T](FrozenDTO):
     """Paginated query result."""
 
-    count: int
-    previous: int | None = None
-    next: int | None = None
-    results: list[T]
+    count: int = Field(description="Total number of items matching the query.")
+    previous: int | None = Field(
+        default=None, description="Previous page number, or null if on the first page."
+    )
+    next: int | None = Field(
+        default=None, description="Next page number, or null if on the last page."
+    )
+    results: list[T] = Field(description="Page of result items.")
 
 
 class CursorParams(FrozenDTO):
@@ -84,9 +89,12 @@ class CursorParams(FrozenDTO):
 class CursorPage[T](FrozenDTO):
     """Cursor-paginated query result."""
 
-    results: list[T]
-    count: int = 0
-    next_cursor: str | None = None
+    results: list[T] = Field(description="Page of result items.")
+    count: int = Field(default=0, description="Number of items returned in this page.")
+    next_cursor: str | None = Field(
+        default=None,
+        description="Opaque cursor to fetch the next page, or null if there are no more pages.",
+    )
 
 
 class ResolutionOutcome(StrEnum):

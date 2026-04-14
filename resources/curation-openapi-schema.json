@@ -2,6 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Curation REST API",
+    "description": "The Curation REST API enables human-in-the-loop review of entity resolution decisions. Curators can browse low-confidence matches, accept or reject proposed canonical entities, assign mentions to alternative clusters, and perform bulk curation actions. The API also provides authentication, user management, audit trails, and registry/curation statistics.",
     "version": "0.1.0"
   },
   "paths": {
@@ -51,7 +52,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "The newly registered user.",
             "content": {
               "application/json": {
                 "schema": {
@@ -103,7 +104,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Access and refresh token pair for the authenticated user.",
             "content": {
               "application/json": {
                 "schema": {
@@ -155,7 +156,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "New access and refresh token pair.",
             "content": {
               "application/json": {
                 "schema": {
@@ -370,7 +371,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Cursor-paginated list of curation decisions.",
             "content": {
               "application/json": {
                 "schema": {
@@ -412,13 +413,15 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "Unique identifier of the curation decision.",
               "title": "Decision Id"
-            }
+            },
+            "description": "Unique identifier of the curation decision."
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The proposed canonical entity cluster for the given decision.",
             "content": {
               "application/json": {
                 "schema": {
@@ -470,8 +473,10 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "Unique identifier of the curation decision.",
               "title": "Decision Id"
-            }
+            },
+            "description": "Unique identifier of the curation decision."
           },
           {
             "name": "page",
@@ -503,7 +508,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Paginated list of alternative canonical entity clusters for the given decision.",
             "content": {
               "application/json": {
                 "schema": {
@@ -555,13 +560,15 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "Unique identifier of the curation decision.",
               "title": "Decision Id"
-            }
+            },
+            "description": "Unique identifier of the curation decision."
           }
         ],
         "responses": {
           "204": {
-            "description": "Successful Response"
+            "description": "Decision accepted; no content returned."
           },
           "400": {
             "content": {
@@ -616,13 +623,15 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "Unique identifier of the curation decision.",
               "title": "Decision Id"
-            }
+            },
+            "description": "Unique identifier of the curation decision."
           }
         ],
         "responses": {
           "204": {
-            "description": "Successful Response"
+            "description": "Decision rejected; no content returned."
           },
           "400": {
             "content": {
@@ -677,8 +686,10 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "Unique identifier of the curation decision.",
               "title": "Decision Id"
-            }
+            },
+            "description": "Unique identifier of the curation decision."
           }
         ],
         "requestBody": {
@@ -693,7 +704,7 @@
         },
         "responses": {
           "204": {
-            "description": "Successful Response"
+            "description": "Decision assigned to the specified cluster; no content returned."
           },
           "400": {
             "content": {
@@ -748,7 +759,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Per-decision results for the bulk accept operation.",
             "content": {
               "application/json": {
                 "schema": {
@@ -795,7 +806,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Per-decision results for the bulk reject operation.",
             "content": {
               "application/json": {
                 "schema": {
@@ -944,8 +955,10 @@
                   "type": "null"
                 }
               ],
+              "description": "Filter by type of user action.",
               "title": "Action Type"
-            }
+            },
+            "description": "Filter by type of user action."
           },
           {
             "name": "actor",
@@ -960,8 +973,10 @@
                   "type": "null"
                 }
               ],
+              "description": "Filter by actor identifier or email.",
               "title": "Actor"
-            }
+            },
+            "description": "Filter by actor identifier or email."
           },
           {
             "name": "time_range_start",
@@ -977,8 +992,10 @@
                   "type": "null"
                 }
               ],
+              "description": "Include only actions recorded at or after this timestamp.",
               "title": "Time Range Start"
-            }
+            },
+            "description": "Include only actions recorded at or after this timestamp."
           },
           {
             "name": "time_range_end",
@@ -994,8 +1011,10 @@
                   "type": "null"
                 }
               ],
+              "description": "Include only actions recorded at or before this timestamp.",
               "title": "Time Range End"
-            }
+            },
+            "description": "Include only actions recorded at or before this timestamp."
           },
           {
             "name": "ordering",
@@ -1010,8 +1029,10 @@
                   "type": "null"
                 }
               ],
+              "description": "Sort order for the returned actions.",
               "title": "Ordering"
-            }
+            },
+            "description": "Sort order for the returned actions."
           },
           {
             "name": "cursor",
@@ -1048,7 +1069,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Cursor-paginated list of user actions.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1100,13 +1121,15 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "Unique identifier of the user action.",
               "title": "Action Id"
-            }
+            },
+            "description": "Unique identifier of the user action."
           }
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The canonical entity cluster selected by the curator, or null if none was selected.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1166,8 +1189,10 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "Unique identifier of the user action.",
               "title": "Action Id"
-            }
+            },
+            "description": "Unique identifier of the user action."
           },
           {
             "name": "page",
@@ -1199,7 +1224,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Paginated candidate cluster previews for the given user action.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1256,7 +1281,7 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
+            "description": "The newly created user.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1358,7 +1383,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Paginated list of users.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1410,8 +1435,10 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "Unique identifier of the user to update.",
               "title": "User Id"
-            }
+            },
+            "description": "Unique identifier of the user to update."
           }
         ],
         "requestBody": {
@@ -1426,7 +1453,7 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The updated user.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1488,7 +1515,7 @@
         "operationId": "get_current_user_api_v1_users_me_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The currently authenticated user.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1522,11 +1549,13 @@
         "properties": {
           "id": {
             "type": "string",
-            "title": "Id"
+            "title": "Id",
+            "description": "Unique identifier of the actor."
           },
           "email": {
             "type": "string",
-            "title": "Email"
+            "title": "Email",
+            "description": "Email address of the actor."
           }
         },
         "type": "object",
@@ -1541,7 +1570,8 @@
         "properties": {
           "cluster_id": {
             "type": "string",
-            "title": "Cluster Id"
+            "title": "Cluster Id",
+            "description": "Identifier of the target canonical entity cluster to assign the mention to."
           }
         },
         "type": "object",
@@ -1570,7 +1600,8 @@
             "maxItems": 200,
             "minItems": 1,
             "uniqueItems": true,
-            "title": "Decision Ids"
+            "title": "Decision Ids",
+            "description": "Set of decision identifiers to process in a single bulk operation."
           }
         },
         "type": "object",
@@ -1587,7 +1618,8 @@
               "$ref": "#/components/schemas/BulkItemResult"
             },
             "type": "array",
-            "title": "Results"
+            "title": "Results",
+            "description": "Per-decision outcomes for the bulk operation."
           }
         },
         "type": "object",
@@ -1601,7 +1633,8 @@
         "properties": {
           "decision_id": {
             "type": "string",
-            "title": "Decision Id"
+            "title": "Decision Id",
+            "description": "Identifier of the decision this result refers to."
           },
           "status": {
             "$ref": "#/components/schemas/BulkItemStatus"
@@ -1615,7 +1648,8 @@
                 "type": "null"
               }
             ],
-            "title": "Detail"
+            "title": "Detail",
+            "description": "Human-readable explanation when the status is not success."
           }
         },
         "type": "object",
@@ -1641,22 +1675,26 @@
         "properties": {
           "cluster_id": {
             "type": "string",
-            "title": "Cluster Id"
+            "title": "Cluster Id",
+            "description": "Unique identifier of the canonical entity cluster."
           },
           "confidence_score": {
             "type": "number",
-            "title": "Confidence Score"
+            "title": "Confidence Score",
+            "description": "Model confidence that this cluster is the correct match."
           },
           "similarity_score": {
             "type": "number",
-            "title": "Similarity Score"
+            "title": "Similarity Score",
+            "description": "Similarity score between the entity mention and the cluster."
           },
           "top_entities": {
             "items": {
               "$ref": "#/components/schemas/EntityMentionPreview"
             },
             "type": "array",
-            "title": "Top Entities"
+            "title": "Top Entities",
+            "description": "Representative entity mentions from this cluster."
           }
         },
         "type": "object",
@@ -1721,27 +1759,32 @@
           "email": {
             "type": "string",
             "format": "email",
-            "title": "Email"
+            "title": "Email",
+            "description": "Email address for the new user account."
           },
           "password": {
             "type": "string",
             "maxLength": 128,
             "minLength": 8,
-            "title": "Password"
+            "title": "Password",
+            "description": "Initial plain-text password (8\u2013128 characters); stored hashed."
           },
           "is_active": {
             "type": "boolean",
             "title": "Is Active",
+            "description": "Whether the account is active upon creation.",
             "default": true
           },
           "is_superuser": {
             "type": "boolean",
             "title": "Is Superuser",
+            "description": "Grant superuser (admin) privileges to the new user.",
             "default": false
           },
           "is_verified": {
             "type": "boolean",
             "title": "Is Verified",
+            "description": "Mark the user's email as verified upon creation.",
             "default": false
           }
         },
@@ -1757,19 +1800,23 @@
         "properties": {
           "total_decisions": {
             "type": "integer",
-            "title": "Total Decisions"
+            "title": "Total Decisions",
+            "description": "Total number of curation decisions recorded."
           },
           "selected_top": {
             "type": "integer",
-            "title": "Selected Top"
+            "title": "Selected Top",
+            "description": "Number of decisions where the top-ranked candidate was accepted."
           },
           "selected_alternative": {
             "type": "integer",
-            "title": "Selected Alternative"
+            "title": "Selected Alternative",
+            "description": "Number of decisions where an alternative candidate was selected."
           },
           "rejected_all": {
             "type": "integer",
-            "title": "Rejected All"
+            "title": "Rejected All",
+            "description": "Number of decisions where all candidates were rejected."
           }
         },
         "type": "object",
@@ -1789,11 +1836,13 @@
               "$ref": "#/components/schemas/DecisionSummary"
             },
             "type": "array",
-            "title": "Results"
+            "title": "Results",
+            "description": "Page of result items."
           },
           "count": {
             "type": "integer",
             "title": "Count",
+            "description": "Number of items returned in this page.",
             "default": 0
           },
           "next_cursor": {
@@ -1805,7 +1854,8 @@
                 "type": "null"
               }
             ],
-            "title": "Next Cursor"
+            "title": "Next Cursor",
+            "description": "Opaque cursor to fetch the next page, or null if there are no more pages."
           }
         },
         "type": "object",
@@ -1821,11 +1871,13 @@
               "$ref": "#/components/schemas/UserActionSummary"
             },
             "type": "array",
-            "title": "Results"
+            "title": "Results",
+            "description": "Page of result items."
           },
           "count": {
             "type": "integer",
             "title": "Count",
+            "description": "Number of items returned in this page.",
             "default": 0
           },
           "next_cursor": {
@@ -1837,7 +1889,8 @@
                 "type": "null"
               }
             ],
-            "title": "Next Cursor"
+            "title": "Next Cursor",
+            "description": "Opaque cursor to fetch the next page, or null if there are no more pages."
           }
         },
         "type": "object",
@@ -1863,7 +1916,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "title": "Id"
+            "title": "Id",
+            "description": "Unique identifier of the curation decision."
           },
           "about_entity_mention": {
             "$ref": "#/components/schemas/EntityMentionPreview"
@@ -1874,7 +1928,8 @@
           "created_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Created At"
+            "title": "Created At",
+            "description": "Timestamp when the decision was created."
           },
           "updated_at": {
             "anyOf": [
@@ -1886,7 +1941,8 @@
                 "type": "null"
               }
             ],
-            "title": "Updated At"
+            "title": "Updated At",
+            "description": "Timestamp of the last update to this decision."
           }
         },
         "type": "object",
@@ -1958,7 +2014,8 @@
                 "type": "null"
               }
             ],
-            "title": "Parsed Representation"
+            "title": "Parsed Representation",
+            "description": "Parsed key-value representation of the entity mention."
           }
         },
         "type": "object",
@@ -1972,7 +2029,8 @@
         "properties": {
           "detail": {
             "type": "string",
-            "title": "Detail"
+            "title": "Detail",
+            "description": "Human-readable description of the error."
           }
         },
         "type": "object",
@@ -1999,11 +2057,13 @@
         "properties": {
           "email": {
             "type": "string",
-            "title": "Email"
+            "title": "Email",
+            "description": "Registered email address of the user."
           },
           "password": {
             "type": "string",
-            "title": "Password"
+            "title": "Password",
+            "description": "Plain-text password for authentication."
           }
         },
         "type": "object",
@@ -2018,7 +2078,8 @@
         "properties": {
           "count": {
             "type": "integer",
-            "title": "Count"
+            "title": "Count",
+            "description": "Total number of items matching the query."
           },
           "previous": {
             "anyOf": [
@@ -2029,7 +2090,8 @@
                 "type": "null"
               }
             ],
-            "title": "Previous"
+            "title": "Previous",
+            "description": "Previous page number, or null if on the first page."
           },
           "next": {
             "anyOf": [
@@ -2040,14 +2102,16 @@
                 "type": "null"
               }
             ],
-            "title": "Next"
+            "title": "Next",
+            "description": "Next page number, or null if on the last page."
           },
           "results": {
             "items": {
               "$ref": "#/components/schemas/CanonicalEntityPreview"
             },
             "type": "array",
-            "title": "Results"
+            "title": "Results",
+            "description": "Page of result items."
           }
         },
         "type": "object",
@@ -2061,7 +2125,8 @@
         "properties": {
           "count": {
             "type": "integer",
-            "title": "Count"
+            "title": "Count",
+            "description": "Total number of items matching the query."
           },
           "previous": {
             "anyOf": [
@@ -2072,7 +2137,8 @@
                 "type": "null"
               }
             ],
-            "title": "Previous"
+            "title": "Previous",
+            "description": "Previous page number, or null if on the first page."
           },
           "next": {
             "anyOf": [
@@ -2083,14 +2149,16 @@
                 "type": "null"
               }
             ],
-            "title": "Next"
+            "title": "Next",
+            "description": "Next page number, or null if on the last page."
           },
           "results": {
             "items": {
               "$ref": "#/components/schemas/UserResponse"
             },
             "type": "array",
-            "title": "Results"
+            "title": "Results",
+            "description": "Page of result items."
           }
         },
         "type": "object",
@@ -2104,7 +2172,8 @@
         "properties": {
           "refresh_token": {
             "type": "string",
-            "title": "Refresh Token"
+            "title": "Refresh Token",
+            "description": "Valid refresh token previously issued by the login endpoint."
           }
         },
         "type": "object",
@@ -2119,13 +2188,15 @@
           "email": {
             "type": "string",
             "format": "email",
-            "title": "Email"
+            "title": "Email",
+            "description": "Email address that will serve as the user's login identifier."
           },
           "password": {
             "type": "string",
             "maxLength": 128,
             "minLength": 8,
-            "title": "Password"
+            "title": "Password",
+            "description": "Plain-text password (8\u2013128 characters); stored hashed."
           }
         },
         "type": "object",
@@ -2140,19 +2211,23 @@
         "properties": {
           "total_entity_mentions": {
             "type": "integer",
-            "title": "Total Entity Mentions"
+            "title": "Total Entity Mentions",
+            "description": "Total number of entity mentions stored in the registry."
           },
           "total_canonical_entities": {
             "type": "integer",
-            "title": "Total Canonical Entities"
+            "title": "Total Canonical Entities",
+            "description": "Total number of distinct canonical entity clusters."
           },
           "average_cluster_size": {
             "type": "number",
-            "title": "Average Cluster Size"
+            "title": "Average Cluster Size",
+            "description": "Average number of entity mentions per canonical entity cluster."
           },
           "resolution_requests": {
             "type": "integer",
-            "title": "Resolution Requests"
+            "title": "Resolution Requests",
+            "description": "Total number of entity resolution requests processed."
           }
         },
         "type": "object",
@@ -2186,15 +2261,18 @@
         "properties": {
           "access_token": {
             "type": "string",
-            "title": "Access Token"
+            "title": "Access Token",
+            "description": "Short-lived JWT used to authenticate API requests."
           },
           "refresh_token": {
             "type": "string",
-            "title": "Refresh Token"
+            "title": "Refresh Token",
+            "description": "Long-lived token used to obtain a new access token."
           },
           "token_type": {
             "type": "string",
             "title": "Token Type",
+            "description": "Token scheme; always 'bearer'.",
             "default": "bearer"
           }
         },
@@ -2210,7 +2288,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "title": "Id"
+            "title": "Id",
+            "description": "Unique identifier of the user action."
           },
           "about_entity_mention": {
             "$ref": "#/components/schemas/EntityMentionPreview"
@@ -2220,7 +2299,8 @@
               "$ref": "#/components/schemas/ClusterReference"
             },
             "type": "array",
-            "title": "Candidates"
+            "title": "Candidates",
+            "description": "Candidate clusters presented to the curator."
           },
           "selected_cluster": {
             "anyOf": [
@@ -2241,7 +2321,8 @@
           "created_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Created At"
+            "title": "Created At",
+            "description": "Timestamp when the user action was recorded."
           },
           "metadata": {
             "anyOf": [
@@ -2250,7 +2331,8 @@
                 "type": "null"
               }
             ],
-            "title": "Metadata"
+            "title": "Metadata",
+            "description": "Optional additional metadata attached to the action."
           }
         },
         "type": "object",
@@ -2279,23 +2361,28 @@
         "properties": {
           "id": {
             "type": "string",
-            "title": "Id"
+            "title": "Id",
+            "description": "Unique identifier of the authenticated user."
           },
           "email": {
             "type": "string",
-            "title": "Email"
+            "title": "Email",
+            "description": "Email address of the authenticated user."
           },
           "is_active": {
             "type": "boolean",
-            "title": "Is Active"
+            "title": "Is Active",
+            "description": "Whether the authenticated user's account is active."
           },
           "is_superuser": {
             "type": "boolean",
-            "title": "Is Superuser"
+            "title": "Is Superuser",
+            "description": "Whether the authenticated user has superuser privileges."
           },
           "is_verified": {
             "type": "boolean",
-            "title": "Is Verified"
+            "title": "Is Verified",
+            "description": "Whether the authenticated user's email has been verified."
           }
         },
         "type": "object",
@@ -2320,7 +2407,8 @@
                 "type": "null"
               }
             ],
-            "title": "Is Active"
+            "title": "Is Active",
+            "description": "Set to true to enable the account or false to disable it."
           },
           "is_superuser": {
             "anyOf": [
@@ -2331,7 +2419,8 @@
                 "type": "null"
               }
             ],
-            "title": "Is Superuser"
+            "title": "Is Superuser",
+            "description": "Set to true to grant or false to revoke superuser privileges."
           },
           "is_verified": {
             "anyOf": [
@@ -2342,7 +2431,8 @@
                 "type": "null"
               }
             ],
-            "title": "Is Verified"
+            "title": "Is Verified",
+            "description": "Set to true to mark the email as verified or false to unverify."
           }
         },
         "type": "object",
@@ -2353,28 +2443,34 @@
         "properties": {
           "id": {
             "type": "string",
-            "title": "Id"
+            "title": "Id",
+            "description": "Unique identifier of the user."
           },
           "email": {
             "type": "string",
-            "title": "Email"
+            "title": "Email",
+            "description": "Email address of the user."
           },
           "is_active": {
             "type": "boolean",
-            "title": "Is Active"
+            "title": "Is Active",
+            "description": "Whether the user account is active and can log in."
           },
           "is_superuser": {
             "type": "boolean",
-            "title": "Is Superuser"
+            "title": "Is Superuser",
+            "description": "Whether the user has superuser (admin) privileges."
           },
           "is_verified": {
             "type": "boolean",
-            "title": "Is Verified"
+            "title": "Is Verified",
+            "description": "Whether the user's email address has been verified."
           },
           "created_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Created At"
+            "title": "Created At",
+            "description": "Timestamp when the user account was created."
           },
           "updated_at": {
             "anyOf": [
@@ -2386,7 +2482,8 @@
                 "type": "null"
               }
             ],
-            "title": "Updated At"
+            "title": "Updated At",
+            "description": "Timestamp of the last update to the user account."
           }
         },
         "type": "object",

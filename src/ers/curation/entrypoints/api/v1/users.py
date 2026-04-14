@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult
 from ers.curation.entrypoints.api.auth import AdminUser, CurrentUser, VerifiedUser
@@ -25,6 +25,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
         403: {"model": ErrorResponse},
         409: {"model": ErrorResponse},
     },
+    response_description="The newly created user.",
 )
 async def create_user(
     body: CreateUserRequest,
@@ -38,6 +39,7 @@ async def create_user(
 @router.get(
     "",
     responses={400: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+    response_description="Paginated list of users.",
 )
 async def list_users(
     pagination: Pagination,
@@ -57,9 +59,10 @@ async def list_users(
         404: {"model": ErrorResponse},
         409: {"model": ErrorResponse},
     },
+    response_description="The updated user.",
 )
 async def patch_user(
-    user_id: str,
+    user_id: Annotated[str, Path(description="Unique identifier of the user to update.")],
     body: UserPatchRequest,
     _admin: AdminUser,
     service: Annotated[UserManagementService, Depends(get_user_management_service)],
@@ -71,6 +74,7 @@ async def patch_user(
 @router.get(
     "/me",
     responses={401: {"model": ErrorResponse}},
+    response_description="The currently authenticated user.",
 )
 async def get_current_user(
     user: CurrentUser,

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated
 
 from erspec.models.core import UserActionType
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 
 from ers.commons.domain.data_transfer_objects import CursorPage, PaginatedResult
 from ers.curation.domain.data_transfer_objects import (
@@ -25,16 +25,27 @@ router = APIRouter(prefix="/user-actions", tags=["User Actions"])
 @router.get(
     "",
     responses={400: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+    response_description="Cursor-paginated list of user actions.",
 )
 async def list_user_actions(
     cursor_params: CursorPagination,
     _user: VerifiedUser,
     service: Annotated[UserActionService, Depends(get_user_action_service)],
-    action_type: Annotated[UserActionType | None, Query()] = None,
-    actor: Annotated[str | None, Query()] = None,
-    time_range_start: Annotated[datetime | None, Query()] = None,
-    time_range_end: Annotated[datetime | None, Query()] = None,
-    ordering: Annotated[BaseOrdering | None, Query()] = None,
+    action_type: Annotated[
+        UserActionType | None, Query(description="Filter by type of user action.")
+    ] = None,
+    actor: Annotated[str | None, Query(description="Filter by actor identifier or email.")] = None,
+    time_range_start: Annotated[
+        datetime | None,
+        Query(description="Include only actions recorded at or after this timestamp."),
+    ] = None,
+    time_range_end: Annotated[
+        datetime | None,
+        Query(description="Include only actions recorded at or before this timestamp."),
+    ] = None,
+    ordering: Annotated[
+        BaseOrdering | None, Query(description="Sort order for the returned actions.")
+    ] = None,
 ) -> CursorPage[UserActionSummary]:
     """List cursor-paginated user actions with optional filtering."""
     filters = None
@@ -55,9 +66,10 @@ async def list_user_actions(
         403: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
     },
+    response_description="The canonical entity cluster selected by the curator, or null if none was selected.",
 )
 async def get_selected_cluster(
-    action_id: str,
+    action_id: Annotated[str, Path(description="Unique identifier of the user action.")],
     _user: VerifiedUser,
     service: Annotated[UserActionService, Depends(get_user_action_service)],
     canonical_service: Annotated[CanonicalEntityService, Depends(get_canonical_entity_service)],
@@ -72,9 +84,10 @@ async def get_selected_cluster(
         403: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
     },
+    response_description="Paginated candidate cluster previews for the given user action.",
 )
 async def get_candidates(
-    action_id: str,
+    action_id: Annotated[str, Path(description="Unique identifier of the user action.")],
     pagination: Pagination,
     _user: VerifiedUser,
     service: Annotated[UserActionService, Depends(get_user_action_service)],
