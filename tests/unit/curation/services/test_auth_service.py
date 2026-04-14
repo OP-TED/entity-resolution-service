@@ -9,7 +9,7 @@ from ers.users.domain.data_transfer_objects import (
     RegisterRequest,
     UserContext,
 )
-from ers.users.domain.exceptions import AuthenticationError
+from ers.users.domain.exceptions import AuthenticationError, UserDeactivatedError
 from ers.users.services.auth_service import AuthService
 from ers.users.services.token_service import TokenService
 from tests.unit.factories import UserFactory
@@ -119,7 +119,7 @@ class TestLogin:
         with pytest.raises(AuthenticationError, match="Invalid credentials"):
             await auth_service.login(LoginRequest(email="nobody@example.com", password="pw"))
 
-    async def test_login_inactive_user_raises(
+    async def test_login_inactive_user_raises_deactivated_error(
         self,
         auth_service: AuthService,
         user_repository: AsyncMock,
@@ -129,7 +129,7 @@ class TestLogin:
         user_repository.find_by_email.return_value = user
         password_hasher.verify.return_value = True
 
-        with pytest.raises(AuthenticationError, match="Invalid credentials"):
+        with pytest.raises(UserDeactivatedError, match="User account is deactivated"):
             await auth_service.login(LoginRequest(email=user.email, password="pw"))
 
 

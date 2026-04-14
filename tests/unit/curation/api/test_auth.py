@@ -10,7 +10,7 @@ from ers.users.domain.data_transfer_objects import (
     UserContext,
     UserResponse,
 )
-from ers.users.domain.exceptions import AuthenticationError
+from ers.users.domain.exceptions import AuthenticationError, UserDeactivatedError
 
 AUTH_URL = "/api/v1/auth"
 
@@ -106,6 +106,21 @@ class TestLoginEndpoint:
         )
 
         assert response.status_code == 401
+
+    async def test_login_deactivated_user_returns_403(
+        self,
+        client: AsyncClient,
+        auth_service: AsyncMock,
+    ) -> None:
+        auth_service.login.side_effect = UserDeactivatedError()
+
+        response = await client.post(
+            f"{AUTH_URL}/login",
+            json={"email": "user@example.com", "password": "pw"},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == "User account is deactivated"
 
 
 class TestRefreshEndpoint:

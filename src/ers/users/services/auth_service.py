@@ -11,7 +11,7 @@ from ers.users.domain.data_transfer_objects import (
     UserContext,
     UserResponse,
 )
-from ers.users.domain.exceptions import AuthenticationError
+from ers.users.domain.exceptions import AuthenticationError, UserDeactivatedError
 from ers.users.domain.users import User
 from ers.users.services.token_service import TokenService
 
@@ -63,7 +63,7 @@ class AuthService:
             raise AuthenticationError("Invalid credentials")
 
         if not user.is_active:
-            raise AuthenticationError("Invalid credentials")
+            raise UserDeactivatedError
 
         return self._issue_tokens(user)
 

@@ -12,6 +12,7 @@ from ers.users.domain.exceptions import (
     AuthenticationError,
     AuthorizationError,
     LastAdminError,
+    UserDeactivatedError,
 )
 
 
@@ -47,6 +48,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     handlers = {
         NotFoundError: 404,
         AuthenticationError: 401,
+        UserDeactivatedError: 403,
         AuthorizationError: 403,
         AlreadyCuratedError: 409,
         InvalidClusterError: 409,

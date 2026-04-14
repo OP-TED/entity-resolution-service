@@ -43,7 +43,7 @@ Feature: Authentication
   Scenario: Log in as an inactive user
     Given a registered user exists who has been deactivated
     When the user logs in with correct credentials
-    Then the login is rejected with an authentication error
+    Then the login is rejected because the account is deactivated
 
   # --- Token refresh ---
 

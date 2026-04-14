@@ -293,6 +293,12 @@ def new_tokens_returned(response: Any) -> None:
     assert "refresh_token" in data
 
 
+@then("the login is rejected because the account is deactivated")
+def login_rejected_deactivated(response: Any) -> None:
+    assert response.status_code == 403
+    assert response.json()["detail"] == "User account is deactivated"
+
+
 @then("the refresh is rejected with an authentication error")
 def refresh_rejected(response: Any) -> None:
     assert response.status_code == 401

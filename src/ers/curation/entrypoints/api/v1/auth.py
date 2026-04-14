@@ -33,7 +33,11 @@ async def register(
 @router.post(
     "/login",
     response_model=TokenResponse,
-    responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse, "description": "User account is deactivated"},
+    },
 )
 async def login(
     body: LoginRequest,

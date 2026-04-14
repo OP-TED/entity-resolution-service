@@ -9,6 +9,13 @@ class AuthorizationError(DomainError):
     """Raised when the user lacks required permissions."""
 
 
+class UserDeactivatedError(DomainError):
+    """Raised when a deactivated user attempts to log in."""
+
+    def __init__(self) -> None:
+        super().__init__("User account is deactivated")
+
+
 class LastAdminError(DomainError):
     """Raised when attempting to deactivate the last active administrator."""
 
