@@ -114,6 +114,33 @@ class TestListDecisions:
 
         assert response.status_code == 400
 
+    async def test_rejects_invalid_entity_type(
+        self,
+        client: AsyncClient,
+    ) -> None:
+        response = await client.get(BASE_URL, params={"entity_type": "INVALID_TYPE"})
+
+        assert response.status_code == 400
+        assert "INVALID_TYPE" in response.json()["detail"]
+        assert "ORGANISATION" in response.json()["detail"]
+        assert "PROCEDURE" in response.json()["detail"]
+
+    async def test_accepts_valid_entity_type(
+        self,
+        client: AsyncClient,
+        decision_curation_service: AsyncMock,
+    ) -> None:
+        decision_curation_service.list_decisions.return_value = CursorPage(
+            results=[], next_cursor=None
+        )
+
+        response = await client.get(BASE_URL, params={"entity_type": "ORGANISATION"})
+
+        assert response.status_code == 200
+        call_args = decision_curation_service.list_decisions.call_args
+        filters = call_args.kwargs["filters"]
+        assert filters.entity_type == "ORGANISATION"
+
 
 class TestAcceptDecision:
     async def test_accept_returns_204(

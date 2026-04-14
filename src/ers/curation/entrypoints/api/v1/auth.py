@@ -18,7 +18,6 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 @router.post(
     "/register",
-    response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
 )
@@ -32,7 +31,6 @@ async def register(
 
 @router.post(
     "/login",
-    response_model=TokenResponse,
     responses={
         400: {"model": ErrorResponse},
         401: {"model": ErrorResponse},
@@ -49,7 +47,6 @@ async def login(
 
 @router.post(
     "/refresh",
-    response_model=TokenResponse,
     responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}},
 )
 async def refresh(

@@ -7,6 +7,7 @@ from ers.commons.services.exceptions import ApplicationError, NotFoundError
 from ers.curation.domain.exceptions import (
     AlreadyCuratedError,
     InvalidClusterError,
+    InvalidEntityTypeError,
 )
 from ers.users.domain.exceptions import (
     AuthenticationError,
@@ -52,6 +53,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         AuthorizationError: 403,
         AlreadyCuratedError: 409,
         InvalidClusterError: 409,
+        InvalidEntityTypeError: 400,
         InvalidCursorError: 400,
         LastAdminError: 409,
         ApplicationError: 400,

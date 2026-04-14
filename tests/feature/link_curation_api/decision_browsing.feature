@@ -80,6 +80,16 @@ Feature: Decision browsing and filtering
     When the curator searches for "zzz_nonexistent_entity"
     Then an empty result set is returned
 
+  # --- Entity type validation ---
+
+  Scenario: Reject invalid entity type filter
+    When the curator filters decisions by an unsupported entity type "BANANA"
+    Then the request is rejected with a validation error mentioning valid entity types
+
+  Scenario: List available entity types
+    When the curator requests the list of available entity types
+    Then the configured entity types are returned in sorted order
+
   # --- Pagination ---
 
   Scenario: Navigate through decisions with cursor pagination

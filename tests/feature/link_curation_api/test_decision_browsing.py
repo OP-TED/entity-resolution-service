@@ -90,6 +90,16 @@ def test_combined_filters():
     pass
 
 
+@scenario(FEATURE, "Reject invalid entity type filter")
+def test_reject_invalid_entity_type():
+    pass
+
+
+@scenario(FEATURE, "List available entity types")
+def test_list_entity_types():
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -491,3 +501,40 @@ def combined_filter_applied(
     filters = call_args.kwargs["filters"]
     assert filters.entity_type is not None
     assert filters.confidence_max is not None
+
+
+# --- Entity type validation ---
+
+
+ENTITY_TYPES_URL = "/api/v1/curation/entity-types"
+
+
+@when(
+    parsers.parse('the curator filters decisions by an unsupported entity type "{entity_type}"'),
+    target_fixture="response",
+)
+def filter_by_invalid_entity_type(client: TestClient, entity_type: str) -> Any:
+    return client.get(DECISIONS_URL, params={"entity_type": entity_type})
+
+
+@then("the request is rejected with a validation error mentioning valid entity types")
+def invalid_entity_type_rejected(response: Any) -> None:
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "BANANA" in detail
+    assert "ORGANISATION" in detail
+    assert "PROCEDURE" in detail
+
+
+@when(
+    "the curator requests the list of available entity types",
+    target_fixture="response",
+)
+def request_entity_types(client: TestClient) -> Any:
+    return client.get(ENTITY_TYPES_URL)
+
+
+@then("the configured entity types are returned in sorted order")
+def entity_types_returned(response: Any) -> None:
+    assert response.status_code == 200
+    assert response.json() == ["ORGANISATION", "PROCEDURE"]

@@ -66,3 +66,12 @@ class TestGetStatistics:
         call_args = statistics_service.get_statistics.call_args
         filters = call_args.kwargs["filters"]
         assert filters.entity_type == "ORGANISATION"
+
+    async def test_rejects_invalid_entity_type(
+        self,
+        client: AsyncClient,
+    ) -> None:
+        response = await client.get(BASE_URL, params={"entity_type": "INVALID_TYPE"})
+
+        assert response.status_code == 400
+        assert "INVALID_TYPE" in response.json()["detail"]

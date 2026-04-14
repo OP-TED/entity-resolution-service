@@ -31,7 +31,6 @@ router = APIRouter(prefix="/curation/decisions", tags=["Decisions"])
 
 @router.get(
     "",
-    response_model=CursorPage[DecisionSummary],
     responses={400: {"model": ErrorResponse}},
 )
 async def list_decisions(
@@ -46,7 +45,6 @@ async def list_decisions(
 
 @router.get(
     "/{decision_id}/proposed-canonical-entity",
-    response_model=CanonicalEntityPreview,
     responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
 )
 async def get_proposed_canonical_entity(
@@ -60,7 +58,6 @@ async def get_proposed_canonical_entity(
 
 @router.get(
     "/{decision_id}/alternative-canonical-entities",
-    response_model=PaginatedResult[CanonicalEntityPreview],
     responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
 )
 async def get_alternative_canonical_entities(
@@ -137,7 +134,6 @@ async def assign_decision(
 
 @router.post(
     "/bulk-accept",
-    response_model=BulkActionResponse,
     responses={400: {"model": ErrorResponse}},
 )
 async def bulk_accept_decisions(
@@ -151,7 +147,6 @@ async def bulk_accept_decisions(
 
 @router.post(
     "/bulk-reject",
-    response_model=BulkActionResponse,
     responses={400: {"model": ErrorResponse}},
 )
 async def bulk_reject_decisions(

@@ -35,6 +35,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.redis_client = redis_client
 
+    # --- RDF config (loaded once, shared via app.state) ---
+    from ers.rdf_mention_parser.adapter.rdf_mapping_config_reader import RDFConfigReader
+
+    app.state.rdf_config = RDFConfigReader.from_file(config.RDF_MENTION_CONFIG_FILE)
+
     await _seed_admin_user(app.state.mongo_db)
 
     try:

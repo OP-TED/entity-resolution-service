@@ -24,6 +24,7 @@ from ers.curation.services import (
     UserActionService,
 )
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
+from ers.rdf_mention_parser.domain.rdf_mapping_config import RDFMappingConfig
 from ers.users.adapters import MongoUserRepository, UserRepository
 from ers.users.services import AuthService, UserManagementService
 from ers.users.services.token_service import JWTTokenService, TokenService
@@ -31,6 +32,11 @@ from ers.users.services.token_service import JWTTokenService, TokenService
 
 def _get_database(request: Request) -> AsyncDatabase[Any]:
     return cast(AsyncDatabase[Any], request.app.state.mongo_db)
+
+
+def get_rdf_config(request: Request) -> RDFMappingConfig:
+    """Return the RDF mapping config from app.state (loaded once in lifespan)."""
+    return cast(RDFMappingConfig, request.app.state.rdf_config)
 
 
 def _get_redis_client(request: Request) -> RedisEREClient:

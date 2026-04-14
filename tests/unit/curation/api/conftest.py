@@ -14,6 +14,7 @@ from ers.curation.entrypoints.api.dependencies import (
     get_canonical_entity_service,
     get_decision_curation_service,
     get_entity_service,
+    get_rdf_config,
     get_statistics_service,
     get_user_action_service,
     get_user_management_service,
@@ -24,6 +25,10 @@ from ers.curation.services import (
     EntityService,
     StatisticsService,
     UserActionService,
+)
+from ers.rdf_mention_parser.domain.rdf_mapping_config import (
+    EntityTypeConfig,
+    RDFMappingConfig,
 )
 from ers.users.domain.data_transfer_objects import UserContext
 from ers.users.services import AuthService, UserManagementService
@@ -40,6 +45,26 @@ TEST_USER_CONTEXT = UserContext(
 @asynccontextmanager
 async def _noop_lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
+
+
+@pytest.fixture
+def rdf_config() -> RDFMappingConfig:
+    return RDFMappingConfig(
+        namespaces={
+            "org": "http://www.w3.org/ns/org#",
+            "epo": "http://data.europa.eu/a4g/ontology#",
+        },
+        entity_types={
+            "ORGANISATION": EntityTypeConfig(
+                rdf_type="org:Organization",
+                fields={"legal_name": "epo:hasLegalName"},
+            ),
+            "PROCEDURE": EntityTypeConfig(
+                rdf_type="epo:Procedure",
+                fields={"title": "epo:hasTitle"},
+            ),
+        },
+    )
 
 
 @pytest.fixture
@@ -80,6 +105,7 @@ def user_action_service() -> AsyncMock:
 @pytest.fixture
 def app(
     monkeypatch,
+    rdf_config: RDFMappingConfig,
     decision_curation_service: AsyncMock,
     canonical_entity_service: AsyncMock,
     entity_service: AsyncMock,
@@ -94,6 +120,7 @@ def app(
     monkeypatch.setenv("DEBUG", "true")
     app = create_app()
     app.router.lifespan_context = _noop_lifespan
+    app.dependency_overrides[get_rdf_config] = lambda: rdf_config
     app.dependency_overrides[get_decision_curation_service] = lambda: decision_curation_service
     app.dependency_overrides[get_canonical_entity_service] = lambda: canonical_entity_service
     app.dependency_overrides[get_entity_service] = lambda: entity_service

@@ -19,7 +19,6 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.post(
     "",
-    response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     responses={
         400: {"model": ErrorResponse},
@@ -38,7 +37,6 @@ async def create_user(
 
 @router.get(
     "",
-    response_model=PaginatedResult[UserResponse],
     responses={400: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
 )
 async def list_users(
@@ -53,7 +51,6 @@ async def list_users(
 
 @router.patch(
     "/{user_id}",
-    response_model=UserResponse,
     responses={
         400: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
@@ -73,7 +70,6 @@ async def patch_user(
 
 @router.get(
     "/me",
-    response_model=UserContext,
     responses={401: {"model": ErrorResponse}},
 )
 async def get_current_user(

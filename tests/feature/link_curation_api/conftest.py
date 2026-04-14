@@ -30,6 +30,7 @@ from ers.curation.entrypoints.api.dependencies import (
     get_canonical_entity_service,
     get_decision_curation_service,
     get_entity_service,
+    get_rdf_config,
     get_statistics_service,
     get_user_action_service,
     get_user_management_service,
@@ -42,6 +43,10 @@ from ers.curation.services import (
     UserActionService,
 )
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
+from ers.rdf_mention_parser.domain.rdf_mapping_config import (
+    EntityTypeConfig,
+    RDFMappingConfig,
+)
 from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.data_transfer_objects import UserContext
@@ -229,7 +234,28 @@ async def _noop_lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 @pytest.fixture
+def rdf_config() -> RDFMappingConfig:
+    return RDFMappingConfig(
+        namespaces={
+            "org": "http://www.w3.org/ns/org#",
+            "epo": "http://data.europa.eu/a4g/ontology#",
+        },
+        entity_types={
+            "ORGANISATION": EntityTypeConfig(
+                rdf_type="org:Organization",
+                fields={"legal_name": "epo:hasLegalName"},
+            ),
+            "PROCEDURE": EntityTypeConfig(
+                rdf_type="epo:Procedure",
+                fields={"title": "epo:hasTitle"},
+            ),
+        },
+    )
+
+
+@pytest.fixture
 def app(
+    rdf_config: RDFMappingConfig,
     decision_curation_service: DecisionCurationService,
     canonical_entity_service: CanonicalEntityService,
     entity_service: EntityService,
@@ -240,6 +266,7 @@ def app(
 ) -> FastAPI:
     application = create_app()
     application.router.lifespan_context = _noop_lifespan
+    application.dependency_overrides[get_rdf_config] = lambda: rdf_config
     application.dependency_overrides[get_decision_curation_service] = lambda: (
         decision_curation_service
     )

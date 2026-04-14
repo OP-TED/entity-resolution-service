@@ -15,6 +15,9 @@ from ers.curation.domain.data_transfer_objects import (
     DecisionOrdering,
     StatisticsFilters,
 )
+from ers.curation.domain.exceptions import InvalidEntityTypeError
+from ers.curation.entrypoints.api.dependencies import get_rdf_config
+from ers.rdf_mention_parser.domain.rdf_mapping_config import RDFMappingConfig
 
 
 class ErrorResponse(BaseModel):
@@ -33,7 +36,15 @@ def get_pagination(
     return PaginationParams(page=page, per_page=per_page)
 
 
+def _validate_entity_type(entity_type: str | None, rdf_config: RDFMappingConfig) -> None:
+    """Reject entity_type values not present in the RDF mapping config."""
+    if entity_type is not None and entity_type not in rdf_config.entity_types:
+        raise InvalidEntityTypeError(entity_type, list(rdf_config.entity_types.keys()))
+
+
 def get_decision_filters(
+    *,
+    rdf_config: Annotated[RDFMappingConfig, Depends(get_rdf_config)],
     entity_type: Annotated[str | None, Query(description="Filter by entity type")] = None,
     confidence_min: Annotated[
         float | None, Query(ge=0, le=1, description="Minimum confidence")
@@ -50,6 +61,7 @@ def get_decision_filters(
     search: Annotated[str | None, Query(description="Search text")] = None,
     ordering: Annotated[DecisionOrdering | None, Query(description="Ordering field")] = None,
 ) -> DecisionFilters:
+    _validate_entity_type(entity_type, rdf_config)
     return DecisionFilters(
         entity_type=entity_type,
         confidence_min=confidence_min,
@@ -62,10 +74,13 @@ def get_decision_filters(
 
 
 def get_statistics_filters(
+    *,
+    rdf_config: Annotated[RDFMappingConfig, Depends(get_rdf_config)],
     entity_type: Annotated[str | None, Query(description="Filter by entity type")] = None,
     timeframe_start: Annotated[datetime | None, Query(description="Start of timeframe")] = None,
     timeframe_end: Annotated[datetime | None, Query(description="End of timeframe")] = None,
 ) -> StatisticsFilters:
+    _validate_entity_type(entity_type, rdf_config)
     return StatisticsFilters(
         entity_type=entity_type,
         timeframe_start=timeframe_start,
