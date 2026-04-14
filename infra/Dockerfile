@@ -1,37 +1,43 @@
 ARG ENVIRONMENT=production
-
+ 
+ARG ENVIRONMENT=production
+ 
 # =============================================================================
 # Builder stage: install dependencies
 # =============================================================================
 FROM python:3.14-slim AS builder
-
+ 
 ARG ENVIRONMENT
-
+ 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    POETRY_VERSION=2.3.1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=true \
-    POETRY_NO_INTERACTION=1
-
+     PYTHONUNBUFFERED=1 \
+     POETRY_VERSION=2.3.1 \
+     POETRY_VIRTUALENVS_IN_PROJECT=true \
+     POETRY_NO_INTERACTION=1
+ 
+# Install git for private/git dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+ 
 RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
-
+ 
 WORKDIR /app
-
+ 
 COPY pyproject.toml poetry.lock LICENSE ./
-
+ 
 RUN if [ "$ENVIRONMENT" = "development" ]; then \
       poetry install --no-root; \
     else \
       poetry install --no-root --only main; \
     fi
-
+ 
 COPY . .
-
+ 
 RUN if [ "$ENVIRONMENT" = "development" ]; then \
       poetry install; \
     else \
       poetry install --only main; \
     fi
+
 
 # =============================================================================
 # Runtime stage: minimal image
