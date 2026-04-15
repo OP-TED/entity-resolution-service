@@ -132,6 +132,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "User account is deactivated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -821,6 +831,37 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/curation/entity-types": {
+      "get": {
+        "tags": [
+          "Entity Types"
+        ],
+        "summary": "List Entity Types",
+        "description": "Return the list of configured entity types.",
+        "operationId": "list_entity_types_api_v1_curation_entity_types_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response List Entity Types Api V1 Curation Entity Types Get"
                 }
               }
             }
@@ -2433,11 +2474,25 @@
             ],
             "title": "Is Verified",
             "description": "Set to true to mark the email as verified or false to unverify."
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password",
+            "description": "New plain-text password (8\u2013128 characters); stored hashed."
           }
         },
         "type": "object",
         "title": "UserPatchRequest",
-        "description": "Admin request to update user flags."
+        "description": "Admin request to update user attributes."
       },
       "UserResponse": {
         "properties": {
