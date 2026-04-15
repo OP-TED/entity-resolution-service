@@ -5,7 +5,7 @@ END_BUILD_PRINT = \e[0m
 
 PROJECT_PATH = $(shell pwd)
 SRC_PATH = ${PROJECT_PATH}/src
-TEST_PATH = ${PROJECT_PATH}/tests
+TEST_PATH = ${PROJECT_PATH}/test
 BUILD_PATH = ${PROJECT_PATH}/dist
 PACKAGE_NAME = ers
 COMPOSE_FILE = ${PROJECT_PATH}/infra/compose.dev.yaml
