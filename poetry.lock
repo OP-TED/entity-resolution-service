@@ -730,9 +730,9 @@ pydantic = ">=2.10.6,<3.0.0"
 
 [package.source]
 type = "git"
-url = "https://github.com/meaningfy-ws/entity-resolution-spec.git"
+url = "https://github.com/OP-TED/entity-resolution-spec.git"
 reference = "develop"
-resolved_reference = "1448fa0a3b532923f4bc2092ad875b494db5b0d4"
+resolved_reference = "539f9978fa86892bd59bea06ee559896eb81b541"
 
 [[package]]
 name = "et-xmlfile"
@@ -3870,4 +3870,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.15"
-content-hash = "edd7d0395fb3a8c231873d8af628cb2c877b239a017dcb9e44ae57e71678378b"
+content-hash = "6d56106054d4bc19d1d2627806e5a5c19331dc79eb44abfb50f19ab608fde622"
