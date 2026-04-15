@@ -36,14 +36,8 @@ def make_cluster(cluster_id="cluster-it-001", conf=0.95, sim=0.90):
 
 
 def truncate_ms(dt: datetime) -> datetime:
-    """Truncate microseconds to milliseconds and strip timezone info.
-
-    MongoDB stores datetimes as naive UTC (millisecond precision). Stripping
-    tzinfo here lets us compare the stored value directly against the
-    timezone-aware input without a TypeError, because both sides become naive
-    UTC after the round-trip.
-    """
-    return dt.replace(microsecond=(dt.microsecond // 1000) * 1000, tzinfo=None)
+    """Truncate microseconds to milliseconds (MongoDB stores ms precision)."""
+    return dt.replace(microsecond=(dt.microsecond // 1000) * 1000)
 
 
 def make_response(

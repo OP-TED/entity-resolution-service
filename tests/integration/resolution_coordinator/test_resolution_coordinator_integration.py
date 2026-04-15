@@ -13,11 +13,12 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from erspec.models.core import ClusterReference, Decision, EntityMention, EntityMentionIdentifier
+from erspec.models.core import ClusterReference, EntityMention, EntityMentionIdentifier
 
 from ers.commons.adapters.hasher import SHA256ContentHasher
 from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.commons.adapters.redis_client import RedisEREClient
+from ers.commons.domain.data_transfer_objects import ResolutionOutcome
 from ers.ere_contract_client.domain.errors import RedisConnectionError
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.request_registry.adapters.records_repository import (
@@ -152,10 +153,11 @@ async def test_it001_full_happy_path(coordinator, decision_service, waiter):
         with patch(_CONFIG_PATH, _FAST_CONFIG):
             return await coordinator.resolve_single(mention)
 
-    result = await _run()
+    decision, outcome = await _run()
 
-    assert result is not None
-    assert result.current_placement.cluster_id == "cl-it-canonical"
+    assert decision is not None
+    assert outcome == ResolutionOutcome.CANONICAL
+    assert decision.current_placement.cluster_id == "cl-it-canonical"
 
     stored = await decision_service.get_decision_by_triad(mention.identifiedBy)
     assert stored is not None
@@ -173,11 +175,12 @@ async def test_it002_timeout_issues_provisional(coordinator, decision_service):
     mention = make_mention(req="req-it-002")
 
     with patch(_CONFIG_PATH, _FAST_CONFIG):
-        result = await coordinator.resolve_single(mention)
+        decision, outcome = await coordinator.resolve_single(mention)
 
     expected_prov_id = derive_provisional_cluster_id(mention.identifiedBy)
-    assert result is not None
-    assert result.current_placement.cluster_id == expected_prov_id
+    assert decision is not None
+    assert outcome == ResolutionOutcome.PROVISIONAL
+    assert decision.current_placement.cluster_id == expected_prov_id
 
     stored = await decision_service.get_decision_by_triad(mention.identifiedBy)
     assert stored is not None
@@ -205,10 +208,11 @@ async def test_it003_redis_down_issues_provisional(
             decision_store_service=decision_service,
             waiter=waiter,
         )
-        result = await svc.resolve_single(make_mention(req="req-it-003"))
+        decision, outcome = await svc.resolve_single(make_mention(req="req-it-003"))
 
     expected_prov_id = derive_provisional_cluster_id(make_identifier(req="req-it-003"))
-    assert result.current_placement.cluster_id == expected_prov_id
+    assert outcome == ResolutionOutcome.PROVISIONAL
+    assert decision.current_placement.cluster_id == expected_prov_id
 
     stored = await decision_service.get_decision_by_triad(make_identifier(req="req-it-003"))
     assert stored is not None
@@ -242,9 +246,10 @@ async def test_it004_idempotent_replay(
             decision_store_service=decision_service,
             waiter=waiter,
         )
-        result = await svc.resolve_single(mention)
+        decision, outcome = await svc.resolve_single(mention)
 
-    assert result.current_placement.cluster_id == "cl-pre-seeded"
+    assert outcome == ResolutionOutcome.CANONICAL
+    assert decision.current_placement.cluster_id == "cl-pre-seeded"
     counting_publish.publish_request.assert_not_called()
 
 
@@ -293,7 +298,7 @@ async def test_it005_concurrent_identical_requests(
 
     results = await asyncio.gather(*tasks)
 
-    cluster_ids = {r.current_placement.cluster_id for r in results}
+    cluster_ids = {decision.current_placement.cluster_id for decision, _ in results}
     assert len(cluster_ids) == 1, f"Expected 1 unique cluster, got: {cluster_ids}"
     assert "cl-concurrent" in cluster_ids
 
@@ -344,8 +349,10 @@ async def test_it006_bulk_decomposition(
 
     assert len(results) == 3
     for i, result in enumerate(results):
-        assert isinstance(result, Decision), f"Index {i} returned {type(result)}"
-        assert result.current_placement.cluster_id == f"cl-bulk-{i}"
+        assert isinstance(result, tuple), f"Index {i} returned {type(result)}"
+        decision, outcome = result
+        assert outcome == ResolutionOutcome.CANONICAL
+        assert decision.current_placement.cluster_id == f"cl-bulk-{i}"
 
 
 # ---------------------------------------------------------------------------

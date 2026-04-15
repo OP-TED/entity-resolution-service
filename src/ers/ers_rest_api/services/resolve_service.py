@@ -2,7 +2,6 @@
 
 from erspec.models.core import Decision, EntityMentionIdentifier
 
-from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
 from ers.ers_rest_api.domain.errors import ErrorCode, ErrorResponse
 from ers.ers_rest_api.domain.resolution import (
@@ -16,27 +15,19 @@ from ers.resolution_coordinator.services.resolution_coordinator_service import (
 )
 
 
-def _is_provisional(decision: Decision) -> bool:
-    """Check whether a decision carries a provisional singleton ID."""
-    expected = derive_provisional_cluster_id(decision.about_entity_mention)
-    return bool(decision.current_placement.cluster_id == expected)
-
-
-def _map_decision(decision: Decision) -> EntityMentionResolutionResult:
-    """Map a coordinator Decision to the API response DTO."""
+def _map_decision(
+    decision: Decision, outcome: ResolutionOutcome
+) -> EntityMentionResolutionResult:
+    """Map a coordinator Decision and its outcome to the API response DTO."""
     return EntityMentionResolutionResult(
         identified_by=decision.about_entity_mention,
         canonical_entity_id=decision.current_placement.cluster_id,
-        status=(
-            ResolutionOutcome.PROVISIONAL
-            if _is_provisional(decision)
-            else ResolutionOutcome.CANONICAL
-        ),
+        status=outcome,
     )
 
 
 def _map_error(
-    identifier: EntityMentionIdentifier, exc: Exception
+    identifier: EntityMentionIdentifier, exc: BaseException
 ) -> EntityMentionResolutionResult:
     """Map a failed resolution to an error result DTO."""
     return EntityMentionResolutionResult(
@@ -62,8 +53,8 @@ class ResolveService:
         request: EntityMentionResolutionRequest,
     ) -> EntityMentionResolutionResult:
         """Resolve an entity mention and return the cluster assignment."""
-        decision = await self._coordinator.resolve_single(request.mention)
-        return _map_decision(decision)
+        decision, outcome = await self._coordinator.resolve_single(request.mention)
+        return _map_decision(decision, outcome)
 
     async def handle_bulk_resolve(
         self,
@@ -74,8 +65,9 @@ class ResolveService:
         results = await self._coordinator.resolve_bulk(mentions)
         mapped: list[EntityMentionResolutionResult] = []
         for i, result in enumerate(results):
-            if isinstance(result, Decision):
-                mapped.append(_map_decision(result))
+            if not isinstance(result, BaseException):
+                decision, outcome = result
+                mapped.append(_map_decision(decision, outcome))
             else:
                 mapped.append(_map_error(mentions[i].identifiedBy, result))
         return BulkResolveResponse(results=mapped)

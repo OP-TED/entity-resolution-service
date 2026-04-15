@@ -431,8 +431,8 @@ def ere_timeout(ctx):
     prov_decision = _make_decision(
         identifier,
         cluster_id=prov_id,
-        confidence=1.0,
-        similarity=1.0,
+        confidence=0.0,
+        similarity=0.0,
     )
     ctx["decision_svc"].get_decision_by_triad = AsyncMock(return_value=None)
     ctx["decision_svc"].store_decision = AsyncMock(return_value=prov_decision)
@@ -489,16 +489,20 @@ def original_content_with_context(ctx, content_fixture, context):
 
 @given(
     parsers.parse(
-        'the original resolution returned "{cluster_id}" with status '
+        'the original resolution returned "{cluster_id}" with initial status '
         '"{status}"'
     )
 )
 def original_resolution(ctx, cluster_id, status):
-    """Seed the Decision Store with the prior resolution result."""
+    """Seed the Decision Store with the prior resolution result.
+
+    Use ``TRIAD_HASH`` as cluster_id to seed with the SHA-256 derived
+    identifier for the current triad (i.e. the provisional cluster ID).
+    """
     identifier = _make_identifier(
         ctx["source_id"], ctx["request_id"], ctx["entity_type"]
     )
-    if status == "PROVISIONAL":
+    if cluster_id == "TRIAD_HASH":
         cluster_id = derive_provisional_cluster_id(identifier)
     existing = _make_decision(identifier, cluster_id=cluster_id)
     ctx["original_cluster_id"] = cluster_id
@@ -534,6 +538,12 @@ def invalid_resolve_request(ctx, violation):
         del identified_by["entity_type"]
     elif violation == "content absent":
         del mention["content"]
+    elif violation == "source_id blank":
+        identified_by["source_id"] = "   "
+    elif violation == "request_id blank":
+        identified_by["request_id"] = "   "
+    elif violation == "entity_type blank":
+        identified_by["entity_type"] = "   "
     elif 'entity_type set to "UNKNOWN_TYPE"' in violation:
         identified_by["entity_type"] = "UNKNOWN_TYPE"
         # This passes Pydantic but fails RDF parsing — configure mock
@@ -582,7 +592,7 @@ def ere_messaging_unavailable_for_publishing(ctx):
     )
     prov_id = derive_provisional_cluster_id(identifier)
     prov_decision = _make_decision(
-        identifier, cluster_id=prov_id, confidence=1.0, similarity=1.0
+        identifier, cluster_id=prov_id, confidence=0.0, similarity=0.0
     )
     ctx["decision_svc"].get_decision_by_triad = AsyncMock(return_value=None)
     ctx["decision_svc"].store_decision = AsyncMock(return_value=prov_decision)
@@ -669,7 +679,7 @@ def submit_second_identical(ctx, source_id, request_id, entity_type):
     identifier = _make_identifier(source_id, request_id, entity_type)
     prov_id = derive_provisional_cluster_id(identifier)
     prov_decision = _make_decision(
-        identifier, cluster_id=prov_id, confidence=1.0, similarity=1.0
+        identifier, cluster_id=prov_id, confidence=0.0, similarity=0.0
     )
     ctx["decision_svc"].get_decision_by_triad = AsyncMock(
         return_value=prov_decision
@@ -691,15 +701,15 @@ def submit_second_identical(ctx, source_id, request_id, entity_type):
 def response_returns_cluster_and_status(ctx, cluster_id, expected_status):
     """Assert HTTP response contains expected cluster and status.
 
-    Use ``DERIVE_PROVISIONAL`` as cluster_id to assert the SHA-256 derived
-    provisional identifier for the current triad.
+    Use ``TRIAD_HASH`` as cluster_id to assert the SHA-256 derived
+    identifier for the current triad.
     """
     resp = ctx["response"]
     assert resp.status_code in (200, 202), (
         f"Expected 200 or 202, got {resp.status_code}: {resp.text}"
     )
     data = resp.json()
-    if cluster_id == "DERIVE_PROVISIONAL":
+    if cluster_id == "TRIAD_HASH":
         identifier = _make_identifier(
             ctx["source_id"], ctx["request_id"], ctx["entity_type"]
         )
@@ -874,16 +884,16 @@ def decision_store_has_provisional(ctx):
     # In provisional scenarios, store_decision is called with the provisional ID
     ctx["decision_svc"].store_decision.assert_called()
     call_kwargs = ctx["decision_svc"].store_decision.call_args.kwargs
-    assert call_kwargs["current"].confidence_score == 1.0
-    assert call_kwargs["current"].similarity_score == 1.0
+    assert call_kwargs["current"].confidence_score == 0.0
+    assert call_kwargs["current"].similarity_score == 0.0
 
 
-@then("the Decision Store decision has confidence 1.0 and similarity 1.0")
-def decision_has_full_scores(ctx):
-    """Assert provisional decision has confidence=1.0 and similarity=1.0."""
+@then("the Decision Store decision has confidence 0.0 and similarity 0.0")
+def decision_has_provisional_scores(ctx):
+    """Assert provisional decision has confidence=0.0 and similarity=0.0 (singleton contract)."""
     call_kwargs = ctx["decision_svc"].store_decision.call_args.kwargs
-    assert call_kwargs["current"].confidence_score == 1.0
-    assert call_kwargs["current"].similarity_score == 1.0
+    assert call_kwargs["current"].confidence_score == 0.0
+    assert call_kwargs["current"].similarity_score == 0.0
 
 
 @then(

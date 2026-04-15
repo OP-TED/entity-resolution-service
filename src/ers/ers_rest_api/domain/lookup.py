@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from erspec.models.core import ClusterReference, EntityMentionIdentifier
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from ers import config
 from ers.commons.domain.data_transfer_objects import ERSRequest, ERSResponse
@@ -23,6 +23,20 @@ class LookupRequest(ERSRequest):
         ...,
         description="Triad identifying the entity mention to look up.",
     )
+
+    @model_validator(mode="after")
+    def _identifier_fields_not_blank(self) -> LookupRequest:
+        ident = self.identified_by
+        for field_name, value in (
+            ("source_id", ident.source_id),
+            ("request_id", ident.request_id),
+            ("entity_type", ident.entity_type),
+        ):
+            if not value.strip():
+                raise ValueError(
+                    f"identified_by.{field_name} must not be blank or whitespace-only"
+                )
+        return self
 
 
 class LookupResponse(ERSResponse):
@@ -134,6 +148,14 @@ class RefreshBulkRequest(ERSRequest):
         min_length=1,
         description="Source system whose deltas to retrieve.",
     )
+
+    @field_validator("source_id", mode="after")
+    @classmethod
+    def _source_id_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("source_id must not be blank or whitespace-only")
+        return v
+
     limit: int = Field(
         default=config.REFRESH_BULK_MAX_LIMIT,
         gt=0,

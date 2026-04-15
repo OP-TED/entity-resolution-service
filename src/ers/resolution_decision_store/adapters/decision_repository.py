@@ -29,7 +29,6 @@ from ers.resolution_decision_store.domain.errors import (
 # MongoDB document field paths
 _FIELD_SOURCE_ID = "about_entity_mention.source_id"
 _FIELD_ENTITY_TYPE = "about_entity_mention.entity_type"
-_FIELD_SOURCE_ID = "about_entity_mention.source_id"
 _FIELD_CONFIDENCE = "current_placement.confidence_score"
 _FIELD_SIMILARITY = "current_placement.similarity_score"
 _FIELD_CLUSTER_ID = "current_placement.cluster_id"

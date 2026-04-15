@@ -154,6 +154,72 @@ class TestResolveEndpoint:
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
         assert "content" in body["detail"]
 
+    async def test_whitespace_only_source_id_returns_400(
+        self, client: AsyncClient
+    ) -> None:
+        payload = {
+            "mention": {
+                "identifiedBy": {
+                    "source_id": "   ",
+                    "request_id": "req-001",
+                    "entity_type": "ORGANISATION",
+                },
+                "content": '{"name": "Acme Corp"}',
+                "content_type": "application/ld+json",
+            },
+        }
+
+        response = await client.post("/api/v1/resolve", json=payload)
+
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
+        assert "source_id" in body["detail"]
+
+    async def test_whitespace_only_request_id_returns_400(
+        self, client: AsyncClient
+    ) -> None:
+        payload = {
+            "mention": {
+                "identifiedBy": {
+                    "source_id": "SYSTEM_A",
+                    "request_id": "\t",
+                    "entity_type": "ORGANISATION",
+                },
+                "content": '{"name": "Acme Corp"}',
+                "content_type": "application/ld+json",
+            },
+        }
+
+        response = await client.post("/api/v1/resolve", json=payload)
+
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
+        assert "request_id" in body["detail"]
+
+    async def test_whitespace_only_entity_type_returns_400(
+        self, client: AsyncClient
+    ) -> None:
+        payload = {
+            "mention": {
+                "identifiedBy": {
+                    "source_id": "SYSTEM_A",
+                    "request_id": "req-001",
+                    "entity_type": "  ",
+                },
+                "content": '{"name": "Acme Corp"}',
+                "content_type": "application/ld+json",
+            },
+        }
+
+        response = await client.post("/api/v1/resolve", json=payload)
+
+        assert response.status_code == 400
+        body = response.json()
+        assert body["error_code"] == ErrorCode.VALIDATION_ERROR
+        assert "entity_type" in body["detail"]
+
     async def test_malformed_json_returns_400(self, client: AsyncClient) -> None:
         response = await client.post(
             "/api/v1/resolve",

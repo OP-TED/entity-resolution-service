@@ -11,7 +11,6 @@ from erspec.models.core import (
     EntityMentionIdentifier,
 )
 
-from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
 from ers.ers_rest_api.domain.errors import ErrorCode
 from ers.ers_rest_api.domain.resolution import (
@@ -68,7 +67,9 @@ class TestResolveService:
     async def test_canonical_resolution_maps_correctly(
         self, service: ResolveService, coordinator: AsyncMock
     ) -> None:
-        coordinator.resolve_single.return_value = _make_decision(IDENT, "cluster-010")
+        coordinator.resolve_single.return_value = (
+            _make_decision(IDENT, "cluster-010"), ResolutionOutcome.CANONICAL
+        )
 
         result = await service.handle_resolve(REQUEST)
 
@@ -79,18 +80,21 @@ class TestResolveService:
     async def test_provisional_resolution_maps_correctly(
         self, service: ResolveService, coordinator: AsyncMock
     ) -> None:
-        prov_id = derive_provisional_cluster_id(IDENT)
-        coordinator.resolve_single.return_value = _make_decision(IDENT, prov_id)
+        coordinator.resolve_single.return_value = (
+            _make_decision(IDENT, "prov-hash-xyz"), ResolutionOutcome.PROVISIONAL
+        )
 
         result = await service.handle_resolve(REQUEST)
 
-        assert result.canonical_entity_id == prov_id
+        assert result.canonical_entity_id == "prov-hash-xyz"
         assert result.status == ResolutionOutcome.PROVISIONAL
 
     async def test_passes_entity_mention_to_coordinator(
         self, service: ResolveService, coordinator: AsyncMock
     ) -> None:
-        coordinator.resolve_single.return_value = _make_decision(IDENT, "cluster-010")
+        coordinator.resolve_single.return_value = (
+            _make_decision(IDENT, "cluster-010"), ResolutionOutcome.CANONICAL
+        )
 
         await service.handle_resolve(REQUEST)
 
@@ -140,8 +144,8 @@ class TestBulkResolveService:
         self, service: ResolveService, coordinator: AsyncMock
     ) -> None:
         coordinator.resolve_bulk.return_value = [
-            _make_decision(IDENT_A, "cluster-A"),
-            _make_decision(IDENT_B, "cluster-B"),
+            (_make_decision(IDENT_A, "cluster-A"), ResolutionOutcome.CANONICAL),
+            (_make_decision(IDENT_B, "cluster-B"), ResolutionOutcome.CANONICAL),
         ]
 
         result = await service.handle_bulk_resolve(BULK_REQUEST)
@@ -155,7 +159,7 @@ class TestBulkResolveService:
         self, service: ResolveService, coordinator: AsyncMock
     ) -> None:
         coordinator.resolve_bulk.return_value = [
-            _make_decision(IDENT_A, "cluster-A"),
+            (_make_decision(IDENT_A, "cluster-A"), ResolutionOutcome.CANONICAL),
             RuntimeError("coordinator down"),
         ]
 
@@ -187,8 +191,8 @@ class TestBulkResolveService:
     ) -> None:
         """Verify bulk uses coordinator.resolve_bulk, not sequential resolve_single."""
         coordinator.resolve_bulk.return_value = [
-            _make_decision(IDENT_A, "cluster-A"),
-            _make_decision(IDENT_B, "cluster-B"),
+            (_make_decision(IDENT_A, "cluster-A"), ResolutionOutcome.CANONICAL),
+            (_make_decision(IDENT_B, "cluster-B"), ResolutionOutcome.CANONICAL),
         ]
 
         await service.handle_bulk_resolve(BULK_REQUEST)

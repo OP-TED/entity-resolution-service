@@ -18,6 +18,20 @@ class EntityMentionResolutionRequest(ERSRequest):
 
     mention: EntityMention = Field(description="The entity mention to resolve.")
 
+    @model_validator(mode="after")
+    def _identifier_fields_not_blank(self) -> EntityMentionResolutionRequest:
+        ident = self.mention.identifiedBy
+        for field_name, value in (
+            ("source_id", ident.source_id),
+            ("request_id", ident.request_id),
+            ("entity_type", ident.entity_type),
+        ):
+            if not value.strip():
+                raise ValueError(
+                    f"mention.identifiedBy.{field_name} must not be blank or whitespace-only"
+                )
+        return self
+
 
 class EntityMentionResolutionResult(ERSResponse):
     """Result of resolving a single entity mention.
