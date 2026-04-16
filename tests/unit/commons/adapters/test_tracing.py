@@ -60,6 +60,7 @@ def _make_config(enabled: bool = False, service_name: str = "test-service") -> M
     cfg = MagicMock()
     cfg.TRACING_ENABLED = enabled
     cfg.OTEL_SERVICE_NAME = service_name
+    cfg.OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318/v1/traces"
     return cfg
 
 
