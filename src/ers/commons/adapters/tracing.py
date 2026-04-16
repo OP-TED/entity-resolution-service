@@ -95,15 +95,12 @@ def configure_tracing(config: Any) -> None:
 
 
 def add_span_processor(sp: SpanProcessor) -> None:
-    """Register a SpanProcessor with the active TracerProvider.
+    """Register an additional SpanProcessor with the active TracerProvider.
 
-    Use this to plug in an exporter after ``configure_tracing()`` has been called,
-    for example::
-
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-
-        add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    ``configure_tracing()`` already attaches a ``BatchSpanProcessor`` with an
+    OTLP HTTP exporter. Use this for supplementary processors such as an
+    ``InMemorySpanExporter`` in tests or a secondary exporter for a different
+    backend.
 
     No-op when ``configure_tracing()`` was not called (``TRACING_ENABLED=False``).
 
