@@ -18,7 +18,7 @@ x-api-common: &api-common
   environment:
     <<: *api-env
   volumes:
-    - ../config/rdf_mention_config.yaml:/app/config/rdf_mention_config.yaml:ro
+    - ../config:/app/config:ro
   restart: unless-stopped
   depends_on:
     ferretdb:

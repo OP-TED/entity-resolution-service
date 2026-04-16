@@ -1,4 +1,4 @@
-# Namespace prefix registry - used by rdf_mapper.py to resolve prefixed names in field paths
+# Namespace prefix registry - used to resolve prefixed names in field paths
 namespaces:
   epo: "http://data.europa.eu/a4g/ontology#"
   org: "http://www.w3.org/ns/org#"
@@ -9,7 +9,6 @@ namespaces:
 
 # Entity type mappings: entity_type_string -> rdf_type + field property paths
 # Property paths use / as separator for multi-hop traversal.
-# Field names must match entity_fields in resolver.yaml (legal_name, country_code).
 entity_types:
   ORGANISATION:
     rdf_type: "org:Organization"
