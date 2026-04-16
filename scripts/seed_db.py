@@ -90,6 +90,9 @@ def _build_cluster_references(
     mentions: list[Any],
     num_clusters: int,
 ) -> tuple[dict[str, list[str]], dict[str, list[Any]]]:
+    if not mentions:
+        return {}, {}
+
     mentions_by_type: dict[str, list[Any]] = {}
     for mention in mentions:
         mentions_by_type.setdefault(mention.identifiedBy.entity_type, []).append(mention)

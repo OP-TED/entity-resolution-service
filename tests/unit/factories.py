@@ -63,7 +63,7 @@ class EntityMentionFactory(ModelFactory):
 
     @classmethod
     def content(cls) -> str:
-        return json.dumps(cls._organisation_payload())
+        return json.dumps(cls._payload())
 
     @classmethod
     def _organisation_payload(cls) -> dict:
@@ -121,7 +121,13 @@ class ResolutionRequestRecordFactory(EntityMentionFactory):
     @classmethod
     def build_for_entity_type(cls, entity_type: str, **kwargs) -> ResolutionRequestRecord:
         payload_json = json.dumps(cls._payload_for(entity_type))
-        return cls.build(content=payload_json, parsed_representation=payload_json, **kwargs)
+        content_hash = hashlib.sha256(payload_json.encode()).hexdigest()
+        return cls.build(
+            content=payload_json,
+            parsed_representation=payload_json,
+            content_hash=content_hash,
+            **kwargs,
+        )
 
 
 class CanonicalEntityIdentifierFactory(ModelFactory):
