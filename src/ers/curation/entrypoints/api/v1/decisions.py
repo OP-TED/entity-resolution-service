@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Path, Response, status
 
@@ -150,8 +150,9 @@ async def bulk_accept_decisions(
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> BulkActionResponse:
     """Accept multiple decisions in a single request."""
-    return await decision_svc.bulk_accept_decisions(
-        body.decision_ids, actor=user.id, service=service
+    return cast(
+        BulkActionResponse,
+        await decision_svc.bulk_accept_decisions(body.decision_ids, actor=user.id, service=service),
     )
 
 
@@ -166,6 +167,7 @@ async def bulk_reject_decisions(
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> BulkActionResponse:
     """Reject multiple decisions in a single request."""
-    return await decision_svc.bulk_reject_decisions(
-        body.decision_ids, actor=user.id, service=service
+    return cast(
+        BulkActionResponse,
+        await decision_svc.bulk_reject_decisions(body.decision_ids, actor=user.id, service=service),
     )
