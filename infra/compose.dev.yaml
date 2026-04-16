@@ -43,6 +43,7 @@ services:
     environment:
       <<: *api-env
       SEED_DB: "true"  # dev-only: seed DB on startup
+      REDIS_HOST: "redis"
 
   ers-api:
     <<: *api-common
