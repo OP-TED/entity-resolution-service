@@ -1,14 +1,15 @@
 """Smoke tests for Resolution Decision Store span extractor registration."""
+
 from datetime import UTC
 
 from erspec.models.core import Decision
 
 import ers.resolution_decision_store.adapters.span_extractors  # noqa: F401 — registers extractors
-from ers.commons.adapters.tracing import _extractors
+from ers.commons.adapters.tracing import get_extractor
 
 
 def test_decision_extractor_is_registered():
-    assert Decision in _extractors
+    assert get_extractor(Decision) is not None
 
 
 def test_decision_extractor_returns_expected_attributes():
@@ -28,7 +29,7 @@ def test_decision_extractor_returns_expected_attributes():
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
-    extractor = _extractors[Decision]
+    extractor = get_extractor(Decision)
     attrs = extractor(decision)
     assert attrs["decision_store.source_id"] == "s1"
     assert attrs["decision_store.cluster_id"] == "c1"
