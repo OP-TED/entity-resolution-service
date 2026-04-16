@@ -81,16 +81,16 @@ def configure_tracing(config: Any) -> None:
     global _provider
     if not config.TRACING_ENABLED:
         return
-    _provider = TracerProvider(
-        resource=Resource(attributes={SERVICE_NAME: config.OTEL_SERVICE_NAME})
-    )
+    _provider = TracerProvider(resource=Resource.create({SERVICE_NAME: config.OTEL_SERVICE_NAME}))
     trace.set_tracer_provider(_provider)
 
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-    exporter = OTLPSpanExporter(endpoint=config.OTEL_EXPORTER_OTLP_ENDPOINT)
-    _provider.add_span_processor(BatchSpanProcessor(exporter))
+    # OTLPSpanExporter reads endpoint, headers, and compression from standard
+    # OTel env vars (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS,
+    # etc.) and auto-appends /v1/traces to the base endpoint.
+    _provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     logger.info("OTel tracing configured: service=%s", config.OTEL_SERVICE_NAME)
 
 

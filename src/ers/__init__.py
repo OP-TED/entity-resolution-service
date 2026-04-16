@@ -158,10 +158,6 @@ class ObservabilityConfig:
     def OTEL_SERVICE_NAME(self, config_value: str) -> str:
         return config_value
 
-    @env_property(default_value="http://localhost:4318/v1/traces")
-    def OTEL_EXPORTER_OTLP_ENDPOINT(self, config_value: str) -> str:
-        return config_value
-
 
 class ResolutionCoordinatorConfig:
     @env_property(default_value="30")
