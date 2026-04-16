@@ -69,7 +69,7 @@ class RDFMentionParserConfig:
     def ERS_PARSER_MAX_CONTENT_LENGTH(self, config_value: str) -> int:
         return int(config_value)
 
-    @env_property(default_value="tests/test_data/sample_rdf_mapping.yaml")
+    @env_property(default_value="config/rdf_mention_config.yaml")
     def RDF_MENTION_CONFIG_FILE(self, config_value: str) -> str:
         return config_value
 
