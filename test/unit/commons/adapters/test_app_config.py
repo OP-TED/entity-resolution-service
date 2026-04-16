@@ -1,3 +1,5 @@
+import pytest
+
 from ers import (
     AdminConfig,
     CurationAppConfig,
@@ -41,15 +43,22 @@ class TestJWTConfig:
         assert isinstance(JWTConfig().ACCESS_TOKEN_EXPIRE_MINUTES, int)
         assert JWTConfig().ACCESS_TOKEN_EXPIRE_MINUTES == 15
 
-    def test_jwt_secret_key_default(self, monkeypatch):
+    def test_jwt_secret_key_required(self, monkeypatch):
         monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
-        assert JWTConfig().JWT_SECRET_KEY == "change-me-in-production"
+        with pytest.raises(ValueError, match="JWT_SECRET_KEY"):
+            _ = JWTConfig().JWT_SECRET_KEY
 
 
 class TestAdminConfig:
-    def test_admin_email_default(self, monkeypatch):
+    def test_admin_email_required(self, monkeypatch):
         monkeypatch.delenv("ADMIN_EMAIL", raising=False)
-        assert AdminConfig().ADMIN_EMAIL == "admin@ers.local"
+        with pytest.raises(ValueError, match="ADMIN_EMAIL"):
+            _ = AdminConfig().ADMIN_EMAIL
+
+    def test_admin_password_required(self, monkeypatch):
+        monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
+        with pytest.raises(ValueError, match="ADMIN_PASSWORD"):
+            _ = AdminConfig().ADMIN_PASSWORD
 
     def test_admin_password_from_env(self, monkeypatch):
         monkeypatch.setenv("ADMIN_PASSWORD", "supersecret")

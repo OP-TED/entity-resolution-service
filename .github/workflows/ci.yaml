@@ -63,6 +63,9 @@ jobs:
           FERRETDB_POSTGRESQL_URL: postgres://ci_user:ci_password@postgres:5432/postgres
 
     env:
+      JWT_SECRET_KEY: ci-test-secret-key
+      ADMIN_EMAIL: ci-admin@test.local
+      ADMIN_PASSWORD: ci-test-password
       MONGO_URI: mongodb://ci_user:ci_password@localhost:27017
 
     steps:

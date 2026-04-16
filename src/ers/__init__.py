@@ -27,8 +27,10 @@ class CurationAppConfig:
 
 
 class JWTConfig:
-    @env_property(default_value="change-me-in-production")
-    def JWT_SECRET_KEY(self, config_value: str) -> str:
+    @env_property()
+    def JWT_SECRET_KEY(self, config_value: str | None) -> str:
+        if config_value is None:
+            raise ValueError("JWT_SECRET_KEY environment variable is required")
         return config_value
 
     @env_property(default_value="HS256")
@@ -45,12 +47,16 @@ class JWTConfig:
 
 
 class AdminConfig:
-    @env_property(default_value="admin@ers.local")
-    def ADMIN_EMAIL(self, config_value: str) -> str:
+    @env_property()
+    def ADMIN_EMAIL(self, config_value: str | None) -> str:
+        if config_value is None:
+            raise ValueError("ADMIN_EMAIL environment variable is required")
         return config_value
 
-    @env_property(default_value="changeme")
-    def ADMIN_PASSWORD(self, config_value: str) -> str:
+    @env_property()
+    def ADMIN_PASSWORD(self, config_value: str | None) -> str:
+        if config_value is None:
+            raise ValueError("ADMIN_PASSWORD environment variable is required")
         return config_value
 
 
@@ -69,7 +75,7 @@ class RDFMentionParserConfig:
     def ERS_PARSER_MAX_CONTENT_LENGTH(self, config_value: str) -> int:
         return int(config_value)
 
-    @env_property(default_value="tests/test_data/sample_rdf_mapping.yaml")
+    @env_property(default_value="config/rdf_mention_config.yaml")
     def RDF_MENTION_CONFIG_FILE(self, config_value: str) -> str:
         return config_value
 
