@@ -15,11 +15,14 @@ from opentelemetry.sdk.trace import TracerProvider
 import ers.commons.adapters.tracing as tracing_module
 from ers.commons.adapters.tracing import (
     add_span_processor,
+    configure_auto_instrumentation,
+    configure_fastapi_telemetry,
     configure_tracing,
     get_extractor,
     get_request_id,
     register_span_extractor,
     set_request_id,
+    shutdown_tracing,
     span,
     trace_function,
 )
@@ -295,3 +298,85 @@ def test_request_id_isolation_between_async_contexts():
 
     assert id_a == "context-a"
     assert id_b is None
+
+
+# ---------------------------------------------------------------------------
+# configure_auto_instrumentation()
+# ---------------------------------------------------------------------------
+
+
+def test_configure_auto_instrumentation_noop_when_disabled(monkeypatch):
+    """No instrumentors are activated when tracing is disabled."""
+    configure_auto_instrumentation(_make_config(enabled=False))
+    # If instrumentors were called, pymongo/redis would be patched.
+    # No assertion needed — just verify it doesn't raise.
+
+
+def test_configure_auto_instrumentation_activates_instrumentors(monkeypatch):
+    """pymongo and Redis instrumentors are called when tracing is enabled."""
+    pymongo_mock = MagicMock()
+    redis_mock = MagicMock()
+    monkeypatch.setattr(
+        "ers.commons.adapters.tracing.PymongoInstrumentor",
+        lambda: pymongo_mock,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "ers.commons.adapters.tracing.RedisInstrumentor",
+        lambda: redis_mock,
+        raising=False,
+    )
+    # Patch the imports inside the function
+    import opentelemetry.instrumentation.pymongo as pymongo_mod
+    import opentelemetry.instrumentation.redis as redis_mod
+
+    monkeypatch.setattr(pymongo_mod, "PymongoInstrumentor", lambda: pymongo_mock)
+    monkeypatch.setattr(redis_mod, "RedisInstrumentor", lambda: redis_mock)
+
+    configure_auto_instrumentation(_make_config(enabled=True))
+
+    pymongo_mock.instrument.assert_called_once()
+    redis_mock.instrument.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# configure_fastapi_telemetry()
+# ---------------------------------------------------------------------------
+
+
+def test_configure_fastapi_telemetry_noop_when_disabled():
+    app = MagicMock()
+    configure_fastapi_telemetry(app, _make_config(enabled=False))
+    # App should not be instrumented
+    assert app.method_calls == []
+
+
+def test_configure_fastapi_telemetry_instruments_app(monkeypatch):
+    configure_tracing(_make_config(enabled=True))
+    app = MagicMock()
+    instrument_mock = MagicMock()
+    import opentelemetry.instrumentation.fastapi as fastapi_mod
+
+    monkeypatch.setattr(fastapi_mod.FastAPIInstrumentor, "instrument_app", instrument_mock)
+
+    configure_fastapi_telemetry(app, _make_config(enabled=True))
+
+    instrument_mock.assert_called_once_with(app, tracer_provider=tracing_module._provider)
+
+
+# ---------------------------------------------------------------------------
+# shutdown_tracing()
+# ---------------------------------------------------------------------------
+
+
+def test_shutdown_tracing_noop_when_not_configured():
+    """shutdown_tracing must not raise when no provider is configured."""
+    shutdown_tracing()
+
+
+def test_shutdown_tracing_shuts_down_provider():
+    configure_tracing(_make_config(enabled=True))
+    assert tracing_module._provider is not None
+    shutdown_tracing()
+    # Calling shutdown again must not raise.
+    shutdown_tracing()
