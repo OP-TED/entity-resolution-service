@@ -27,8 +27,10 @@ class CurationAppConfig:
 
 
 class JWTConfig:
-    @env_property(default_value="change-me-in-production")
-    def JWT_SECRET_KEY(self, config_value: str) -> str:
+    @env_property()
+    def JWT_SECRET_KEY(self, config_value: str | None) -> str:
+        if config_value is None:
+            raise ValueError("JWT_SECRET_KEY environment variable is required")
         return config_value
 
     @env_property(default_value="HS256")
@@ -45,12 +47,16 @@ class JWTConfig:
 
 
 class AdminConfig:
-    @env_property(default_value="admin@ers.local")
-    def ADMIN_EMAIL(self, config_value: str) -> str:
+    @env_property()
+    def ADMIN_EMAIL(self, config_value: str | None) -> str:
+        if config_value is None:
+            raise ValueError("ADMIN_EMAIL environment variable is required")
         return config_value
 
-    @env_property(default_value="changeme")
-    def ADMIN_PASSWORD(self, config_value: str) -> str:
+    @env_property()
+    def ADMIN_PASSWORD(self, config_value: str | None) -> str:
+        if config_value is None:
+            raise ValueError("ADMIN_PASSWORD environment variable is required")
         return config_value
 
 
