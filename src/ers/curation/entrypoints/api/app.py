@@ -11,6 +11,11 @@ from fastapi.openapi.utils import get_openapi
 from ers import config
 from ers.commons.adapters.mongo_client import MongoClientManager
 from ers.commons.adapters.redis_client import RedisConnectionConfig, RedisEREClient
+from ers.commons.adapters.tracing import (
+    configure_auto_instrumentation,
+    configure_fastapi_telemetry,
+    configure_tracing,
+)
 from ers.curation.entrypoints.api.exception_handlers import register_exception_handlers
 from ers.curation.entrypoints.api.health import router as health_router
 from ers.curation.entrypoints.api.v1.router import v1_router
@@ -77,6 +82,14 @@ async def _seed_admin_user(db: object) -> None:
 
 def create_app() -> FastAPI:
     """Application factory for the FastAPI instance."""
+    # Bootstrap OTel tracing (no-op when TRACING_ENABLED=False).
+    configure_tracing(config)
+    configure_auto_instrumentation(config)
+
+    # Register span attribute extractors. Must be imported here (not at module
+    # level) so they are registered after the module graph is fully loaded.
+    import ers.commons.adapters.span_extractors  # noqa: F401
+
     app = FastAPI(
         title=config.APP_NAME,
         description=(
@@ -103,6 +116,8 @@ def create_app() -> FastAPI:
     app.include_router(v1_router, prefix=config.API_V1_PREFIX)
 
     app.openapi = lambda: _custom_openapi(app)  # type: ignore[method-assign]
+
+    configure_fastapi_telemetry(app, config)
 
     return app
 

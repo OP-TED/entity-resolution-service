@@ -25,6 +25,12 @@ from ers.curation.services import (
     CanonicalEntityService,
     DecisionCurationService,
 )
+from ers.curation.services.decision_curation_service import (
+    bulk_accept_decisions as traced_bulk_accept,
+)
+from ers.curation.services.decision_curation_service import (
+    bulk_reject_decisions as traced_bulk_reject,
+)
 
 router = APIRouter(prefix="/curation/decisions", tags=["Decisions"])
 
@@ -149,7 +155,7 @@ async def bulk_accept_decisions(
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> BulkActionResponse:
     """Accept multiple decisions in a single request."""
-    return await service.bulk_accept_decisions(body.decision_ids, actor=user.id)
+    return await traced_bulk_accept(body.decision_ids, actor=user.id, service=service)
 
 
 @router.post(
@@ -163,4 +169,4 @@ async def bulk_reject_decisions(
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> BulkActionResponse:
     """Reject multiple decisions in a single request."""
-    return await service.bulk_reject_decisions(body.decision_ids, actor=user.id)
+    return await traced_bulk_reject(body.decision_ids, actor=user.id, service=service)

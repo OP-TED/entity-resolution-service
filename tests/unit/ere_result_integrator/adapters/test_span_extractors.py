@@ -1,15 +1,16 @@
 """Smoke tests for ERE Result Integrator span extractor registration."""
+
 from datetime import UTC, datetime
 
 from erspec.models.core import ClusterReference, EntityMentionIdentifier
 from erspec.models.ere import EntityMentionResolutionResponse
 
 import ers.ere_result_integrator.adapters.span_extractors  # noqa: F401 — registers extractors
-from ers.commons.adapters.tracing import _extractors
+from ers.commons.adapters.tracing import get_extractor
 
 
 def test_response_extractor_is_registered():
-    assert EntityMentionResolutionResponse in _extractors
+    assert get_extractor(EntityMentionResolutionResponse) is not None
 
 
 def test_response_extractor_returns_expected_attributes():
@@ -25,7 +26,7 @@ def test_response_extractor_returns_expected_attributes():
         ],
         timestamp=datetime.now(UTC),
     )
-    extractor = _extractors[EntityMentionResolutionResponse]
+    extractor = get_extractor(EntityMentionResolutionResponse)
     attrs = extractor(response)
     assert attrs["ere_result_integrator.source_id"] == "SYS_A"
     assert attrs["ere_result_integrator.entity_type"] == "Organization"
