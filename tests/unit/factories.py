@@ -82,7 +82,7 @@ class EntityMentionFactory(ModelFactory):
         faker = cls.__faker__
         return {
             "identifier": faker.numerify("##_####"),
-            "title": faker.sentence(nb_words=6).rstrip("."),
+            "title": faker.job() + " services",
             "description": faker.paragraph(nb_sentences=3),
             "legal_basis": faker.numerify("3####L####"),
             "procedure_type": faker.random_element(
