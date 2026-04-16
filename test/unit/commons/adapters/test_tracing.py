@@ -15,10 +15,14 @@ from opentelemetry.sdk.trace import TracerProvider
 import ers.commons.adapters.tracing as tracing_module
 from ers.commons.adapters.tracing import (
     add_span_processor,
+    configure_auto_instrumentation,
+    configure_fastapi_telemetry,
     configure_tracing,
+    get_extractor,
     get_request_id,
     register_span_extractor,
     set_request_id,
+    shutdown_tracing,
     span,
     trace_function,
 )
@@ -26,6 +30,7 @@ from ers.commons.adapters.tracing import (
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
+
 
 def _reset_otel_globals() -> None:
     """Reset OTel global tracer provider state for test isolation.
@@ -48,6 +53,8 @@ def reset_tracing_state():
     tracing_module._extractors.clear()
     _reset_otel_globals()
     yield
+    if tracing_module._provider is not None:
+        tracing_module._provider.shutdown()
     tracing_module._provider = original_provider
     tracing_module._extractors.clear()
     tracing_module._extractors.update(original_extractors)
@@ -65,6 +72,7 @@ def _make_config(enabled: bool = False, service_name: str = "test-service") -> M
 # span() — context manager
 # ---------------------------------------------------------------------------
 
+
 def test_span_noop_does_not_raise():
     with span("test.operation"):
         pass
@@ -78,6 +86,7 @@ def test_span_with_attributes_does_not_raise():
 # ---------------------------------------------------------------------------
 # trace_function() — sync
 # ---------------------------------------------------------------------------
+
 
 def test_trace_function_sync_returns_correct_value():
     @trace_function(span_name="test.sync")
@@ -98,6 +107,7 @@ def test_trace_function_preserves_function_name():
 
 def test_trace_function_no_parens():
     """@trace_function without parentheses must work identically to @trace_function()."""
+
     @trace_function
     def standalone():
         return "ok"
@@ -141,6 +151,7 @@ def test_trace_function_sync_exception_propagates():
 # trace_function() — async
 # ---------------------------------------------------------------------------
 
+
 def test_trace_function_async_returns_correct_value():
     @trace_function(span_name="test.async")
     async def async_add(a, b):
@@ -171,6 +182,7 @@ def test_trace_function_async_preserves_name():
 # configure_tracing() — bootstrap
 # ---------------------------------------------------------------------------
 
+
 def test_import_does_not_activate_tracing():
     """_provider must be None at import time — no side effects on import."""
     assert tracing_module._provider is None
@@ -195,6 +207,7 @@ def test_configure_tracing_enabled_registers_global_provider():
 # add_span_processor()
 # ---------------------------------------------------------------------------
 
+
 def test_add_span_processor_noop_when_not_configured():
     mock_processor = MagicMock()
     add_span_processor(mock_processor)  # Must not raise
@@ -211,6 +224,7 @@ def test_add_span_processor_registers_when_configured():
 # ---------------------------------------------------------------------------
 # Extractor registry
 # ---------------------------------------------------------------------------
+
 
 class _SampleDomain:
     def __init__(self, value: str):
@@ -242,14 +256,15 @@ def test_unregistered_type_silently_ignored():
 def test_later_registration_overwrites_earlier():
     register_span_extractor(_SampleDomain, lambda o: {"key": "first"})
     register_span_extractor(_SampleDomain, lambda o: {"key": "second"})
-    assert tracing_module._extractors[_SampleDomain](
-        _SampleDomain("x")
-    ) == {"key": "second"}
+    extractor = get_extractor(_SampleDomain)
+    assert extractor is not None
+    assert extractor(_SampleDomain("x")) == {"key": "second"}
 
 
 # ---------------------------------------------------------------------------
 # Correlation context
 # ---------------------------------------------------------------------------
+
 
 def test_set_and_get_request_id():
     rid = set_request_id("req-123")
@@ -283,3 +298,85 @@ def test_request_id_isolation_between_async_contexts():
 
     assert id_a == "context-a"
     assert id_b is None
+
+
+# ---------------------------------------------------------------------------
+# configure_auto_instrumentation()
+# ---------------------------------------------------------------------------
+
+
+def test_configure_auto_instrumentation_noop_when_disabled(monkeypatch):
+    """No instrumentors are activated when tracing is disabled."""
+    configure_auto_instrumentation(_make_config(enabled=False))
+    # If instrumentors were called, pymongo/redis would be patched.
+    # No assertion needed — just verify it doesn't raise.
+
+
+def test_configure_auto_instrumentation_activates_instrumentors(monkeypatch):
+    """pymongo and Redis instrumentors are called when tracing is enabled."""
+    pymongo_mock = MagicMock()
+    redis_mock = MagicMock()
+    monkeypatch.setattr(
+        "ers.commons.adapters.tracing.PymongoInstrumentor",
+        lambda: pymongo_mock,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "ers.commons.adapters.tracing.RedisInstrumentor",
+        lambda: redis_mock,
+        raising=False,
+    )
+    # Patch the imports inside the function
+    import opentelemetry.instrumentation.pymongo as pymongo_mod
+    import opentelemetry.instrumentation.redis as redis_mod
+
+    monkeypatch.setattr(pymongo_mod, "PymongoInstrumentor", lambda: pymongo_mock)
+    monkeypatch.setattr(redis_mod, "RedisInstrumentor", lambda: redis_mock)
+
+    configure_auto_instrumentation(_make_config(enabled=True))
+
+    pymongo_mock.instrument.assert_called_once()
+    redis_mock.instrument.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# configure_fastapi_telemetry()
+# ---------------------------------------------------------------------------
+
+
+def test_configure_fastapi_telemetry_noop_when_disabled():
+    app = MagicMock()
+    configure_fastapi_telemetry(app, _make_config(enabled=False))
+    # App should not be instrumented
+    assert app.method_calls == []
+
+
+def test_configure_fastapi_telemetry_instruments_app(monkeypatch):
+    configure_tracing(_make_config(enabled=True))
+    app = MagicMock()
+    instrument_mock = MagicMock()
+    import opentelemetry.instrumentation.fastapi as fastapi_mod
+
+    monkeypatch.setattr(fastapi_mod.FastAPIInstrumentor, "instrument_app", instrument_mock)
+
+    configure_fastapi_telemetry(app, _make_config(enabled=True))
+
+    instrument_mock.assert_called_once_with(app, tracer_provider=tracing_module._provider)
+
+
+# ---------------------------------------------------------------------------
+# shutdown_tracing()
+# ---------------------------------------------------------------------------
+
+
+def test_shutdown_tracing_noop_when_not_configured():
+    """shutdown_tracing must not raise when no provider is configured."""
+    shutdown_tracing()
+
+
+def test_shutdown_tracing_shuts_down_provider():
+    configure_tracing(_make_config(enabled=True))
+    assert tracing_module._provider is not None
+    shutdown_tracing()
+    # Calling shutdown again must not raise.
+    shutdown_tracing()

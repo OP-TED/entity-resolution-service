@@ -51,6 +51,10 @@ dependencies = [
     "opentelemetry-api (>=1.30.0,<2.0.0)",
     "opentelemetry-sdk (>=1.30.0,<2.0.0)",
     "opentelemetry-instrumentation (>=0.61b0,<1.0.0)",
+    "opentelemetry-instrumentation-fastapi (>=0.62b0,<1.0.0)",
+    "opentelemetry-instrumentation-pymongo (>=0.62b0,<1.0.0)",
+    "opentelemetry-instrumentation-redis (>=0.62b0,<1.0.0)",
+    "opentelemetry-exporter-otlp-proto-http (>=1.30.0,<2.0.0)",
 ]
 
 [tool.poetry]

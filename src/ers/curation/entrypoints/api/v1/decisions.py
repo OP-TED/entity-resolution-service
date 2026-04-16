@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Path, Response, status
 
@@ -25,6 +25,7 @@ from ers.curation.services import (
     CanonicalEntityService,
     DecisionCurationService,
 )
+from ers.curation.services import decision_curation_service as decision_svc
 
 router = APIRouter(prefix="/curation/decisions", tags=["Decisions"])
 
@@ -149,7 +150,10 @@ async def bulk_accept_decisions(
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> BulkActionResponse:
     """Accept multiple decisions in a single request."""
-    return await service.bulk_accept_decisions(body.decision_ids, actor=user.id)
+    return cast(
+        BulkActionResponse,
+        await decision_svc.bulk_accept_decisions(body.decision_ids, actor=user.id, service=service),
+    )
 
 
 @router.post(
@@ -163,4 +167,7 @@ async def bulk_reject_decisions(
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
 ) -> BulkActionResponse:
     """Reject multiple decisions in a single request."""
-    return await service.bulk_reject_decisions(body.decision_ids, actor=user.id)
+    return cast(
+        BulkActionResponse,
+        await decision_svc.bulk_reject_decisions(body.decision_ids, actor=user.id, service=service),
+    )

@@ -88,9 +88,7 @@ class DecisionCurationService:
         try:
             await self._ere_publish_service.publish_request(request)
         except Exception:
-            log.exception(
-                "Failed to publish ERE re-evaluation for decision %s", decision.id
-            )
+            log.exception("Failed to publish ERE re-evaluation for decision %s", decision.id)
 
     async def list_decisions(
         self,
@@ -269,3 +267,44 @@ class DecisionCurationService:
             created_at=decision.created_at,
             updated_at=decision.updated_at,
         )
+
+
+# ---------------------------------------------------------------------------
+# Traced entry points — module-level
+# ---------------------------------------------------------------------------
+
+from opentelemetry import trace  # noqa: E402
+
+from ers.commons.adapters.tracing import trace_function  # noqa: E402
+
+
+@trace_function(span_name="curation.bulk_accept")
+async def bulk_accept_decisions(
+    decision_ids: Collection[str],
+    actor: str,
+    service: DecisionCurationService,
+) -> BulkActionResponse:
+    """Traced entry point for bulk accept."""
+    trace.get_current_span().set_attribute("curation.bulk_count", len(decision_ids))
+    result = await service.bulk_accept_decisions(decision_ids, actor)
+    trace.get_current_span().set_attribute(
+        "curation.bulk_success_count",
+        sum(1 for r in result.results if r.status == BulkItemStatus.SUCCESS),
+    )
+    return result
+
+
+@trace_function(span_name="curation.bulk_reject")
+async def bulk_reject_decisions(
+    decision_ids: Collection[str],
+    actor: str,
+    service: DecisionCurationService,
+) -> BulkActionResponse:
+    """Traced entry point for bulk reject."""
+    trace.get_current_span().set_attribute("curation.bulk_count", len(decision_ids))
+    result = await service.bulk_reject_decisions(decision_ids, actor)
+    trace.get_current_span().set_attribute(
+        "curation.bulk_success_count",
+        sum(1 for r in result.results if r.status == BulkItemStatus.SUCCESS),
+    )
+    return result

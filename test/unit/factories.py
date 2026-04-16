@@ -1,6 +1,5 @@
 import hashlib
 import json
-import random
 from datetime import UTC, datetime
 
 from erspec.models.core import (
@@ -64,27 +63,48 @@ class EntityMentionFactory(ModelFactory):
 
     @classmethod
     def content(cls) -> str:
-        return '{"name": "Example Entity"}'
+        return json.dumps(cls._payload())
+
+    @classmethod
+    def _organisation_payload(cls) -> dict:
+        faker = cls.__faker__
+        return {
+            "name": faker.company(),
+            "country_code": faker.country_code(),
+            "nuts_code": faker.lexify("??", letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ") + faker.numerify("###"),
+            "post_code": faker.postcode(),
+            "post_name": faker.city(),
+            "thoroughfare": faker.street_address(),
+        }
+
+    @classmethod
+    def _procedure_payload(cls) -> dict:
+        faker = cls.__faker__
+        return {
+            "identifier": faker.numerify("##_####"),
+            "title": faker.job() + " services",
+            "description": faker.paragraph(nb_sentences=3),
+            "legal_basis": faker.numerify("3####L####"),
+            "procedure_type": faker.random_element(
+                ["open", "restricted", "neg-wo-call", "neg-w-call", "competitive-dialogue"]
+            ),
+            "purpose_nature": faker.random_element(["services", "works", "supplies"]),
+            "purpose_classification": faker.numerify("########"),
+        }
+
+    @classmethod
+    def _payload_for(cls, entity_type: str) -> dict:
+        if entity_type == "PROCEDURE":
+            return cls._procedure_payload()
+        return cls._organisation_payload()
 
     @classmethod
     def _payload(cls) -> dict:
-        faker = cls.__faker__
-
-        payload: dict = {"name": faker.company()}
-        optional_fields = {
-            "registration_number": faker.bothify(text="??########"),
-            "country": faker.country_code(),
-            "city": faker.city(),
-            "email": faker.company_email(),
-        }
-        for key, value in optional_fields.items():
-            if random.random() > 0.5:
-                payload[key] = value
-        return payload
+        return cls._organisation_payload()
 
     @classmethod
     def parsed_representation(cls) -> str:
-        return f"{json.dumps(cls._payload())}"
+        return json.dumps(cls._payload())
 
 
 class ResolutionRequestRecordFactory(EntityMentionFactory):
@@ -97,6 +117,17 @@ class ResolutionRequestRecordFactory(EntityMentionFactory):
     @classmethod
     def received_at(cls) -> datetime:
         return datetime.now(UTC)
+
+    @classmethod
+    def build_for_entity_type(cls, entity_type: str, **kwargs) -> ResolutionRequestRecord:
+        payload_json = json.dumps(cls._payload_for(entity_type))
+        content_hash = hashlib.sha256(payload_json.encode()).hexdigest()
+        return cls.build(
+            content=payload_json,
+            parsed_representation=payload_json,
+            content_hash=content_hash,
+            **kwargs,
+        )
 
 
 class CanonicalEntityIdentifierFactory(ModelFactory):
