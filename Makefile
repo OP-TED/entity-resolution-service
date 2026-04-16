@@ -5,11 +5,19 @@ END_BUILD_PRINT = \e[0m
 
 PROJECT_PATH = $(shell pwd)
 SRC_PATH = ${PROJECT_PATH}/src
-TEST_PATH = ${PROJECT_PATH}/tests
+TEST_PATH = ${PROJECT_PATH}/test
 BUILD_PATH = ${PROJECT_PATH}/dist
 PACKAGE_NAME = ers
 COMPOSE_FILE = ${PROJECT_PATH}/infra/compose.dev.yaml
 ENV_FILE = ${PROJECT_PATH}/infra/.env
+# TODO: bump to v7.22.0 once released — v7.21.0 drops descriptions from nullable
+#       (anyOf) properties in the asciidoc generator. The fix is in the 7.22.0-SNAPSHOT
+#       but no stable release or Docker image exists yet.
+OPENAPI_GENERATOR_IMAGE = openapitools/openapi-generator-cli:v7.21.0
+DOCS_API_REL ?= docs/api-docs
+DOCS_API_PATH = ${PROJECT_PATH}/${DOCS_API_REL}
+DOCS_TEMPLATE_PATH = ${PROJECT_PATH}/docs/templates/asciidoc
+ASCIIDOC_PROPS = useMethodAndPath=true,useIntroduction=true,useTableTitles=true,skipExamples=true
 
 ICON_DONE = [✔]
 ICON_ERROR = [x]
@@ -22,7 +30,7 @@ COV_FLAGS = --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml --
 #-----------------------------------------------------------------------------
 # Dev commands
 #-----------------------------------------------------------------------------
-.PHONY: help install-poetry install lock build seed-db
+.PHONY: help install-poetry install lock build seed-db openapi generate-api-docs
 
 help: ## Display available targets
 	@ echo -e "$(BUILD_PRINT)Available targets:$(END_BUILD_PRINT)"
@@ -32,6 +40,9 @@ help: ## Display available targets
 	@ echo "    lock                 - Update poetry.lock"
 	@ echo "    build                - Build the package distribution"
 	@ echo "    seed-db              - Seed the database with mock data"
+	@ echo "    openapi              - Generate OpenAPI schemas into /resources folder"
+	@ echo "    api-docs    		 - Generate AsciiDoc API reference from OpenAPI schemas"
+	@ echo "                           Override output path: make api-docs DOCS_API_REL=path"
 	@ echo ""
 	@ echo -e "  $(BUILD_PRINT)Code Quality (mutating):$(END_BUILD_PRINT)"
 	@ echo "    format               - Format code with Ruff"
@@ -100,6 +111,39 @@ seed-db: ## Seed the database with mock data (needs running database and config)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Seeding database with mock data$(END_BUILD_PRINT)"
 	@ poetry run python -m scripts.seed_db
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Database seeding complete$(END_BUILD_PRINT)"
+
+openapi: ## Generate OpenAPI schema into resources/
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Generating OpenAPI schemas$(END_BUILD_PRINT)"
+	@ poetry run python -m scripts.export_openapi
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) OpenAPI schemas generated$(END_BUILD_PRINT)"
+
+# Usage: $(call run-openapi-asciidoc,<schema-file>,<output-subdir>)
+define run-openapi-asciidoc
+	@ MSYS_NO_PATHCONV=1 docker run --rm \
+		-v "$(PROJECT_PATH)/resources:/input" \
+		-v "$(DOCS_API_PATH)/$(2):/output" \
+		-v "$(DOCS_TEMPLATE_PATH):/templates" \
+		$(OPENAPI_GENERATOR_IMAGE) generate \
+		-i /input/$(1) \
+		-g asciidoc \
+		-o /output \
+		-t /templates \
+		--additional-properties=$(ASCIIDOC_PROPS) \
+		--remove-operation-id-prefix \
+		--skip-validate-spec \
+		--inline-schema-name-mappings Location_inner=LocationElement
+endef
+
+api-docs: ## Generate AsciiDoc API reference from OpenAPI schemas (override: DOCS_API_REL=path)
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Generating API reference documentation$(END_BUILD_PRINT)"
+	@ mkdir -p $(DOCS_API_PATH)/ers $(DOCS_API_PATH)/curation
+	$(call run-openapi-asciidoc,ers-openapi-schema.json,ers)
+	$(call run-openapi-asciidoc,curation-openapi-schema.json,curation)
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Fixing cross-references$(END_BUILD_PRINT)"
+	@ cd $(PROJECT_PATH) && poetry run python -m scripts.fix_asciidoc_xrefs \
+		$(DOCS_API_REL)/ers/index.adoc \
+		$(DOCS_API_REL)/curation/index.adoc
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) API reference docs generated at $(DOCS_API_REL)/$(END_BUILD_PRINT)"
 
 #-----------------------------------------------------------------------------
 # Code quality — mutating targets

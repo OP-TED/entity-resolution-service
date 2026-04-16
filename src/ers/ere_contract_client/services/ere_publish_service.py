@@ -3,6 +3,9 @@
 import logging
 import uuid
 from datetime import UTC, datetime
+from typing import cast
+
+from erspec.models.ere import EntityMentionResolutionRequest
 
 from ers.commons.adapters.redis_client import AbstractClient
 from ers.commons.adapters.tracing import trace_function
@@ -15,7 +18,6 @@ from ers.ere_contract_client.domain.errors import (
     RedisConnectionError,
     SerializationError,
 )
-from erspec.models.ere import EntityMentionResolutionRequest
 
 log = logging.getLogger(__name__)
 
@@ -76,7 +78,7 @@ class EREPublishService:
             request.entity_mention.identifiedBy.entity_type,
             request.ere_request_id,
         )
-        return request.ere_request_id
+        return cast(str, request.ere_request_id)
 
     def _validate_triad(self, request: EntityMentionResolutionRequest) -> None:
         """Raise InvalidRequestError if the correlation triad is incomplete.

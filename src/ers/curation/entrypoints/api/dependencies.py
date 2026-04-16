@@ -1,14 +1,15 @@
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 from fastapi import Depends, Request
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ers import config
 from ers.commons.adapters.hasher import Argon2PasswordHasher, ContentHasher
+from ers.commons.adapters.redis_client import RedisEREClient
 from ers.curation.adapters import (
-    DecisionCurationRepository,
+    DecisionRepository,
     EntityMentionCurationRepository,
-    MongoDecisionCurationRepository,
+    MongoDecisionRepository,
     MongoEntityMentionCurationRepository,
     MongoStatisticsRepository,
     MongoUserActionCurationRepository,
@@ -22,13 +23,30 @@ from ers.curation.services import (
     StatisticsService,
     UserActionService,
 )
+from ers.ere_contract_client.services.ere_publish_service import EREPublishService
+from ers.rdf_mention_parser.domain.rdf_mapping_config import RDFMappingConfig
 from ers.users.adapters import MongoUserRepository, UserRepository
 from ers.users.services import AuthService, UserManagementService
 from ers.users.services.token_service import JWTTokenService, TokenService
 
 
-def _get_database(request: Request) -> AsyncDatabase:
-    return request.app.state.mongo_db
+def _get_database(request: Request) -> AsyncDatabase[Any]:
+    return cast(AsyncDatabase[Any], request.app.state.mongo_db)
+
+
+def get_rdf_config(request: Request) -> RDFMappingConfig:
+    """Return the RDF mapping config from app.state (loaded once in lifespan)."""
+    return cast(RDFMappingConfig, request.app.state.rdf_config)
+
+
+def _get_redis_client(request: Request) -> RedisEREClient:
+    return cast(RedisEREClient, request.app.state.redis_client)
+
+
+async def _get_ere_publish_service(
+    client: Annotated[RedisEREClient, Depends(_get_redis_client)],
+) -> EREPublishService:
+    return EREPublishService(adapter=client)
 
 
 # Infrastructure providers
@@ -52,8 +70,8 @@ def get_token_service() -> TokenService:
 
 async def get_decision_repository(
     db: Annotated[AsyncDatabase, Depends(_get_database)],
-) -> DecisionCurationRepository:
-    return MongoDecisionCurationRepository(db)
+) -> DecisionRepository:
+    return MongoDecisionRepository(db)
 
 
 async def get_entity_mention_repository(
@@ -86,27 +104,31 @@ async def get_user_repository(
 async def get_user_action_service(
     repo: Annotated[UserActionCurationRepository, Depends(get_user_action_repository)],
     entity_repo: Annotated[EntityMentionCurationRepository, Depends(get_entity_mention_repository)],
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
 ) -> UserActionService:
     return UserActionService(
         user_action_repository=repo,
         entity_mention_repository=entity_repo,
+        user_repository=user_repo,
     )
 
 
 async def get_decision_curation_service(
-    decision_repo: Annotated[DecisionCurationRepository, Depends(get_decision_repository)],
+    decision_repo: Annotated[DecisionRepository, Depends(get_decision_repository)],
     entity_repo: Annotated[EntityMentionCurationRepository, Depends(get_entity_mention_repository)],
     user_action_service: Annotated[UserActionService, Depends(get_user_action_service)],
+    ere_publish_service: Annotated[EREPublishService, Depends(_get_ere_publish_service)],
 ) -> DecisionCurationService:
     return DecisionCurationService(
         decision_repository=decision_repo,
         entity_mention_repository=entity_repo,
         user_action_service=user_action_service,
+        ere_publish_service=ere_publish_service,
     )
 
 
 async def get_canonical_entity_service(
-    decision_repo: Annotated[DecisionCurationRepository, Depends(get_decision_repository)],
+    decision_repo: Annotated[DecisionRepository, Depends(get_decision_repository)],
     entity_repo: Annotated[EntityMentionCurationRepository, Depends(get_entity_mention_repository)],
 ) -> CanonicalEntityService:
     return CanonicalEntityService(

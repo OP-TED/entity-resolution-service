@@ -81,6 +81,20 @@ class RDFMappingConfig(BaseModel):
 
         return self
 
+    def get_entity_type_config(self, name: str) -> EntityTypeConfig:
+        """Return the EntityTypeConfig for the given short key name.
+
+        Args:
+            name: Short entity type key, e.g. ``ORGANISATION``.
+
+        Raises:
+            UnsupportedEntityTypeError: If no entry matches ``name``.
+        """
+        try:
+            return self.entity_types[name]
+        except KeyError as err:
+            raise UnsupportedEntityTypeError(name) from err
+
     def resolve_entity_type(self, uri: str) -> EntityTypeConfig:
         """Return the EntityTypeConfig whose rdf_type expands to the given full URI.
 

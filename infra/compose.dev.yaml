@@ -17,6 +17,8 @@ x-api-common: &api-common
     - .env
   environment:
     <<: *api-env
+  volumes:
+    - ../config:/app/config:ro
   restart: unless-stopped
   depends_on:
     ferretdb:
@@ -43,6 +45,7 @@ services:
     environment:
       <<: *api-env
       SEED_DB: "true"  # dev-only: seed DB on startup
+      REDIS_HOST: "redis"
 
   ers-api:
     <<: *api-common
@@ -50,6 +53,9 @@ services:
     command: ["ers"]
     ports:
       - "${ERS_API_PORT:-8001}:8001"
+    environment:
+      <<: *api-env
+      REDIS_HOST: "redis"
 
   postgres:
     image: ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0

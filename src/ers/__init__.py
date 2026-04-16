@@ -1,4 +1,5 @@
 import json
+from typing import cast
 
 from dotenv import load_dotenv
 
@@ -7,8 +8,8 @@ from ers.commons.adapters.config_resolver import env_property
 load_dotenv()
 
 
-class AppConfig:
-    @env_property(default_value="Entity Resolution Service")
+class CurationAppConfig:
+    @env_property(default_value="Curation REST API")
     def APP_NAME(self, config_value: str) -> str:
         return config_value
 
@@ -22,12 +23,14 @@ class AppConfig:
 
     @env_property(default_value='["*"]')
     def CORS_ORIGINS(self, config_value: str) -> list[str]:
-        return json.loads(config_value)
+        return cast(list[str], json.loads(config_value))
 
 
 class JWTConfig:
-    @env_property(default_value="change-me-in-production")
-    def JWT_SECRET_KEY(self, config_value: str) -> str:
+    @env_property()
+    def JWT_SECRET_KEY(self, config_value: str | None) -> str:
+        if config_value is None:
+            raise ValueError("JWT_SECRET_KEY environment variable is required")
         return config_value
 
     @env_property(default_value="HS256")
@@ -44,19 +47,17 @@ class JWTConfig:
 
 
 class AdminConfig:
-    @env_property(default_value="admin@ers.local")
-    def ADMIN_EMAIL(self, config_value: str) -> str:
+    @env_property()
+    def ADMIN_EMAIL(self, config_value: str | None) -> str:
+        if config_value is None:
+            raise ValueError("ADMIN_EMAIL environment variable is required")
         return config_value
 
-    @env_property(default_value="changeme")
-    def ADMIN_PASSWORD(self, config_value: str) -> str:
+    @env_property()
+    def ADMIN_PASSWORD(self, config_value: str | None) -> str:
+        if config_value is None:
+            raise ValueError("ADMIN_PASSWORD environment variable is required")
         return config_value
-
-
-class CurationConfig:
-    @env_property(default_value="0.85")
-    def CURATION_CONFIDENCE_THRESHOLD(self, config_value: str) -> float:
-        return float(config_value)
 
 
 class MongoDBConfig:
@@ -74,7 +75,7 @@ class RDFMentionParserConfig:
     def ERS_PARSER_MAX_CONTENT_LENGTH(self, config_value: str) -> int:
         return int(config_value)
 
-    @env_property(default_value="rdf_mention_config.yaml")
+    @env_property(default_value="config/rdf_mention_config.yaml")
     def RDF_MENTION_CONFIG_FILE(self, config_value: str) -> str:
         return config_value
 
@@ -91,11 +92,6 @@ class ERSRestApiConfig:
     @env_property(default_value="8001")
     def ERS_API_PORT(self, config_value: str) -> int:
         return int(config_value)
-
-    @env_property(default_value="false")
-    def USE_MOCK_SERVICES(self, config_value: str) -> bool:
-        """Enable factory-generated mock responses (temporary dev)."""
-        return config_value.lower() == "true"
 
 
 class EREConfig:
@@ -117,6 +113,10 @@ class RedisConfig:
     def REDIS_DB(self, config_value: str) -> int:
         return int(config_value)
 
+    @env_property(default_value="changeme")
+    def REDIS_PASSWORD(self, config_value: str) -> str:
+        return config_value
+
     @env_property(default_value="ere_requests")
     def ERE_REQUEST_CHANNEL(self, config_value: str) -> str:
         return config_value
@@ -124,6 +124,35 @@ class RedisConfig:
     @env_property(default_value="ere_responses")
     def ERE_RESPONSE_CHANNEL(self, config_value: str) -> str:
         return config_value
+
+
+class DecisionStoreConfig:
+    @env_property(default_value="5")
+    def DECISION_STORE_MAX_CANDIDATES(self, config_value: str) -> int:
+        value = int(config_value)
+        if value < 1:
+            raise ValueError(f"DECISION_STORE_MAX_CANDIDATES must be >= 1, got {value}")
+        return value
+
+    @env_property(default_value="250")
+    def DECISION_STORE_DEFAULT_PAGE_SIZE(self, config_value: str) -> int:
+        value = int(config_value)
+        if value < 1:
+            raise ValueError(f"DECISION_STORE_DEFAULT_PAGE_SIZE must be >= 1, got {value}")
+        max_size = self.DECISION_STORE_MAX_PAGE_SIZE
+        if value > max_size:
+            raise ValueError(
+                f"DECISION_STORE_DEFAULT_PAGE_SIZE ({value}) must be <= "
+                f"DECISION_STORE_MAX_PAGE_SIZE ({max_size})"
+            )
+        return value
+
+    @env_property(default_value="1000")
+    def DECISION_STORE_MAX_PAGE_SIZE(self, config_value: str) -> int:
+        value = int(config_value)
+        if value < 1:
+            raise ValueError(f"DECISION_STORE_MAX_PAGE_SIZE must be >= 1, got {value}")
+        return value
 
 
 class ObservabilityConfig:
@@ -136,17 +165,37 @@ class ObservabilityConfig:
         return config_value
 
 
+class ResolutionCoordinatorConfig:
+    @env_property(default_value="30")
+    def ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET(self, config_value: str) -> float:
+        """Maximum time budget for a single-mention resolution response.
+
+        Also serves as the ERE wait window — if ERE does not respond within
+        this budget, a provisional identifier is issued and returned to the client.
+        """
+        return float(config_value)
+
+    @env_property(default_value="120")
+    def ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET(self, config_value: str) -> float:
+        """Maximum time budget for a bulk resolution response (all mentions combined).
+
+        Each mention waits up to SINGLE_REQUEST_TIME_BUDGET for ERE internally.
+        """
+        return float(config_value)
+
+
 class ERSConfigResolver(
-    AppConfig,
+    CurationAppConfig,
     JWTConfig,
     AdminConfig,
-    CurationConfig,
     MongoDBConfig,
     RedisConfig,
     RDFMentionParserConfig,
     ERSRestApiConfig,
     EREConfig,
+    DecisionStoreConfig,
     ObservabilityConfig,
+    ResolutionCoordinatorConfig,
 ):
     """Aggregates all ERS configuration.
 

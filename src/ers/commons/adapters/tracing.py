@@ -81,23 +81,26 @@ def configure_tracing(config: Any) -> None:
     global _provider
     if not config.TRACING_ENABLED:
         return
-    _provider = TracerProvider(
-        resource=Resource(attributes={SERVICE_NAME: config.OTEL_SERVICE_NAME})
-    )
+    _provider = TracerProvider(resource=Resource.create({SERVICE_NAME: config.OTEL_SERVICE_NAME}))
     trace.set_tracer_provider(_provider)
+
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    # OTLPSpanExporter reads endpoint, headers, and compression from standard
+    # OTel env vars (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS,
+    # etc.) and auto-appends /v1/traces to the base endpoint.
+    _provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     logger.info("OTel tracing configured: service=%s", config.OTEL_SERVICE_NAME)
 
 
 def add_span_processor(sp: SpanProcessor) -> None:
-    """Register a SpanProcessor with the active TracerProvider.
+    """Register an additional SpanProcessor with the active TracerProvider.
 
-    Use this to plug in an exporter after ``configure_tracing()`` has been called,
-    for example::
-
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-
-        add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+    ``configure_tracing()`` already attaches a ``BatchSpanProcessor`` with an
+    OTLP HTTP exporter. Use this for supplementary processors such as an
+    ``InMemorySpanExporter`` in tests or a secondary exporter for a different
+    backend.
 
     No-op when ``configure_tracing()`` was not called (``TRACING_ENABLED=False``).
 
@@ -106,6 +109,36 @@ def add_span_processor(sp: SpanProcessor) -> None:
     """
     if _provider is not None:
         _provider.add_span_processor(sp)
+
+
+def configure_auto_instrumentation(config: Any) -> None:
+    """Activate pymongo and Redis auto-instrumentation.
+
+    Must be called BEFORE any MongoClient or Redis connection is created —
+    the instrumentors monkey-patch the library clients at call time.
+    No-op when ``TRACING_ENABLED=False``.
+
+    Args:
+        config: ``ERSConfigResolver`` instance.
+    """
+    if not config.TRACING_ENABLED:
+        return
+    from opentelemetry.instrumentation.pymongo import PymongoInstrumentor
+    from opentelemetry.instrumentation.redis import RedisInstrumentor
+
+    PymongoInstrumentor().instrument()
+    RedisInstrumentor().instrument()
+    logger.info("OTel auto-instrumentation activated: pymongo, redis")
+
+
+def shutdown_tracing() -> None:
+    """Flush pending spans and shut down the TracerProvider.
+
+    Call once from each app's lifespan teardown (``finally`` block).
+    No-op when tracing was not configured.
+    """
+    if _provider is not None:
+        _provider.shutdown()
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +165,18 @@ def register_span_extractor(type_: type, extractor: Callable[[Any], dict[str, An
                    a dict of safe span attribute key-value pairs.
     """
     _extractors[type_] = extractor
+
+
+def get_extractor(type_: type) -> Callable[[Any], dict[str, Any]] | None:
+    """Return the registered span attribute extractor for a type, or None.
+
+    Args:
+        type_: The domain type to look up.
+
+    Returns:
+        The extractor callable, or ``None`` if no extractor is registered.
+    """
+    return _extractors.get(type_)
 
 
 def _extract_attributes(args: tuple, kwargs: dict) -> dict[str, Any]:
@@ -321,29 +366,20 @@ def trace_function(
 def configure_fastapi_telemetry(app: Any, config: Any) -> None:
     """Register OTel instrumentation middleware on a FastAPI application.
 
-    Currently a no-op stub. Activate when ``opentelemetry-instrumentation-fastapi``
-    is added as a dependency (``poetry add opentelemetry-instrumentation-fastapi``).
-
-    When activated, replace the body with::
-
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-        if config.TRACING_ENABLED:
-            FastAPIInstrumentor.instrument_app(app, tracer_provider=_provider)
-
-    This automatically:
-    - Creates a root span for every incoming HTTP request
-    - Extracts W3C ``traceparent`` / ``tracestate`` from incoming headers
-    - Attaches HTTP method, route, and status code as span attributes
+    Creates a root span for every incoming HTTP request. Extracts W3C
+    ``traceparent`` / ``tracestate`` from incoming headers. Attaches HTTP
+    method, route, and status code as span attributes.
 
     Call once from each app factory (``entrypoints/api/app.py``) after
-    ``configure_tracing()``.
-
-    Note:
-        ``make_otel_http_headers()`` is NOT needed alongside this. When
-        ``opentelemetry-instrumentation-httpx`` is also installed, outgoing
-        httpx calls propagate trace context automatically.
+    ``configure_tracing()``.  No-op when ``TRACING_ENABLED=False``.
 
     Args:
         app: The FastAPI application instance.
         config: ``ERSConfigResolver`` instance.
     """
+    if not config.TRACING_ENABLED:
+        return
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+    FastAPIInstrumentor.instrument_app(app, tracer_provider=_provider)
+    logger.info("OTel FastAPI instrumentation activated")

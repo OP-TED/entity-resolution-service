@@ -18,9 +18,9 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 @router.post(
     "/register",
-    response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+    response_description="The newly registered user.",
 )
 async def register(
     body: RegisterRequest,
@@ -32,8 +32,12 @@ async def register(
 
 @router.post(
     "/login",
-    response_model=TokenResponse,
-    responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse, "description": "User account is deactivated"},
+    },
+    response_description="Access and refresh token pair for the authenticated user.",
 )
 async def login(
     body: LoginRequest,
@@ -45,8 +49,8 @@ async def login(
 
 @router.post(
     "/refresh",
-    response_model=TokenResponse,
     responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}},
+    response_description="New access and refresh token pair.",
 )
 async def refresh(
     body: RefreshRequest,

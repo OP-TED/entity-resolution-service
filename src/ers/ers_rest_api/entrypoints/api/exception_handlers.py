@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -6,6 +8,23 @@ from ers.commons.domain.exceptions import DomainError
 from ers.commons.services.exceptions import ApplicationError
 from ers.ers_rest_api.domain.errors import ErrorCode
 from ers.ers_rest_api.services.exceptions import MentionNotFoundError
+from ers.request_registry.services.exceptions import IdempotencyConflictError
+from ers.resolution_coordinator.domain.exceptions import (
+    ParsingFailedError,
+    ResolutionTimeoutError,
+    SourceNotFoundError,
+)
+
+_log = logging.getLogger(__name__)
+
+
+def _format_validation_detail(exc: RequestValidationError) -> str:
+    details = []
+    for err in exc.errors():
+        loc = " -> ".join(str(part) for part in err["loc"] if part != "body")
+        msg = err["msg"]
+        details.append(f"{loc}: {msg}" if loc else msg)
+    return "; ".join(details)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -16,16 +35,37 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request,
         exc: RequestValidationError,
     ) -> JSONResponse:
-        details = []
-        for err in exc.errors():
-            loc = " -> ".join(str(part) for part in err["loc"] if part != "body")
-            msg = err["msg"]
-            details.append(f"{loc}: {msg}" if loc else msg)
         return JSONResponse(
             status_code=400,
             content={
                 "error_code": ErrorCode.VALIDATION_ERROR,
-                "detail": "; ".join(details),
+                "detail": _format_validation_detail(exc),
+            },
+        )
+
+    @app.exception_handler(ParsingFailedError)
+    async def parsing_failed_handler(
+        request: Request,
+        exc: ParsingFailedError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error_code": ErrorCode.PARSING_FAILED,
+                "detail": exc.message,
+            },
+        )
+
+    @app.exception_handler(IdempotencyConflictError)
+    async def idempotency_conflict_handler(
+        request: Request,
+        exc: IdempotencyConflictError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error_code": ErrorCode.IDEMPOTENCY_CONFLICT,
+                "detail": exc.message,
             },
         )
 
@@ -38,6 +78,32 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=404,
             content={
                 "error_code": ErrorCode.MENTION_NOT_FOUND,
+                "detail": exc.message,
+            },
+        )
+
+    @app.exception_handler(SourceNotFoundError)
+    async def source_not_found_handler(
+        request: Request,
+        exc: SourceNotFoundError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error_code": ErrorCode.SOURCE_NOT_FOUND,
+                "detail": exc.message,
+            },
+        )
+
+    @app.exception_handler(ResolutionTimeoutError)
+    async def resolution_timeout_handler(
+        request: Request,
+        exc: ResolutionTimeoutError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=504,
+            content={
+                "error_code": ErrorCode.SERVICE_TIMEOUT,
                 "detail": exc.message,
             },
         )
@@ -65,5 +131,22 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "error_code": ErrorCode.VALIDATION_ERROR,
                 "detail": exc.message,
+            },
+        )
+
+    @app.exception_handler(Exception)
+    async def unhandled_error_handler(
+        request: Request,
+        exc: Exception,
+    ) -> JSONResponse:
+        _log.exception(
+            "Unhandled error processing %s %s", request.method, request.url,
+            exc_info=exc,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error_code": ErrorCode.SERVICE_ERROR,
+                "detail": "Internal server error",
             },
         )

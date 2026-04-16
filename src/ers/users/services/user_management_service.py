@@ -58,9 +58,10 @@ class UserManagementService:
     async def list_users(
         self,
         pagination: PaginationParams,
+        email_search: str | None = None,
     ) -> PaginatedResult[UserResponse]:
-        """Return paginated users."""
-        users = await self._user_repo.find_paginated(pagination)
+        """Return paginated users, optionally filtered by email search."""
+        users = await self._user_repo.find_paginated(pagination, email_search=email_search)
         return PaginatedResult(
             count=users.count,
             previous=users.previous,
@@ -81,6 +82,9 @@ class UserManagementService:
         updates = dto.model_dump(exclude_none=True)
         if updates:
             await self._guard_last_admin(user, updates)
+            password = updates.pop("password", None)
+            if password is not None:
+                updates["hashed_password"] = self._hasher.hash(password)
             updates["updated_at"] = datetime.now(UTC)
             user = user.model_copy(update=updates)
             await self._user_repo.save(user)

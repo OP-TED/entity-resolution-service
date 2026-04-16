@@ -1,7 +1,7 @@
 # EPIC-07: ERS REST API
 
 **Status:** Gherkin Complete (Clarity Gate: 9.8/10)
-**Last Updated:** 2026-03-12
+**Last Updated:** 2026-03-25
 **Component:** ERS REST API (entrypoint layer)
 **Spines Covered:** Spine A (Resolution Intake & Canonical Identifier Issuance), Spine C (Canonical Assignment Lookup / Bulk-Delta)
 **Dependencies:** Resolution Coordinator (EPIC-06), Decision Store (EPIC-04), er-spec models
@@ -50,83 +50,143 @@ All endpoints are unauthenticated, return JSON responses with explicit status fi
 
 Define REST request/response data structures (separate from domain models, but aligned):
 
-- **`EntityMentionRequest`** — reuse er-spec `EntityMention` directly (identifier triad + content + content_type)
-- **`ResolveResponse`** — includes:
-  - `canonical_entity_id: str` — the cluster ID (canonical or provisional)
-  - `status: str` — `"PROVISIONAL"` or `"CANONICAL"` (indicates if ID may change)
-  - `entity_mention_context: dict` (optional context echoed back)
-  - `request_id: str` — triad request ID for correlation
+- **`EntityMentionResolutionRequest`** — wraps `mention: EntityMention` (er-spec); one per resolve call
+- **`EntityMentionResolutionResult`** — resolve response:
+  - `identified_by: EntityMentionIdentifier`
+  - `canonical_entity_id: str | None` — cluster ID (canonical or provisional)
+  - `status: ResolutionOutcome | None` — `PROVISIONAL` or `CANONICAL` enum (from `ers.commons.domain.data_transfer_objects`)
+  - `error: ErrorResponse | None` — populated only in bulk error cases
+- **`BulkResolveRequest`** / **`BulkResolveResponse`** — wraps `list[EntityMentionResolutionRequest]` / `list[EntityMentionResolutionResult]`
 - **`LookupResponse`** — includes:
-  - `cluster_reference: ClusterReference` — reuse from er-spec (or embedded `canonical_entity_id` + `entity_type`)
-  - `last_updated: datetime` — timestamp of last Decision Store update
+  - `identified_by: EntityMentionIdentifier`
+  - `cluster_reference: ClusterReference` (er-spec)
+  - `last_updated: datetime` — `Decision.updated_at` or `Decision.created_at` fallback
 - **`RefreshBulkRequest`** — includes:
-  - `source_id: str` — the data source identifier
-  - `limit: int = 1000` — optional page size (default 1000)
-  - `continuation_cursor: str | None` — opaque cursor for pagination
+  - `source_id: str` (min_length=1)
+  - `limit: int` — default and max from `config.REFRESH_BULK_MAX_LIMIT` (1000); validated `gt=0`
+  - `continuation_cursor: str | None`
 - **`RefreshBulkResponse`** — includes:
-  - `deltas: list[DeltaAssignment]` — list of changed assignments
-  - `continuation_cursor: str | None` — opaque cursor for next page (None if end)
-  - `has_more: bool` — indicates if more results available
-  - Each `DeltaAssignment`: mention triad + canonical_entity_id + update timestamp
+  - `deltas: list[LookupResponse]` — changed assignments since last snapshot
+  - `has_more: bool`
+  - `continuation_cursor: str | None` — present iff `has_more=True` (validated by model_validator)
+- **`ErrorResponse`** — `error_code: ErrorCode` (StrEnum) + `detail: str`; returned on all error responses
 
 ### Adapters Layer
 
 **FastAPI Integration Adapter:**
-- Mount FastAPI app with three route handlers (resolve, lookup, refreshBulk)
-- Parse HTTP requests, map to Pydantic models
-- Handle Pydantic validation errors, return `400 Bad Request` with error detail
-- Catch service exceptions, map to appropriate HTTP status codes:
-  - `ServiceException` → `500 Internal Server Error`
-  - `ValidationException` → `400 Bad Request`
-  - `EntityNotFound` → `404 Not Found` (if applicable)
-- Return JSON responses with explicit status codes
+- App created via `create_app()` factory; routes registered under `config.ERS_API_PREFIX` (`/api/v1`)
+- Dependencies injected per-request via FastAPI `Depends()` (see `dependencies.py`): database → repository → service
+- Exception handlers registered at app level (`exception_handlers.py`):
+  - `RequestValidationError` → `400 VALIDATION_ERROR`
+  - `MentionNotFoundError` → `404 MENTION_NOT_FOUND`
+  - `ApplicationError` → `400 VALIDATION_ERROR`
+  - `DomainError` → `400 VALIDATION_ERROR`
+- All handlers return `ErrorResponse(error_code, detail)` JSON body
 
 ### Services Layer
 
-**Resolve Service** (thin orchestrator):
-- Validate `EntityMentionRequest` (idempotency triad presence, content not empty)
-- Call Resolution Coordinator service (EPIC-06) with EntityMention
-- Map Coordinator response (clusterId + outcome marker) to `ResolveResponse`
-- Determine status: if provisional (deterministic derivation) → `"PROVISIONAL"`, else `"CANONICAL"`
+**ResolveService** (thin orchestrator):
+- Accepts `ResolutionCoordinatorService` (injected via `Depends(get_resolution_coordinator)`)
+- Calls `coordinator.resolve_single(request.mention)` → returns `Decision`
+- Maps `Decision` → `EntityMentionResolutionResult` with provisional detection via `derive_provisional_cluster_id`
+- `handle_bulk_resolve` uses `coordinator.resolve_bulk(mentions)` for concurrent resolution
+- Returns result directly; route handler sets HTTP 202 if `status == ResolutionOutcome.PROVISIONAL`
 
-**Lookup Service** (thin orchestrator):
-- Validate lookup request (triad fields not null)
-- Call Decision Store service (EPIC-04) `get_decision_for_mention(sourceId, requestId, entityType)`
-- Map Decision to `LookupResponse`
-- If mention not found, raise `EntityNotFound` (404)
+**LookupService** (thin orchestrator):
+- Accepts `ResolutionCoordinatorService` (injected via `Depends(get_resolution_coordinator)`)
+- Calls `coordinator.lookup_by_triad(identifier)` → `Decision | None`
+- If `None`: raises `MentionNotFoundError` → handler returns 404
+- Maps `Decision` to `LookupResponse`: `identified_by`, `cluster_reference`, `last_updated` (uses `created_at` fallback if `updated_at` is None)
 
-**RefreshBulk Service** (thin orchestrator):
-- Validate `RefreshBulkRequest` (sourceId not null, limit > 0)
-- Call Decision Store service (EPIC-04) `get_delta_for_source(sourceId, lastSeenTimestamp, limit, cursor)`
-  - Delta query filters: `lastNotificationDate < lastUpdateDate`
-  - Cursor is opaque, passed through from Decision Store
-- Increment LookupState watermark for this source (advance `lastNotificationDate`)
-- Map results to `RefreshBulkResponse`
+**RefreshBulkService** (thin orchestrator):
+- Accepts `BulkRefreshCoordinatorService` (injected via `Depends(_get_bulk_refresh_coordinator)`)
+- Calls `coordinator.refresh_bulk(source_id, cursor, page_size)` → `CursorPage[Decision]`
+- Maps `CursorPage[Decision]` to `RefreshBulkResponse` (deltas, has_more, continuation_cursor)
+- Snapshot advancement is handled internally by the coordinator
 
 ### Entrypoints Layer
 
 **FastAPI Routes:**
 
 ```python
-@app.post("/resolve")
-async def resolve(request: EntityMentionRequest) -> ResolveResponse:
-    """POST /resolve — Resolve an entity mention, return canonical or provisional cluster ID."""
-    return resolve_service.handle_resolve(request)
+@router.post("/resolve", response_model=EntityMentionResolutionResult)
+async def resolve(
+    request: EntityMentionResolutionRequest,
+    response: Response,
+    service: Annotated[ResolveService, Depends(get_resolve_service)],
+) -> EntityMentionResolutionResult:
+    result = await service.handle_resolve(request)
+    if result.status == ResolutionOutcome.PROVISIONAL:
+        response.status_code = 202   # provisional → 202 Accepted
+    return result
 
-@app.get("/lookup")
+@router.get("/lookup", response_model=LookupResponse)
 async def lookup(
-    source_id: str,
-    request_id: str,
-    entity_type: str,
+    source_id: Annotated[str, Query(min_length=1)],
+    request_id: Annotated[str, Query(min_length=1)],
+    entity_type: Annotated[str, Query(min_length=1)],
+    service: Annotated[LookupService, Depends(get_lookup_service)],
 ) -> LookupResponse:
-    """GET /lookup — Retrieve current cluster assignment for a mention triad."""
-    return lookup_service.handle_lookup(source_id, request_id, entity_type)
+    return await service.handle_lookup(source_id, request_id, entity_type)
 
-@app.post("/refreshBulk")
-async def refresh_bulk(request: RefreshBulkRequest) -> RefreshBulkResponse:
-    """POST /refreshBulk — Retrieve delta of changed assignments since last notification."""
-    return refreshbulk_service.handle_refreshbulk(request)
+@router.post("/refresh-bulk", response_model=RefreshBulkResponse)
+async def refresh_bulk(
+    request: RefreshBulkRequest,
+    service: Annotated[RefreshBulkService, Depends(get_refresh_bulk_service)],
+) -> RefreshBulkResponse:
+    return await service.handle_refresh_bulk(request)
 ```
+
+**Note:** Routes are registered on a versioned `APIRouter` included under `config.ERS_API_PREFIX` (default `/api/v1`). Full paths: `POST /api/v1/resolve`, `GET /api/v1/lookup`, `POST /api/v1/refresh-bulk`.
+
+### Application Lifespan (Startup / Shutdown)
+
+EPIC-07 is the **composition root** — the only component with visibility across all EPICs.
+The FastAPI `lifespan` context manager is the mandatory location for:
+
+1. Instantiating shared coordination state (`AsyncResolutionWaiter`)
+2. Wiring `waiter.notify` as the `on_outcome_stored` callback into `OutcomeIntegrationService`
+3. Starting `OutcomeIntegrationWorker` as a background `asyncio.Task` (EPIC-05 entrypoint)
+4. Instantiating `ResolutionCoordinatorService` with the shared waiter (EPIC-06)
+5. Cancelling and awaiting the worker task on shutdown
+
+```python
+from contextlib import asynccontextmanager
+import asyncio
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- startup ---
+    waiter = AsyncResolutionWaiter()
+
+    outcome_service = OutcomeIntegrationService(
+        registry_repo=MongoResolutionRequestRepository(...),
+        decision_service=DecisionStoreService(...),
+        on_outcome_stored=waiter.notify,        # EPIC-06 method injected into EPIC-05
+    )
+    outcome_worker = OutcomeIntegrationWorker(
+        listener=RedisOutcomeListener(redis_client),
+        service=outcome_service,
+    )
+    outcome_worker.start()                      # asyncio.create_task — non-blocking
+
+    app.state.coordinator = ResolutionCoordinatorService(
+        ...,
+        waiter=waiter,                          # same waiter injected into EPIC-06
+    )
+
+    yield  # application is running and serving requests
+
+    # --- shutdown ---
+    await outcome_worker.stop()                 # task.cancel() + await
+
+app = FastAPI(lifespan=lifespan)
+```
+
+**Why lifespan and not module-level initialisation:** `asyncio.create_task()` requires a
+running event loop. Calling it at import time or outside the lifespan context raises
+`RuntimeError`. The lifespan hook is the first point at which the uvicorn event loop is
+guaranteed to be running.
 
 ---
 
@@ -238,11 +298,14 @@ Feature: Bulk Refresh of Changed Assignments (Delta)
 
 ### Incoming (services called by this epic)
 
-- **Resolution Coordinator (EPIC-06):** `/resolve` endpoint calls `Coordinator.handle_intake(EntityMention)` and receives `(clusterId, outcomeMarker)`
-- **Decision Store (EPIC-04):** `/lookup` and `/refreshBulk` endpoints call:
-  - `DecisionStore.get_decision_for_mention(sourceId, requestId, entityType)` → `Decision | None`
-  - `DecisionStore.get_delta_for_source(sourceId, lastSeenTimestamp, limit, cursor)` → `(deltas, nextCursor)`
-- **er-spec models:** Request/response models reuse `EntityMention`, `ClusterReference`, domain constants
+- **Resolution Coordinator (EPIC-06) — sole gateway for all REST API services:**
+  - `ResolutionCoordinatorService.resolve_single(mention)` → `Decision` (resolve)
+  - `ResolutionCoordinatorService.resolve_bulk(mentions)` → `list[Decision | Exception]` (bulk resolve)
+  - `ResolutionCoordinatorService.lookup_by_triad(identifier)` → `Decision | None` (lookup)
+  - `BulkRefreshCoordinatorService.refresh_bulk(source_id, cursor, page_size)` → `CursorPage[Decision]` (refresh-bulk)
+- **ERE Result Integrator (EPIC-05):** `OutcomeIntegrationWorker` started in lifespan; `AsyncResolutionWaiter` wired between EPIC-05 and EPIC-06 via `on_outcome_stored` callback
+- **er-spec models:** `EntityMention`, `EntityMentionIdentifier`, `ClusterReference`, `Decision`
+- **Note:** `ResolutionDecisionStoreServiceABC` has been retired. All Decision Store access goes through the Coordinator.
 
 ### Outgoing (components that import from this epic)
 
@@ -333,13 +396,15 @@ This EPIC synthesizes requirements from:
 ## Architectural Constraints (Non-Negotiable)
 
 1. **No auth logic in this EPIC.** Entirely out of scope. No placeholder stubs.
-2. **Resolve endpoint always returns 200 OK**, even for provisional IDs. Status field carries the semantic.
+2. **Resolve endpoint returns 200 for canonical, 202 for provisional.** HTTP 202 Accepted signals "accepted but not yet final". The `status` field also carries the semantic.
 3. **Decision Store cursor is opaque.** Don't inspect or reconstruct; pass through as-is.
 4. **lastSeenTimestamp managed internally via LookupState watermark** (EPIC-01). REST caller does NOT pass it.
 5. **No caching at API layer.** Each request hits Decision Store fresh.
 6. **Services are thin orchestrators**, not business logic holders. Coordinator and Decision Store own the logic.
 7. **All string identifiers (status values, error codes) must be constants or enums**, not free strings.
 8. **Models do not import from services or entrypoints.** Dependency direction: entrypoints → services → models.
+9. **`OutcomeIntegrationWorker` must be started inside the FastAPI `lifespan` context**, never at module import time. `asyncio.create_task()` requires a running event loop; calling it outside lifespan raises `RuntimeError`.
+10. **EPIC-05 and EPIC-06 must not import from each other.** Both are Tier 2 in `.importlinter`. The `AsyncResolutionWaiter` → `OutcomeIntegrationService` connection is made exclusively here, via the `on_outcome_stored` callback parameter.
 
 ---
 
@@ -354,7 +419,14 @@ This EPIC synthesizes requirements from:
 
 ## Next Actions
 
-1. ✅ **EPIC-07 written** — Ready for implementation
-2. **Done:** Gherkin feature writing (gherkin-writer agent) — 3 feature files + step scaffolding under `tests/features/ers_rest_api/` and `tests/steps/ers_rest_api/`
-3. **Pending:** EPIC-06 and EPIC-04 completion (prereqs for implementation)
-4. **Pending:** Implementer agent to code the three layers and pass Clarity Gate
+1. ✅ **EPIC-07 core implementation** — Routes, services, models, DI, exception handlers implemented
+2. ✅ **Gherkin feature files** — Under `tests/feature/ers_rest_api/`
+3. ✅ **EPIC-04 complete** — Decision Store available
+4. ✅ **EPIC-05 and EPIC-06 wired** — T6.7 wired all services, lifespan, and coordinator gateway
+5. ✅ **Open concerns resolved** — All 4 concerns in `concerns.md` resolved (2026-04-01)
+6. ✅ **Dead code removed** — `ResolutionDecisionStoreServiceABC`, `DeltaPage`, `USE_MOCK_SERVICES` deleted
+7. ✅ **BDD feature tests wired** — 51 scenarios across `test_resolve_entity_mention.py` + `test_lookup_cluster_assignment.py`
+8. ✅ **E2E UC-B1.1 wired** — 19 scenarios in `test_ucb11_resolve_entity_mention.py` (task 6X)
+9. **Deferred:** E2E resolution cycle (`test_e2e_resolution_cycle.py`) — requires cross-endpoint state coordination; feature file updated, skip marker added
+10. **Deferred:** E2E curation tests (`test_ucb21`, `test_ucb22`) — requires curation API (future EPIC, Spine D)
+11. **Deferred:** E2E statistics test (`test_ucw4`) — requires statistics endpoint (future EPIC)

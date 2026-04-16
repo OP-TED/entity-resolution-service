@@ -3,10 +3,11 @@
 ## Status
 - **Epic ID:** ERS-EPIC-06
 - **Component:** #6 — Resolution Coordinator
-- **Phase:** Gherkin features complete, ready for implementation
-- **Spines:** A (Resolution Intake), B (Async Engine Interaction)
-- **Last updated:** 2026-03-16
-- **Dependencies:** EPIC-01 (Request Registry), EPIC-02 (RDF Mention Parser), EPIC-03 (ERE Contract Client), EPIC-04 (Resolution Decision Store)
+- **Phase:** Task files written, ready for implementation
+- **Spines:** A (Resolution Intake), B (Async Engine Interaction), C (Bulk Cluster Refresh)
+- **Last updated:** 2026-03-31
+- **Dependencies:** EPIC-01 (Request Registry — parse+register bundled), EPIC-03 (ERE Contract Client), EPIC-04 (Resolution Decision Store), EPIC-05 (ERE Result Integrator — `AsyncResolutionWaiter.notify` wired via EPIC-07 lifespan)
+- **Note:** EPIC-02 (RDF Mention Parser) is NOT a direct dependency — `RequestRegistryService.register_resolution_request` embeds RDF parsing internally.
 - **Clarity Gate:** Score: 9.85/10
 
 ---
@@ -17,15 +18,16 @@
 
 ## 1. Description
 
-The Resolution Coordinator is the **service-layer orchestrator** for Spines A and B. It receives entity mention resolution requests, coordinates registration (EPIC-01), parsing (EPIC-02), engine submission (EPIC-03), and decision persistence (EPIC-04), then returns a canonical or provisional cluster identifier to the caller within the client timeout budget.
+The Resolution Coordinator is the **service-layer orchestrator** for Spines A, B, and C. It receives entity mention resolution requests, coordinates registration (EPIC-01 — which also embeds RDF parsing), engine submission (EPIC-03), and decision persistence (EPIC-04), then returns a canonical or provisional cluster identifier to the caller within the request time budget.
 
-This component is a pure **service** — it defines no new entrypoints (EPIC-07 provides the REST API) and no new adapters. It orchestrates existing adapters and services from dependency EPICs.
+This component is a pure **service** — it defines no new entrypoints (EPIC-07 provides the REST API) and no new adapters. It orchestrates existing services from dependency EPICs.
 
-The Coordinator owns three critical responsibilities:
+The Coordinator owns four critical responsibilities:
 
-1. **Intake orchestration** — validate, parse, register, and publish each Entity Mention through the resolution pipeline
-2. **Time budget enforcement** — manage dual timeouts (client budget and ERE execution window) and issue provisional identifiers on timeout
-3. **Bulk decomposition** — break multi-mention requests into independent single-mention resolutions
+1. **Intake orchestration** — register and publish each Entity Mention through the resolution pipeline (RDF parsing is embedded in the registry service)
+2. **Time budget enforcement** — single and bulk requests have separate budgets; issue provisional identifiers when the budget expires before ERE responds
+3. **Bulk decomposition** — break multi-mention requests into independent concurrent single-mention resolutions
+4. **Bulk cluster refresh** — return delta of changed cluster assignments since the last snapshot (Spine C, `BulkRefreshCoordinatorService`)
 
 The Coordinator does NOT:
 - Make clustering decisions (ERE authority)
@@ -38,8 +40,8 @@ The Coordinator does NOT:
 | Term | Definition |
 |------|-----------|
 | **Correlation Triad** | `(source_id, request_id, entity_type)` — sole correlation and uniqueness key across ERS-ERE. |
-| **Client Timeout Budget** | Maximum time ERS may spend before returning a response to the Originator. Configuration-driven, default 60s. |
-| **ERE Execution Window** | Maximum time the Coordinator waits for an ERE response before issuing a provisional identifier. Must be < client budget. Configuration-driven. |
+| **Single Request Time Budget** | Maximum time ERS may spend before returning a response for a single-mention resolution. Doubles as the ERE wait window — on expiry the coordinator issues a provisional and returns. Env var: `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET`, default 30s. |
+| **Bulk Request Time Budget** | Maximum time ERS may spend before returning a response for a bulk resolve call. Fatal if exceeded. Env var: `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET`, default 120s. |
 | **Provisional Singleton ID** | Deterministically derived cluster identifier: `SHA256(concat(source_id, request_id, entity_type))`. Issued when ERE does not respond within the execution window. |
 | **Draft Identifier** | Synonym for Provisional Singleton ID. Used interchangeably in source architecture documents. |
 | **AsyncResolutionWaiter** | In-process coordination component that manages `asyncio.Event` objects keyed by triad. Allows the Coordinator to await ERE responses signalled by EPIC-05. |
@@ -52,26 +54,25 @@ The Coordinator does NOT:
 
 ### In Scope
 
-- Service class `ResolutionCoordinatorService` orchestrating the full Spine A intake flow
-- Dual time budget enforcement (client budget + ERE execution window)
-- Provisional singleton ID derivation: `SHA256(concat(source_id, request_id, entity_type))`
-- Bulk request decomposition into independent single-mention resolutions
-- Idempotent replay handling (return existing decision from Decision Store)
-- Idempotency conflict detection and rejection
-- Integration with `AsyncResolutionWaiter` for in-process ERE response notification
-- Outbound contract validation before publishing to ERE (triad completeness)
-- Graceful degradation on Redis failure (issue provisional, persist in Decision Store)
-- Configuration model for timeout values
-- OpenTelemetry instrumentation at the service layer
+- `ResolutionCoordinatorService` — Spine A+B intake: register, publish, wait, provisional fallback
+- `BulkRefreshCoordinatorService` — Spine C: delta lookup, snapshot advance, source-not-found guard
+- `AsyncResolutionWaiter` — in-process event coordination between coordinator and EPIC-05
+- Separate time budgets: `SINGLE_REQUEST_TIME_BUDGET` (also ERE wait window) and `BULK_REQUEST_TIME_BUDGET`
+- Provisional singleton ID reuse: `derive_provisional_cluster_id` already exists at `ers.resolution_decision_store.adapters.provisional_id` — import, do not redefine
+- Bulk decomposition via `asyncio.gather(..., return_exceptions=True)`
+- Idempotent replay, idempotency conflict detection, graceful Redis degradation
+- `DecisionStoreService.query_decisions_delta` extension (source + snapshot filter)
+- `RequestRegistryService.source_has_requests` extension (Spine C unknown-source guard)
+- Exception hierarchy: `CoordinatorException` base → `ResolutionTimeoutException`, `ParsingFailedException`, `EnginePublishFailedException`, `SourceNotFoundException`
+- Config via `ERSConfigResolver` (`ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET`, `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET`)
+- OpenTelemetry instrumentation at module-level public functions (not class methods)
 
 ### Out of Scope
 
 - ERE response consumption and Decision Store updates from ERE outcomes (EPIC-05)
-- REST API / HTTP entrypoints (EPIC-07)
-- RDF parsing logic (EPIC-02 — Coordinator calls the parser service)
-- Request Registry persistence internals (EPIC-01)
-- Decision Store persistence internals (EPIC-04)
-- ERE Contract Client transport internals (EPIC-03)
+- REST API / HTTP entrypoints (EPIC-07 — wired in T6.7 but not defined here)
+- RDF parsing logic — parsing is embedded in `RequestRegistryService.register_resolution_request`; Coordinator never calls a parser service directly
+- Request Registry, Decision Store, ERE Contract Client internals (EPIC-01, -03, -04)
 - Retry policies for ERE publishing (on failure, issue provisional)
 - User-initiated curation flows (EPIC-09, Spine D)
 - Authentication / authorisation
@@ -81,7 +82,7 @@ The Coordinator does NOT:
 1. All dependency services (EPIC-01 through EPIC-04) are available as injectable Python classes.
 2. `AsyncResolutionWaiter` runs in the same process as the Coordinator (single-process deployment for MVP).
 3. The er-spec library provides all domain models needed (`EntityMention`, `EntityMentionIdentifier`, `ClusterReference`, `EntityMentionResolutionRequest`).
-4. EPIC-05 (ERE Result Integrator) writes to the Decision Store and then signals the `AsyncResolutionWaiter` via a callback. This coupling is the integration contract between EPIC-05 and EPIC-06.
+4. EPIC-05 (ERE Result Integrator) writes to the Decision Store and then calls an injected async callback `on_outcome_stored(triad_key)`. At runtime this callback is `AsyncResolutionWaiter.notify`, wired by EPIC-07's FastAPI lifespan. EPIC-05 does not import EPIC-06 directly — the connection is made entirely at wiring time to respect Tier 2 sibling import rules.
 5. Bulk requests are bounded in size (max items enforced at the API layer, EPIC-07).
 
 ## 4. Domain Models
@@ -97,40 +98,34 @@ All models are imported from er-spec or dependency EPICs. The Coordinator define
 | `ClusterReference` | er-spec | Cluster assignment (current + candidates) |
 | `EntityMentionResolutionRequest` | er-spec | ERE publish envelope |
 | `ResolutionRequestRecord` | EPIC-01 | Request Registry record |
-| `JSONRepresentation` | EPIC-01 | Parsed mention content |
-| `ResolutionDecisionRecord` | EPIC-04 | Decision Store record |
+| `Decision` | er-spec | Decision Store record (canonical type returned by Decision Store) |
+| `LookupRequestRecord` | EPIC-01 | Per-source bulk refresh snapshot state |
+| `CursorPage[Decision]` | `ers.commons.domain.data_transfer_objects` | Paginated delta result for Spine C |
 
-### 4.2 Local Configuration Model
+### 4.2 Configuration
 
-```python
-class CoordinatorConfig(BaseModel):
-    """Configuration for the Resolution Coordinator timeouts."""
-    client_timeout_seconds: float = 60.0
-    ere_execution_window_seconds: float = 10.0
+No `CoordinatorConfig` Pydantic model. Configuration lives in the project-wide
+`ERSConfigResolver` (`src/ers/__init__.py`) via a `ResolutionCoordinatorConfig` mixin,
+following the same `env_property` pattern used by all other config classes.
 
-    @model_validator(mode="after")
-    def execution_window_less_than_client_timeout(self) -> "CoordinatorConfig":
-        if self.ere_execution_window_seconds >= self.client_timeout_seconds:
-            raise ValueError(
-                "ere_execution_window_seconds must be < client_timeout_seconds"
-            )
-        return self
-```
+| Env Var | Default | Meaning |
+|---------|---------|---------|
+| `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET` | `30` (seconds) | Wait budget for single-mention resolution. Also serves as the ERE wait window — on expiry, a provisional is issued. |
+| `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET` | `120` (seconds) | Wait budget for a full bulk resolve call. Fatal (`ResolutionTimeoutException`) if exceeded. |
 
-**Constraints:**
-- `client_timeout_seconds` must be > 0.
-- `ere_execution_window_seconds` must be > 0 and strictly less than `client_timeout_seconds`.
-- All values overridable via environment variables (prefix `ERS_COORDINATOR_`).
+Read via `from ers import config` — not injected as a constructor parameter.
+`ResolutionCoordinatorService.__init__` validates that both values are > 0.
 
 ### 4.3 Local Exceptions
 
 | Exception | Raised When |
 |-----------|------------|
-| `ResolutionTimeoutError` | Client timeout budget expired before any response could be produced. Fatal — propagated to caller (EPIC-07 maps to 504). |
-| `ParsingFailedError` | RDF Mention Parser (EPIC-02) raises any parsing error. Fatal — request rejected, NOT registered in Request Registry. |
-| `EnginePublishFailedError` | ERE Contract Client (EPIC-03) raises `RedisConnectionError`. Non-fatal — Coordinator issues provisional ID as graceful degradation. |
+| `ResolutionTimeoutException` | MongoDB unavailable during provisional write (single-mention), OR bulk request time budget expired. Fatal — propagated to caller (EPIC-07 maps to 504). **Not** raised on ERE timeout — that path issues a provisional instead. |
+| `ParsingFailedException` | `RequestRegistryService.register_resolution_request` raises any parsing error internally. Fatal — request rejected, NOT registered in Request Registry. |
+| `EnginePublishFailedException` | ERE Contract Client (EPIC-03) raises `RedisConnectionError`. Non-fatal — Coordinator issues provisional ID as graceful degradation. |
+| `SourceNotFoundException` | Requested source has no resolution requests in the Request Registry (Spine C only). Fatal — no delta to return. |
 
-All exceptions inherit from a base `CoordinatorError`. Existing exceptions from dependencies (`IdempotencyConflictError` from EPIC-01, `StaleOutcomeError` from EPIC-04) are propagated, not wrapped.
+All exceptions inherit from a base `CoordinatorException`. Existing exceptions from dependencies (`IdempotencyConflictError` from EPIC-01, `StaleOutcomeError` from EPIC-04) are propagated, not wrapped.
 
 ## 5. Behavioural Specification
 
@@ -138,51 +133,54 @@ All exceptions inherit from a base `CoordinatorError`. Existing exceptions from 
 
 ```mermaid
 flowchart TD
-    A[Receive EntityMention] --> B[Parse via RDF Mention Parser - EPIC-02]
-    B -- Parse failure --> Z1[Raise ParsingFailedError - fatal]
-    B -- Success --> C[Register in Request Registry - EPIC-01]
-    C -- Idempotency conflict --> Z2[Propagate IdempotencyConflictError]
-    C -- Idempotent replay --> D{Decision exists in Decision Store?}
-    D -- Yes --> E[Return existing ResolutionDecisionRecord]
-    D -- No --> F[Wait on AsyncResolutionWaiter]
-    C -- New record --> G[Publish to ERE via Contract Client - EPIC-03]
-    G -- RedisConnectionError --> H[Derive provisional singleton ID]
-    G -- Success --> I[Await AsyncResolutionWaiter with ERE execution window timeout]
+    A[Receive EntityMention] --> B[Register via RequestRegistryService - EPIC-01\nembeds RDF parsing internally]
+    B -- Parse failure --> Z1[Raise ParsingFailedException - fatal]
+    B -- Idempotency conflict --> Z2[Propagate IdempotencyConflictError]
+    B -- Idempotent replay --> D{Decision exists in Decision Store?}
+    D -- Yes --> E[Return existing Decision]
+    D -- No --> F[Get wait handle from AsyncResolutionWaiter]
+    B -- New record --> G[Publish to ERE via Contract Client - EPIC-03]
+    G -- RedisConnectionError --> H[derive_provisional_cluster_id - already in EPIC-04 adapters]
+    G -- Success --> I[Await AsyncResolutionWaiter with SINGLE_REQUEST_TIME_BUDGET timeout]
     I -- ERE responds in time --> J[Read decision from Decision Store]
-    J --> K[Return ResolutionDecisionRecord]
+    J --> K[Return Decision]
     I -- Timeout --> H
     H --> L[Store provisional decision in Decision Store - EPIC-04]
-    L --> M[Return ResolutionDecisionRecord with provisional ID]
+    L -- RepositoryConnectionError --> Z3[Raise ResolutionTimeoutException - fatal]
+    L -- StaleOutcomeError --> J
+    L -- Success --> M[Return Decision with provisional ID]
 ```
 
 **Step-by-step algorithm:**
 
-1. **Parse.** Call `RDFMentionParserService.parse(entity_mention)` → `JSONRepresentation`. If parsing fails, raise `ParsingFailedError`. Do NOT register the request.
+1. **Check existing decision first.** Call `DecisionStoreService.get_decision_by_triad(identifier)`.
+   - If a decision exists: return it immediately (idempotent replay shortcut — no registration needed).
+   - If not found: proceed to step 2.
 
-2. **Register.** Call `RequestRegistryService.register_resolution_request(entity_mention)`.
-   - If **idempotent replay** (same triad, same content): look up Decision Store. If a decision exists, return it immediately. If no decision yet (ERE hasn't responded), share the existing async wait (step 5).
+2. **Register.** Call `RequestRegistryService.register_resolution_request(entity_mention)`. This embeds RDF parsing internally — the coordinator never calls a parser service directly.
+   - If **parsing fails** inside the service: `ParsingFailedException` is raised. Do NOT proceed. Request was NOT registered.
    - If **idempotency conflict** (same triad, different content): propagate `IdempotencyConflictError` to caller. Do NOT touch Decision Store.
-   - If **new record**: proceed to step 3.
+   - If **new record** or **idempotent replay** (same triad, same content, no decision yet): proceed to step 3.
 
 3. **Publish to ERE.** Construct `EntityMentionResolutionRequest` with triad + entity mention. Call `EREPublishService.publish_request(request)`.
-   - If `RedisConnectionError` (Redis down): skip to step 6 (graceful degradation — issue provisional).
+   - If `RedisConnectionError` (Redis down): skip to step 5 (graceful degradation — issue provisional).
    - If success: proceed to step 4.
 
-4. **Register/get wait handle.** Call `AsyncResolutionWaiter.get_or_create(triad_key)` → returns an `asyncio.Event`.
+4. **Await ERE response.** Call `AsyncResolutionWaiter.get_or_create(triad_key)` → returns an `asyncio.Event`. `await asyncio.wait_for(asyncio.shield(event.wait()), timeout=SINGLE_REQUEST_TIME_BUDGET)`.
+   - If **event fires** (EPIC-05 signalled): proceed to step 6.
+   - If **timeout** (`asyncio.TimeoutError`): proceed to step 5.
 
-5. **Await ERE response.** `await event.wait()` with timeout = `ere_execution_window_seconds`.
-   - If **event fires** (EPIC-05 signalled): proceed to step 7.
-   - If **timeout**: proceed to step 6.
-
-6. **Issue provisional singleton.**
-   - Derive: `cluster_id = SHA256(concat(source_id, request_id, entity_type))` as hex string.
+5. **Issue provisional singleton.**
+   - Call `derive_provisional_cluster_id(identifier)` — already implemented at `ers.resolution_decision_store.adapters.provisional_id`. Do NOT reimplement.
    - Construct `ClusterReference(cluster_id=provisional_id, confidence_score=1.0, similarity_score=1.0)`.
    - Call `DecisionStoreService.store_decision(identifier, current=provisional_ref, candidates=[provisional_ref], updated_at=now_utc)`.
-   - Return the `ResolutionDecisionRecord`.
+     - If `RepositoryConnectionError` (MongoDB down): raise `ResolutionTimeoutException` (fatal).
+     - If `StaleOutcomeError` (ERE already wrote a newer decision): catch, fall through to step 6 to read and return the existing decision.
+   - Return the `Decision`.
 
-7. **Read authoritative decision.** Call `DecisionStoreService.get_decision_by_triad(identifier)`. Return the `ResolutionDecisionRecord`.
+6. **Read authoritative decision.** Call `DecisionStoreService.get_decision_by_triad(identifier)`. Return the `Decision`.
 
-8. **Cleanup.** After returning, `AsyncResolutionWaiter.release(triad_key)` decrements the waiter count and removes the Event when no more waiters remain.
+7. **Cleanup.** After returning (in a `finally` block), `asyncio.shield(AsyncResolutionWaiter.release(triad_key))` — the `asyncio.shield` ensures cleanup survives bulk cancellation.
 
 ### 5.2 Bulk Decomposition
 
@@ -190,7 +188,7 @@ flowchart TD
 async def resolve_bulk(
     self,
     entity_mentions: list[EntityMention],
-) -> list[ResolutionDecisionRecord | CoordinatorError]:
+) -> list[Decision | CoordinatorException]:
 ```
 
 - Decompose the list into independent `resolve_single()` calls.
@@ -223,40 +221,39 @@ class AsyncResolutionWaiter:
         """Decrements waiter count. Removes Event when count reaches 0."""
 ```
 
-- `triad_key` is a string: `f"{source_id}|{request_id}|{entity_type}"`.
+- `triad_key` is a string: `f"{source_id}{request_id}{entity_type}"` (direct concatenation, no separator — matches the provisional cluster ID derivation algorithm).
 - Thread-safe via `asyncio.Lock`.
 - The `notify` method is the **integration contract** with EPIC-05. EPIC-05 calls `waiter.notify(triad_key)` after writing the ERE outcome to the Decision Store.
 - Events are ephemeral (in-memory only). On process restart, pending waits are lost — this is acceptable because the client request will have already timed out.
 
 ### 5.4 Provisional Singleton ID Derivation
 
-```python
-import hashlib
+**This function already exists.** Import it; do NOT reimplement it:
 
-def derive_provisional_cluster_id(identifier: EntityMentionIdentifier) -> str:
-    """Deterministic provisional singleton cluster ID.
-    Algorithm: SHA256(concat(source_id, request_id, entity_type)) as hex string.
-    Both ERS and ERE implement the same derivation rule (ADR-A1N)."""
-    raw = f"{identifier.source_id}{identifier.request_id}{identifier.entity_type}"
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+```python
+from ers.resolution_decision_store.adapters.provisional_id import derive_provisional_cluster_id
 ```
+
+Algorithm: `SHA256(concat(source_id, request_id, entity_type))` as hex string (no separator).
+Both ERS and ERE implement the same derivation rule (ADR-A1N).
 
 - Pure function, no I/O, no side effects.
 - Deterministic: same input always produces the same ID.
-- Defined as a module-level utility in the Coordinator's service module.
+- Also used in `ResolveService` (EPIC-07/T6.7) to detect provisional decisions from the Decision Store.
 
 ## 6. Error Handling Matrix
 
 | Error Type | Detection | Response | Fallback | Logging Level |
 |------------|-----------|----------|----------|---------------|
-| RDF parsing failure (any EPIC-02 error) | Parser raises exception | Raise `ParsingFailedError` wrapping original | None — request NOT registered | ERROR |
+| RDF parsing failure (embedded in EPIC-01 registration) | `register_resolution_request` raises parsing error | Raise `ParsingFailedException` wrapping original | None — request NOT registered | ERROR |
 | Idempotency conflict | EPIC-01 raises `IdempotencyConflictError` | Propagate to caller (EPIC-07 maps to 422) | None | WARN |
 | Redis connection failure | EPIC-03 raises `RedisConnectionError` | Issue provisional singleton ID | Persist provisional in Decision Store | WARN |
-| ERE execution window timeout | `asyncio.Event.wait()` times out | Issue provisional singleton ID | Persist provisional in Decision Store | INFO |
-| Client timeout budget exceeded | Overall operation exceeds `client_timeout_seconds` | Raise `ResolutionTimeoutError` | None — propagate to caller (EPIC-07 maps to 504) | ERROR |
-| Decision Store unavailable (MongoDB down) | EPIC-04 raises `RepositoryConnectionError` | Raise `ResolutionTimeoutError` (fatal — cannot persist) | None | ERROR |
+| ERE single-mention timeout (`SINGLE_REQUEST_TIME_BUDGET`) | `asyncio.wait_for` raises `asyncio.TimeoutError` | Issue provisional singleton ID — **non-fatal** | Persist provisional in Decision Store | INFO |
+| Bulk request time budget exceeded (`BULK_REQUEST_TIME_BUDGET`) | `asyncio.wait_for` on `asyncio.gather` raises `asyncio.TimeoutError` | Raise `ResolutionTimeoutException` — **fatal** | None — propagated to caller (EPIC-07 maps to 504) | ERROR |
+| Decision Store unavailable during provisional write (MongoDB down) | EPIC-04 raises `RepositoryConnectionError` | Raise `ResolutionTimeoutException` (fatal — cannot persist) | None | ERROR |
 | Stale outcome on provisional write | EPIC-04 raises `StaleOutcomeError` | Ignore — means ERE already wrote a newer decision | Read and return the existing decision | DEBUG |
 | Bulk: individual mention failure | Any error in single-mention flow | Capture as error in results list | Other mentions unaffected | Per error type |
+| Unknown source (Spine C) | `RequestRegistryService.source_has_requests` returns False | Raise `SourceNotFoundException` — fatal | None — propagated to caller (EPIC-07 maps to 404) | WARN |
 
 ---
 
@@ -266,7 +263,7 @@ def derive_provisional_cluster_id(identifier: EntityMentionIdentifier) -> str:
 |-------|-----------|-----|
 | Override or reinterpret ERE clustering decisions in the Coordinator | Accept ERE outcomes as-is; store exactly what ERE returns | ERE is the canonical authority for clustering. ERS must never override. |
 | Implement retry logic for ERE publishing inside the Coordinator | On publish failure, issue provisional singleton and persist in Decision Store | Retries add complexity and latency. Graceful degradation is simpler and meets the user's requirement. |
-| Register a request in the Request Registry before parsing succeeds | Parse first, then register. Parsing failure = fatal, request never existed. | Avoids polluting the registry with requests that could not be processed. |
+| Call a parser service directly from the Coordinator | Call `RequestRegistryService.register_resolution_request` — it embeds RDF parsing internally. Map any parsing error to `ParsingFailedException`. | Parsing is an EPIC-01/EPIC-02 concern. The Coordinator never imports or injects a parser directly. |
 | Put parsing, registration, or publishing logic inside the `AsyncResolutionWaiter` | Keep the waiter as a pure coordination primitive (Events only). All business logic stays in `ResolutionCoordinatorService`. | SRP: waiter coordinates; service orchestrates. |
 | Use polling loops to check the Decision Store for ERE responses | Use `asyncio.Event` signalled by EPIC-05's callback | Polling wastes CPU and adds latency. Event-driven is simpler and faster. |
 | Catch and swallow `IdempotencyConflictError` | Propagate to caller. The API layer (EPIC-07) maps it to 422. | Conflicts are business errors that the caller must handle. |
@@ -283,25 +280,25 @@ def derive_provisional_cluster_id(identifier: EntityMentionIdentifier) -> str:
 
 | Test ID | Component | Input | Expected Output | Edge Cases |
 |---------|-----------|-------|-----------------|------------|
-| TC-001 | `CoordinatorConfig` | Default constructor | Valid: 60s client, 10s ERE window | N/A |
-| TC-002 | `CoordinatorConfig` | `ere_execution_window_seconds=60, client_timeout_seconds=60` | `ValidationError` (window must be < budget) | Window = budget (equal, not less) |
-| TC-003 | `CoordinatorConfig` | `client_timeout_seconds=0` | `ValidationError` | Negative values |
-| TC-004 | `derive_provisional_cluster_id` | Known triad | Deterministic SHA-256 hex string | Empty source_id; unicode characters in fields |
-| TC-005 | `derive_provisional_cluster_id` | Same triad twice | Identical output both times | Different triads produce different IDs |
+| TC-001 | `ERSConfigResolver` — coordinator config | Default env (no overrides) | `config.coordinator_single_request_time_budget == 30` | N/A |
+| TC-002 | `ERSConfigResolver` — coordinator config | `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0` | `ValueError` on access (validated > 0 in service `__init__`) | Negative values |
+| TC-003 | `ResolutionCoordinatorService.__init__` | Config with budget ≤ 0 | `ValueError` raised | N/A |
+| TC-004 | `derive_provisional_cluster_id` (EPIC-04 function) | Known triad | Deterministic SHA-256 hex string | Empty source_id; unicode in fields |
+| TC-005 | `derive_provisional_cluster_id` (EPIC-04 function) | Same triad twice | Identical output both times | Different triads produce different IDs |
 | TC-006 | `AsyncResolutionWaiter.get_or_create` | New triad_key | New Event created, waiter count = 1 | Same key called twice → same Event, count = 2 |
 | TC-007 | `AsyncResolutionWaiter.notify` | Triad with waiting Event | Event is set; all waiters unblocked | Notify on non-existent key → no-op |
 | TC-008 | `AsyncResolutionWaiter.release` | Triad with count = 1 | Event removed from dict | Count > 1 → decremented but not removed |
-| TC-009 | Service: resolve_single (happy path) | Valid EntityMention, ERE responds in time | `ResolutionDecisionRecord` with ERE cluster ID | N/A |
-| TC-010 | Service: resolve_single (ERE timeout) | Valid EntityMention, ERE does NOT respond in time | `ResolutionDecisionRecord` with provisional singleton ID | Provisional ID matches SHA-256 derivation |
-| TC-011 | Service: resolve_single (idempotent replay, decision exists) | Same triad + same content, decision in store | Returns existing `ResolutionDecisionRecord` | No ERE publish, no new registration |
+| TC-009 | Service: resolve_single (happy path) | Valid EntityMention, ERE responds in time | `Decision` with ERE cluster ID | N/A |
+| TC-010 | Service: resolve_single (ERE timeout) | Valid EntityMention, ERE does NOT respond within `SINGLE_REQUEST_TIME_BUDGET` | `Decision` with provisional singleton ID — non-fatal | Provisional ID matches `derive_provisional_cluster_id` |
+| TC-011 | Service: resolve_single (idempotent replay, decision exists) | Same triad + same content, decision in store already | Returns existing `Decision` from Decision Store immediately | No ERE publish, no registration |
 | TC-012 | Service: resolve_single (idempotent replay, no decision yet) | Same triad + same content, no decision yet | Shares async wait with original request | Both waiters unblocked when EPIC-05 signals |
 | TC-013 | Service: resolve_single (idempotency conflict) | Same triad, different content | `IdempotencyConflictError` propagated | Decision Store not touched |
-| TC-014 | Service: resolve_single (parse failure) | Malformed RDF content | `ParsingFailedError` raised | Request NOT registered in Request Registry |
-| TC-015 | Service: resolve_single (Redis down) | Valid mention, Redis connection fails | Provisional singleton issued and persisted | No ERE publish attempted after failure |
-| TC-016 | Service: resolve_single (MongoDB down) | Valid mention, Decision Store unavailable | `ResolutionTimeoutError` raised (fatal) | N/A |
+| TC-014 | Service: resolve_single (parse failure) | `register_resolution_request` raises parsing error | `ParsingFailedException` raised | Request NOT registered in Request Registry |
+| TC-015 | Service: resolve_single (Redis down) | Valid mention, `publish_request` raises `RedisConnectionError` | Provisional singleton issued and persisted | ERE never published |
+| TC-016 | Service: resolve_single (MongoDB down during provisional write) | `store_decision` raises `RepositoryConnectionError` | `ResolutionTimeoutException` raised (fatal) | N/A |
 | TC-017 | Service: resolve_single (stale outcome on provisional write) | ERE wrote decision before provisional | Reads and returns existing (newer) decision | `StaleOutcomeError` caught, not propagated |
 | TC-018 | Service: resolve_bulk | 3 mentions, 2 succeed, 1 parse failure | List of 2 decisions + 1 error | Order preserved; failures don't abort batch |
-| TC-019 | Service: resolve_bulk | Empty list | Empty list returned | N/A |
+| TC-019 | Service: resolve_bulk (bulk timeout) | Bulk budget exceeded | `ResolutionTimeoutException` raised | N/A |
 | TC-020 | Service: observability | Valid resolve | OTel span with triad attributes + timing | Error case: span records exception |
 
 ### Integration Tests
@@ -314,111 +311,34 @@ def derive_provisional_cluster_id(identifier: EntityMentionIdentifier) -> str:
 | IT-004 | Idempotent replay | MongoDB + Redis; pre-existing decision | Submit same triad+content → same decision returned without new ERE publish | Drop test collections |
 | IT-005 | Concurrent identical requests | MongoDB + Redis | Submit 5 identical requests concurrently → all 5 return same decision; exactly 1 ERE publish | Drop test collections; flush Redis |
 | IT-006 | Bulk decomposition | MongoDB + Redis | Submit 3 mentions → 3 independent decisions returned | Drop test collections; flush Redis |
+| IT-007 | Bulk refresh — delta (Spine C) | MongoDB; pre-seed 5 decisions, 3 updated after snapshot | `refresh_bulk` → delta returns only the 3 updated decisions; snapshot advanced | Drop test collections |
+| IT-008 | Bulk refresh — first lookup (Spine C) | MongoDB; no prior snapshot | `refresh_bulk` with `cursor=None` → all decisions for source returned | Drop test collections |
+| IT-009 | Bulk refresh — unknown source (Spine C) | MongoDB; no requests for source | `refresh_bulk` → `SourceNotFoundException` raised | Drop test collections |
 
 ---
 
 ## 9. Task Breakdown
 
-### Task 1: Define Configuration and Exceptions
-**Layer:** `models/`
-**Dependencies:** None
-**Description:**
-- Create `CoordinatorConfig` Pydantic model with field validators.
-- Create exception hierarchy: `CoordinatorError` (base), `ResolutionTimeoutError`, `ParsingFailedError`, `EnginePublishFailedError`.
-- Environment variable loading via Pydantic `model_config` with `env_prefix = "ERS_COORDINATOR_"`.
+Each task is a PR-sized unit of work. Unit tests are written alongside the code in each task (not in a separate task). Integration and feature tests are grouped in T6.6. Full details are in the individual task files in this folder.
 
-**Acceptance Criteria:**
-- `CoordinatorConfig()` produces valid defaults (60s / 10s).
-- Invalid configs rejected (window >= budget, zero/negative values).
-- All exceptions instantiable with message string and inherit from `CoordinatorError`.
-
-### Task 2: Implement AsyncResolutionWaiter
-**Layer:** `services/` (internal coordination component)
-**Dependencies:** None
-**Description:**
-- Create `AsyncResolutionWaiter` class with `get_or_create`, `notify`, `release` methods.
-- Thread-safe via `asyncio.Lock`.
-- Full unit test coverage including concurrent access scenarios.
-
-**Acceptance Criteria:**
-- Multiple callers with same triad share one Event.
-- `notify` unblocks all waiters.
-- `release` cleans up when waiter count reaches 0.
-- Notify on non-existent key is a no-op.
-
-### Task 3: Implement Provisional ID Derivation
-**Layer:** `services/` (module-level utility)
-**Dependencies:** er-spec (`EntityMentionIdentifier`)
-**Description:**
-- Pure function `derive_provisional_cluster_id(identifier) -> str`.
-- SHA-256 of `concat(source_id, request_id, entity_type)`.
-
-**Acceptance Criteria:**
-- Deterministic (same input → same output).
-- Matches the algorithm specified in ADR-A1N and EPIC-04.
-
-### Task 4: Implement ResolutionCoordinatorService
-**Layer:** `services/`
-**Dependencies:** Tasks 1-3, EPIC-01 service, EPIC-02 service, EPIC-03 service, EPIC-04 service
-**Description:**
-- Create `ResolutionCoordinatorService` with constructor accepting all dependency services + `AsyncResolutionWaiter` + `CoordinatorConfig`.
-- Implement `resolve_single(entity_mention: EntityMention) -> ResolutionDecisionRecord`.
-- Implement `resolve_bulk(entity_mentions: list[EntityMention]) -> list[ResolutionDecisionRecord | CoordinatorError]`.
-- Full flow per Section 5.1 algorithm.
-- OpenTelemetry spans on `resolve_single` and `resolve_bulk`.
-
-**Acceptance Criteria:**
-- Happy path: ERE responds in time → returns ERE decision.
-- Timeout: provisional singleton issued and persisted.
-- Redis down: graceful degradation → provisional.
-- MongoDB down: fatal error.
-- Idempotent replay: returns existing decision.
-- Conflict: propagated.
-- Parse failure: fatal, no registration.
-- Bulk: concurrent execution, order preserved, individual failures captured.
-
-### Task 5: Unit Tests
-**Layer:** `tests/`
-**Dependencies:** Tasks 1-4
-**Description:**
-- Unit tests for all components using mocked dependency services.
-- All TC-001 through TC-020 from Section 8.
-- Minimum 90% coverage on new code.
-
-**Acceptance Criteria:**
-- All test cases pass.
-- Coverage >= 90%.
-
-### Task 6: Integration Tests
-**Layer:** `tests/`
-**Dependencies:** Tasks 1-4, MongoDB + Redis available
-**Description:**
-- Integration tests with real MongoDB and Redis (via testcontainers or docker-compose).
-- All IT-001 through IT-006 from Section 8.
-- Simulated ERE responses via direct Redis `lpush` to `ere_responses`.
-
-**Acceptance Criteria:**
-- All integration tests pass.
-- Tests are skippable if infrastructure unavailable (pytest marks).
-
-### Task 7: Gherkin Features
-**Layer:** `tests/features/`
-**Dependencies:** Tasks 1-4
-**Description:**
-- Feature files per Section 11.
-- Step definitions calling the Coordinator service.
-
-**Acceptance Criteria:**
-- All Gherkin scenarios pass via pytest-bdd.
+| Task | File | Builds On |
+|------|------|-----------|
+| T6.1 — Foundation: Exceptions + Config | `task61-exceptions-config.md` | — |
+| T6.2 — AsyncResolutionWaiter | `task62-async-resolution-waiter.md` | T6.1 |
+| T6.3 — ResolutionCoordinatorService (Spines A+B) | `task63-resolution-coordinator-service.md` | T6.1, T6.2 |
+| T6.4 — DecisionStoreService Delta Extension | `task64-decision-store-delta-extension.md` | — |
+| T6.5 — BulkRefreshCoordinatorService (Spine C) | `task65-bulk-refresh-coordinator-service.md` | T6.1, T6.4 |
+| T6.6 — Integration + Feature Tests | `task66-integration-feature-tests.md` | T6.3, T6.5 |
+| T6.7 — ERS REST API Wiring | `task67-ers-rest-api-wiring.md` | T6.3, T6.5 |
 
 ## Roadmap
-- [ ] Task 1: Define Configuration and Exceptions (models)
-- [ ] Task 2: Implement AsyncResolutionWaiter (services)
-- [ ] Task 3: Implement Provisional ID Derivation (services)
-- [ ] Task 4: Implement ResolutionCoordinatorService (services)
-- [ ] Task 5: Unit Tests (tests)
-- [ ] Task 6: Integration Tests (tests)
-- [ ] Task 7: Gherkin Features (tests/features)
+- [x] T6.1: Foundation — Exceptions + Config
+- [x] T6.2: AsyncResolutionWaiter
+- [x] T6.3: ResolutionCoordinatorService (Spines A+B)
+- [x] T6.4: DecisionStoreService Delta Extension
+- [x] T6.5: BulkRefreshCoordinatorService (Spine C)
+- [x] T6.6: Integration + Feature Tests
+- [x] T6.7: ERS REST API Wiring
 
 ---
 
@@ -471,6 +391,18 @@ At `tests/features/resolution_coordinator/`:
 | Waiter timeout | Waiter registered, no signal within timeout → waiter unblocked by timeout |
 | Cleanup after all waiters release | All waiters release → Event removed from dictionary |
 
+### Feature: Bulk Cluster Lookup (Spine C)
+
+File: `tests/feature/resolution_coordinator/test_bulk_lookup.feature`
+
+| Scenario | Description |
+|----------|-------------|
+| First-time lookup returns all decisions | No prior snapshot → all decisions for source returned |
+| Delta lookup returns only changed decisions | Prior snapshot exists → only decisions updated after snapshot returned |
+| Empty delta still advances snapshot | No decisions updated since snapshot → empty page, snapshot advanced |
+| Unknown source raises error | Source has no requests in registry → `SourceNotFoundException` raised |
+| Pagination cursor forwarded correctly | Non-None cursor passed → delta query uses that cursor |
+
 ---
 
 ## 12. Risks and Assumptions
@@ -489,7 +421,7 @@ At `tests/features/resolution_coordinator/`:
 
 1. EPIC-05 (ERE Result Integrator) will call `AsyncResolutionWaiter.notify(triad_key)` after writing ERE outcomes to the Decision Store.
 2. Single-process deployment for MVP. Horizontal scaling (multiple Coordinator instances) would require replacing `AsyncResolutionWaiter` with Redis Pub/Sub or similar.
-3. The client timeout budget is enforced at the HTTP layer (EPIC-07) via request timeouts. The Coordinator's `client_timeout_seconds` is a safety net.
+3. The `BULK_REQUEST_TIME_BUDGET` is a Coordinator-level safety net. Individual request timeouts at the HTTP layer (EPIC-07) may fire first.
 4. Bulk request size is bounded at the API layer (EPIC-07). The Coordinator does not enforce a max size.
 
 ---
@@ -498,20 +430,22 @@ At `tests/features/resolution_coordinator/`:
 
 | Dependency | Type | Provides | Epic |
 |-----------|------|----------|------|
-| `RequestRegistryService` | Service (injected) | `register_resolution_request()`, idempotency enforcement | EPIC-01 |
-| `RDFMentionParserService` | Service (injected) | `parse(entity_mention)` → `JSONRepresentation` | EPIC-02 |
-| `EREPublishService` | Service (injected) | `publish_request(request)` → `ere_request_id` | EPIC-03 |
-| `DecisionStoreService` | Service (injected) | `store_decision()`, `get_decision_by_triad()` | EPIC-04 |
-| `AsyncResolutionWaiter` | Component (injected) | In-process event coordination | This EPIC |
-| `CoordinatorConfig` | Configuration | Timeout values | This EPIC |
-| er-spec | Library | Domain models | External |
+| `RequestRegistryService` | Service (injected) | `register_resolution_request()` (embeds RDF parsing), `source_has_requests()`, `get_lookup_state()`, `advance_snapshot()` | EPIC-01 |
+| `EREPublishService` | Service (injected) | `publish_request(request)` | EPIC-03 |
+| `DecisionStoreService` | Service (injected) | `store_decision()`, `get_decision_by_triad()`, `query_decisions_delta()` | EPIC-04 |
+| `AsyncResolutionWaiter` | Component (injected) | In-process event coordination between Coordinator and EPIC-05 | This EPIC |
+| `ERSConfigResolver` | Configuration (global singleton) | `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET`, `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET` | `src/ers/__init__.py` |
+| `derive_provisional_cluster_id` | Function (imported) | Deterministic provisional cluster ID derivation | EPIC-04 adapters |
+| er-spec | Library | Domain models (`EntityMention`, `Decision`, `ClusterReference`, etc.) | External |
 
 ### Downstream Consumers
 
 | Consumer | What It Uses | Epic |
 |----------|-------------|------|
-| ERS REST API | `ResolutionCoordinatorService.resolve_single()`, `resolve_bulk()` | EPIC-07 |
-| ERE Result Integrator | `AsyncResolutionWaiter.notify()` callback | EPIC-05 |
+| ERS REST API (`ResolveService`) | `ResolutionCoordinatorService.resolve_single()`, `resolve_bulk()` | EPIC-07 |
+| ERS REST API (`RefreshBulkService`) | `BulkRefreshCoordinatorService.refresh_bulk()` | EPIC-07 |
+| ERE Result Integrator | `AsyncResolutionWaiter.notify` passed as `on_outcome_stored` callback — wired by EPIC-07 lifespan; EPIC-05 never imports EPIC-06 directly | EPIC-05 |
+| ERS REST API (lifecycle) | `AsyncResolutionWaiter` created in FastAPI lifespan (`app.state.waiter`), callback wired to `OutcomeIntegrationService` | EPIC-07 |
 
 ---
 
@@ -530,49 +464,3 @@ At `tests/features/resolution_coordinator/`:
 | ERE Contract Client EPIC | `.claude/memory/epics/ers-epic-03-ere-contract-client/EPIC.md` | Publish service interface, error types |
 | Resolution Decision Store EPIC | `.claude/memory/epics/ers-epic-04-resolution-decision-store/EPIC.md` | Decision Store service interface, staleness detection |
 | Planning Roadmap | `.claude/memory/planning-roadmap.md` | Component #6 |
-
----
-<!-- implementation-log -->
----
-
-# Part 2 — Implementation Log
-
-<!-- Written and updated by the implementer during Phase 3. -->
-
----
-
-## Clarity Gate Assessment
-
-**Document type:** Implementation | **Date:** 2026-03-12
-
-### 13-Item Checklist
-
-#### Foundation Checks
-- [x] **Actionable** — Concrete service interface, step-by-step algorithm with Mermaid diagram, configuration model with validators, utility function with code.
-- [x] **Current** — Reflects developer answers from 2026-03-12 Q&A session. All design decisions documented.
-- [x] **Single Source** — er-spec and dependency EPIC models referenced by pointer only (Section 4.1). Config and exceptions defined locally (Sections 4.2-4.3).
-- [x] **Decision, Not Wish** — All decided: asyncio.Event coordination, SHA-256 provisional derivation, graceful degradation on Redis failure, fatal on MongoDB failure, bulk decomposition in Coordinator.
-- [x] **Prompt-Ready** — Every section provides direct implementer input: interfaces, algorithms, config constraints, error handling matrix, test cases.
-- [x] **No Future State** — No "might", "eventually", "ideally". Horizontal scaling noted as future evolution with explicit boundary (Assumption #2).
-- [x] **No Fluff** — Pure specification. No motivational content.
-
-#### Document Architecture Checks
-- [x] **Type Identified** — Implementation (stated after Part 1 heading).
-- [x] **Anti-patterns Placed** — Section 7, 10 entries (exceeds minimum of 5).
-- [x] **Test Cases Placed** — Section 8, 20 unit tests + 6 integration tests.
-- [x] **Error Handling Placed** — Section 6, 8 error scenarios with detection, response, fallback, and log level.
-- [x] **Deep Links Present** — Section 14, 11 references with file paths and section context.
-- [x] **No Duplicates** — Dependency models listed as reference table; not redefined.
-
-### Scoring
-
-| Criterion | Weight | Score | Rationale |
-|-----------|--------|-------|-----------|
-| Actionability | 25% | 10 | Step-by-step algorithm, Mermaid flow, concrete service methods, code for utility and waiter |
-| Specificity | 20% | 10 | Timeout defaults explicit (60s/10s), SHA-256 algorithm specified, all error types with handling |
-| Consistency | 15% | 10 | Single source for config; all models by pointer; no duplication across EPIC boundaries |
-| Structure | 15% | 10 | Tables throughout; numbered algorithm; clear task breakdown with layers and acceptance criteria |
-| Disambiguation | 15% | 10 | 10 anti-patterns; 8 error scenarios; edge cases per test; concurrent access addressed |
-| Reference Clarity | 10% | 9 | 11 deep links. Minor gap: ADR-A1N file path assumed (not verified against actual docs directory structure) |
-
-**Score: 9.85/10** — Weighted: (10×0.25 + 10×0.20 + 10×0.15 + 10×0.15 + 10×0.15 + 9×0.10) = 9.85. Rounded to **9.8/10** — PASS. Ready for implementation.

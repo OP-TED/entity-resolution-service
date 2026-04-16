@@ -1,0 +1,2705 @@
+= Curation REST API
+0.1.0
+:toc: left
+:numbered:
+:toclevels: 4
+:source-highlighter: highlightjs
+:keywords: openapi, rest, Curation REST API
+:app-name: Curation REST API
+
+== Introduction
+The Curation REST API enables human-in-the-loop review of entity resolution decisions. Curators can browse low-confidence matches, accept or reject proposed canonical entities, assign mentions to alternative clusters, and perform bulk curation actions. The API also provides authentication, user management, audit trails, and registry/curation statistics.
+
+== Access
+
+
+* *Bearer* Authentication 
+
+
+
+
+
+== Endpoints
+
+
+[.Auth]
+=== Auth
+
+
+[.apiV1AuthLoginPost]
+==== POST /api/v1/auth/login
+
+Login
+
+===== Description
+
+Authenticate and receive access + refresh tokens.
+
+
+===== Parameters
+
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| LoginRequest
+|  <<LoginRequest,LoginRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+<<TokenResponse,TokenResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Access and refresh token pair for the authenticated user.
+| <<TokenResponse,TokenResponse>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 401
+| Unauthorized
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.apiV1AuthRefreshPost]
+==== POST /api/v1/auth/refresh
+
+Refresh
+
+===== Description
+
+Exchange a refresh token for a new token pair.
+
+
+===== Parameters
+
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| RefreshRequest
+|  <<RefreshRequest,RefreshRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+<<TokenResponse,TokenResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| New access and refresh token pair.
+| <<TokenResponse,TokenResponse>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 401
+| Unauthorized
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.apiV1AuthRegisterPost]
+==== POST /api/v1/auth/register
+
+Register
+
+===== Description
+
+Register a new user account.
+
+
+===== Parameters
+
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| RegisterRequest
+|  <<RegisterRequest,RegisterRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+<<UserResponse,UserResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 201
+| The newly registered user.
+| <<UserResponse,UserResponse>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 409
+| Conflict
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.Decisions]
+=== Decisions
+
+
+[.acceptDecisionsApiV1CurationDecisionsBulkAcceptPost]
+==== POST /api/v1/curation/decisions/bulk-accept
+
+Bulk Accept Decisions
+
+===== Description
+
+Accept multiple decisions in a single request.
+
+
+===== Parameters
+
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| BulkActionRequest
+|  <<BulkActionRequest,BulkActionRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+<<BulkActionResponse,BulkActionResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Per-decision results for the bulk accept operation.
+| <<BulkActionResponse,BulkActionResponse>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.alternativeCanonicalEntitiesApiV1CurationDecisionsDecisionIdAlternativeCanonicalEntitiesGet]
+==== GET /api/v1/curation/decisions/{decision_id}/alternative-canonical-entities
+
+Get Alternative Canonical Entities
+
+===== Description
+
+Get alternative canonical entities for a given decision.
+
+
+===== Parameters
+
+
+[cols="2,3,1,1,1"]
+.Path Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| decision_id
+| Unique identifier of the curation decision. 
+| X
+| null
+| 
+
+|===
+
+
+
+
+
+[cols="2,3,1,1,1"]
+.Query Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| page
+| Page number 
+| -
+| 1
+| 
+
+| per_page
+| Items per page 
+| -
+| 20
+| 
+
+|===
+
+
+===== Return Type
+
+<<PaginatedResultCanonicalEntityPreview,PaginatedResult[CanonicalEntityPreview]>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Paginated list of alternative canonical entity clusters for the given decision.
+| <<PaginatedResultCanonicalEntityPreview,PaginatedResult[CanonicalEntityPreview]>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 404
+| Not Found
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.decisionApiV1CurationDecisionsDecisionIdAcceptPost]
+==== POST /api/v1/curation/decisions/{decision_id}/accept
+
+Accept Decision
+
+===== Description
+
+Accept the proposed canonical entity match.
+
+
+===== Parameters
+
+
+[cols="2,3,1,1,1"]
+.Path Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| decision_id
+| Unique identifier of the curation decision. 
+| X
+| null
+| 
+
+|===
+
+
+
+
+
+
+===== Return Type
+
+
+
+-
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 204
+| Decision accepted; no content returned.
+| -
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 404
+| Not Found
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 409
+| Conflict
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.decisionApiV1CurationDecisionsDecisionIdAssignPost]
+==== POST /api/v1/curation/decisions/{decision_id}/assign
+
+Assign Decision
+
+===== Description
+
+Assign the subject entity mention to a specific cluster.
+
+
+===== Parameters
+
+
+[cols="2,3,1,1,1"]
+.Path Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| decision_id
+| Unique identifier of the curation decision. 
+| X
+| null
+| 
+
+|===
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| AssignRequest
+|  <<AssignRequest,AssignRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+
+
+-
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 204
+| Decision assigned to the specified cluster; no content returned.
+| -
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 404
+| Not Found
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 409
+| Conflict
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.decisionApiV1CurationDecisionsDecisionIdRejectPost]
+==== POST /api/v1/curation/decisions/{decision_id}/reject
+
+Reject Decision
+
+===== Description
+
+Reject the proposed canonical entity match.
+
+
+===== Parameters
+
+
+[cols="2,3,1,1,1"]
+.Path Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| decision_id
+| Unique identifier of the curation decision. 
+| X
+| null
+| 
+
+|===
+
+
+
+
+
+
+===== Return Type
+
+
+
+-
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 204
+| Decision rejected; no content returned.
+| -
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 404
+| Not Found
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 409
+| Conflict
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.decisionsApiV1CurationDecisionsGet]
+==== GET /api/v1/curation/decisions
+
+List Decisions
+
+===== Description
+
+Retrieve cursor-paginated list of decisions with optional filtering.
+
+
+===== Parameters
+
+
+
+
+
+
+[cols="2,3,1,1,1"]
+.Query Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| entity_type
+| Filter by entity type 
+| -
+| null
+| 
+
+| confidence_min
+| Minimum confidence 
+| -
+| null
+| 
+
+| confidence_max
+| Maximum confidence 
+| -
+| null
+| 
+
+| similarity_min
+| Minimum similarity 
+| -
+| null
+| 
+
+| similarity_max
+| Maximum similarity 
+| -
+| null
+| 
+
+| search
+| Search text 
+| -
+| null
+| 
+
+| ordering
+| Ordering field 
+| -
+| null
+| 
+
+| cursor
+| Pagination cursor from previous response 
+| -
+| null
+| 
+
+| limit
+| Items per page 
+| -
+| 20
+| 
+
+|===
+
+
+===== Return Type
+
+<<CursorPageDecisionSummary,CursorPage[DecisionSummary]>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Cursor-paginated list of curation decisions.
+| <<CursorPageDecisionSummary,CursorPage[DecisionSummary]>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.proposedCanonicalEntityApiV1CurationDecisionsDecisionIdProposedCanonicalEntityGet]
+==== GET /api/v1/curation/decisions/{decision_id}/proposed-canonical-entity
+
+Get Proposed Canonical Entity
+
+===== Description
+
+Get the proposed canonical entity for a given decision.
+
+
+===== Parameters
+
+
+[cols="2,3,1,1,1"]
+.Path Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| decision_id
+| Unique identifier of the curation decision. 
+| X
+| null
+| 
+
+|===
+
+
+
+
+
+
+===== Return Type
+
+<<CanonicalEntityPreview,CanonicalEntityPreview>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| The proposed canonical entity cluster for the given decision.
+| <<CanonicalEntityPreview,CanonicalEntityPreview>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 404
+| Not Found
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.rejectDecisionsApiV1CurationDecisionsBulkRejectPost]
+==== POST /api/v1/curation/decisions/bulk-reject
+
+Bulk Reject Decisions
+
+===== Description
+
+Reject multiple decisions in a single request.
+
+
+===== Parameters
+
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| BulkActionRequest
+|  <<BulkActionRequest,BulkActionRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+<<BulkActionResponse,BulkActionResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Per-decision results for the bulk reject operation.
+| <<BulkActionResponse,BulkActionResponse>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.Health]
+=== Health
+
+
+[.healthGet]
+==== GET /health
+
+Health
+
+===== Description
+
+Health check endpoint to verify the service is running.
+
+
+===== Parameters
+
+
+
+
+
+
+
+===== Return Type
+
+
+`Map`
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Successful Response
+| Map[`string`]
+
+|===
+
+
+
+[.Statistics]
+=== Statistics
+
+
+[.statisticsApiV1CurationStatsGet]
+==== GET /api/v1/curation/stats
+
+Get Statistics
+
+===== Description
+
+Retrieve registry statistics and curation statistics with optional filtering.
+
+
+===== Parameters
+
+
+
+
+
+
+[cols="2,3,1,1,1"]
+.Query Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| entity_type
+| Filter by entity type 
+| -
+| null
+| 
+
+| timeframe_start
+| Start of timeframe 
+| -
+| null
+| 
+
+| timeframe_end
+| End of timeframe 
+| -
+| null
+| 
+
+|===
+
+
+===== Return Type
+
+<<Statistics,Statistics>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Successful Response
+| <<Statistics,Statistics>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.UserActions]
+=== UserActions
+
+
+[.candidatesApiV1UserActionsActionIdCandidatesGet]
+==== GET /api/v1/user-actions/{action_id}/candidates
+
+Get Candidates
+
+===== Description
+
+Get paginated candidate cluster previews with top entity mentions.
+
+
+===== Parameters
+
+
+[cols="2,3,1,1,1"]
+.Path Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| action_id
+| Unique identifier of the user action. 
+| X
+| null
+| 
+
+|===
+
+
+
+
+
+[cols="2,3,1,1,1"]
+.Query Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| page
+| Page number 
+| -
+| 1
+| 
+
+| per_page
+| Items per page 
+| -
+| 20
+| 
+
+|===
+
+
+===== Return Type
+
+<<PaginatedResultCanonicalEntityPreview,PaginatedResult[CanonicalEntityPreview]>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Paginated candidate cluster previews for the given user action.
+| <<PaginatedResultCanonicalEntityPreview,PaginatedResult[CanonicalEntityPreview]>>
+
+
+| 403
+| Forbidden
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 404
+| Not Found
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.selectedClusterApiV1UserActionsActionIdSelectedClusterGet]
+==== GET /api/v1/user-actions/{action_id}/selected-cluster
+
+Get Selected Cluster
+
+===== Description
+
+Get the selected cluster preview with top entity mentions.
+
+
+===== Parameters
+
+
+[cols="2,3,1,1,1"]
+.Path Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| action_id
+| Unique identifier of the user action. 
+| X
+| null
+| 
+
+|===
+
+
+
+
+
+
+===== Return Type
+
+<<CanonicalEntityPreview,CanonicalEntityPreview>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| The canonical entity cluster selected by the curator, or null if none was selected.
+| <<CanonicalEntityPreview,CanonicalEntityPreview>>
+
+
+| 403
+| Forbidden
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 404
+| Not Found
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.userActionsApiV1UserActionsGet]
+==== GET /api/v1/user-actions
+
+List User Actions
+
+===== Description
+
+List cursor-paginated user actions with optional filtering.
+
+
+===== Parameters
+
+
+
+
+
+
+[cols="2,3,1,1,1"]
+.Query Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| action_type
+| Filter by type of user action. 
+| -
+| null
+| 
+
+| actor
+| Filter by actor identifier or email. 
+| -
+| null
+| 
+
+| time_range_start
+| Include only actions recorded at or after this timestamp. 
+| -
+| null
+| 
+
+| time_range_end
+| Include only actions recorded at or before this timestamp. 
+| -
+| null
+| 
+
+| ordering
+| Sort order for the returned actions. 
+| -
+| null
+| 
+
+| cursor
+| Pagination cursor from previous response 
+| -
+| null
+| 
+
+| limit
+| Items per page 
+| -
+| 20
+| 
+
+|===
+
+
+===== Return Type
+
+<<CursorPageUserActionSummary,CursorPage[UserActionSummary]>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Cursor-paginated list of user actions.
+| <<CursorPageUserActionSummary,CursorPage[UserActionSummary]>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 403
+| Forbidden
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.Users]
+=== Users
+
+
+[.currentUserApiV1UsersMeGet]
+==== GET /api/v1/users/me
+
+Get Current User
+
+===== Description
+
+Get current authenticated user.
+
+
+===== Parameters
+
+
+
+
+
+
+
+===== Return Type
+
+<<UserContext,UserContext>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| The currently authenticated user.
+| <<UserContext,UserContext>>
+
+
+| 401
+| Unauthorized
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.userApiV1UsersPost]
+==== POST /api/v1/users
+
+Create User
+
+===== Description
+
+Create a new user (admin only).
+
+
+===== Parameters
+
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| CreateUserRequest
+|  <<CreateUserRequest,CreateUserRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+<<UserResponse,UserResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 201
+| The newly created user.
+| <<UserResponse,UserResponse>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 403
+| Forbidden
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 409
+| Conflict
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.userApiV1UsersUserIdPatch]
+==== PATCH /api/v1/users/{user_id}
+
+Patch User
+
+===== Description
+
+Update user flags (admin only).
+
+
+===== Parameters
+
+
+[cols="2,3,1,1,1"]
+.Path Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| user_id
+| Unique identifier of the user to update. 
+| X
+| null
+| 
+
+|===
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| UserPatchRequest
+|  <<UserPatchRequest,UserPatchRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+<<UserResponse,UserResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| The updated user.
+| <<UserResponse,UserResponse>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 403
+| Forbidden
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 404
+| Not Found
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 409
+| Conflict
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.usersApiV1UsersGet]
+==== GET /api/v1/users
+
+List Users
+
+===== Description
+
+List all users (verified users).
+
+
+===== Parameters
+
+
+
+
+
+
+[cols="2,3,1,1,1"]
+.Query Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| email
+| Partial email match 
+| -
+| null
+| 
+
+| page
+| Page number 
+| -
+| 1
+| 
+
+| per_page
+| Items per page 
+| -
+| 20
+| 
+
+|===
+
+
+===== Return Type
+
+<<PaginatedResultUserResponse,PaginatedResult[UserResponse]>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Paginated list of users.
+| <<PaginatedResultUserResponse,PaginatedResult[UserResponse]>>
+
+
+| 400
+| Bad Request
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 403
+| Forbidden
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[#models]
+== Models
+
+
+[#ActorSummary]
+=== ActorSummary
+
+Embedded actor info for user action display.
+
+
+[.fields-ActorSummary]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| id
+| X
+| 
+|  `String`
+| Unique identifier of the actor.
+|     
+
+| email
+| X
+| 
+|  `String`
+| Email address of the actor.
+|     
+
+|===
+
+
+
+[#AssignRequest]
+=== AssignRequest
+
+Request body for assigning an entity to an alternative cluster.
+
+
+[.fields-AssignRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| cluster_id
+| X
+| 
+|  `String`
+| Identifier of the target canonical entity cluster to assign the mention to.
+|     
+
+|===
+
+
+
+[#BaseOrdering]
+=== BaseOrdering
+
+Base ordering options available to all entity listings.
+
+
+
+
+[.fields-BaseOrdering]
+[cols="1"]
+|===
+| Enum Values
+
+| created_at
+| -created_at
+
+|===
+
+
+[#BulkActionRequest]
+=== BulkActionRequest
+
+Request body for bulk accept/reject operations.
+
+
+[.fields-BulkActionRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| decision_ids
+| X
+| 
+|  `Set` of `string`
+| Set of decision identifiers to process in a single bulk operation.
+|     
+
+|===
+
+
+
+[#BulkActionResponse]
+=== BulkActionResponse
+
+Response body for bulk accept/reject operations.
+
+
+[.fields-BulkActionResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| results
+| X
+| 
+|  `List` of <<BulkItemResult,BulkItemResult>>
+| Per-decision outcomes for the bulk operation.
+|     
+
+|===
+
+
+
+[#BulkItemResult]
+=== BulkItemResult
+
+Result of a single decision within a bulk action.
+
+
+[.fields-BulkItemResult]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| decision_id
+| X
+| 
+|  `String`
+| Identifier of the decision this result refers to.
+|     
+
+| status
+| X
+| 
+| <<BulkItemStatus,BulkItemStatus>>
+| 
+|    success, not_found, already_curated, error,  
+
+| detail
+| 
+| X
+|  `String`
+| Human-readable explanation when the status is not success.
+|     
+
+|===
+
+
+
+[#BulkItemStatus]
+=== BulkItemStatus
+
+Outcome of an individual bulk action item.
+
+
+
+
+[.fields-BulkItemStatus]
+[cols="1"]
+|===
+| Enum Values
+
+| success
+| not_found
+| already_curated
+| error
+
+|===
+
+
+[#CanonicalEntityPreview]
+=== CanonicalEntityPreview
+
+Cluster preview with top entity mentions for display.
+
+
+[.fields-CanonicalEntityPreview]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| cluster_id
+| X
+| 
+|  `String`
+| Unique identifier of the canonical entity cluster.
+|     
+
+| confidence_score
+| X
+| 
+|  `BigDecimal`
+| Model confidence that this cluster is the correct match.
+|     
+
+| similarity_score
+| X
+| 
+|  `BigDecimal`
+| Similarity score between the entity mention and the cluster.
+|     
+
+| top_entities
+| X
+| 
+|  `List` of <<EntityMentionPreview,EntityMentionPreview>>
+| Representative entity mentions from this cluster.
+|     
+
+|===
+
+
+
+[#ClusterReference]
+=== ClusterReference
+
+A reference to a cluster to which an entity is deemed to belong, with an associated confidence and similarity scores.
+
+A cluster is a set of entity mentions that have been determined to refer to the same real-world entity.
+Each cluster has a unique clusterId.
+
+A cluster reference is used to report the association between an entity mention and a cluster 
+of equivalence.
+
+
+[.fields-ClusterReference]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| cluster_id
+| X
+| 
+|  `String`
+| The identifier of the cluster/canonical entity that is considered equivalent to the subject entity mention that an &#x60;EntityMentionResolutionResponse&#x60; refers to. 
+|     
+
+| confidence_score
+| X
+| 
+|  `BigDecimal`
+| A 0-1 value of how confident the ERE is about the equivalence between the subject entity mention and the target canonical entity. 
+|     
+
+| similarity_score
+| X
+| 
+|  `BigDecimal`
+| A 0-1 score representing the pairwise comparison between a mention and a cluster (likely based on a representative representation). 
+|     
+
+|===
+
+
+
+[#CreateUserRequest]
+=== CreateUserRequest
+
+Admin request to create a user.
+
+
+[.fields-CreateUserRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| email
+| X
+| 
+|  `String`
+| Email address for the new user account.
+| email    
+
+| password
+| X
+| 
+|  `String`
+| Initial plain-text password (8–128 characters); stored hashed.
+|     
+
+| is_active
+| 
+| 
+|  `Boolean`
+| Whether the account is active upon creation.
+|     
+
+| is_superuser
+| 
+| 
+|  `Boolean`
+| Grant superuser (admin) privileges to the new user.
+|     
+
+| is_verified
+| 
+| 
+|  `Boolean`
+| Mark the user&#39;s email as verified upon creation.
+|     
+
+|===
+
+
+
+[#CurationStatistics]
+=== CurationStatistics
+
+Statistics about the curation process based on UserAction counts.
+
+
+[.fields-CurationStatistics]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| total_decisions
+| X
+| 
+|  `Integer`
+| Total number of curation decisions recorded.
+|     
+
+| selected_top
+| X
+| 
+|  `Integer`
+| Number of decisions where the top-ranked candidate was accepted.
+|     
+
+| selected_alternative
+| X
+| 
+|  `Integer`
+| Number of decisions where an alternative candidate was selected.
+|     
+
+| rejected_all
+| X
+| 
+|  `Integer`
+| Number of decisions where all candidates were rejected.
+|     
+
+|===
+
+
+
+[#CursorPageDecisionSummary]
+=== CursorPage[DecisionSummary]
+
+
+
+
+[.fields-CursorPageDecisionSummary]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| results
+| X
+| 
+|  `List` of <<DecisionSummary,DecisionSummary>>
+| Page of result items.
+|     
+
+| count
+| 
+| 
+|  `Integer`
+| Number of items returned in this page.
+|     
+
+| next_cursor
+| 
+| X
+|  `String`
+| Opaque cursor to fetch the next page, or null if there are no more pages.
+|     
+
+|===
+
+
+
+[#CursorPageUserActionSummary]
+=== CursorPage[UserActionSummary]
+
+
+
+
+[.fields-CursorPageUserActionSummary]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| results
+| X
+| 
+|  `List` of <<UserActionSummary,UserActionSummary>>
+| Page of result items.
+|     
+
+| count
+| 
+| 
+|  `Integer`
+| Number of items returned in this page.
+|     
+
+| next_cursor
+| 
+| X
+|  `String`
+| Opaque cursor to fetch the next page, or null if there are no more pages.
+|     
+
+|===
+
+
+
+[#DecisionOrdering]
+=== DecisionOrdering
+
+Allowed ordering options for decision listing.
+
+
+
+
+[.fields-DecisionOrdering]
+[cols="1"]
+|===
+| Enum Values
+
+| confidence_score
+| -confidence_score
+| created_at
+| -created_at
+| updated_at
+| -updated_at
+
+|===
+
+
+[#DecisionSummary]
+=== DecisionSummary
+
+Decision summary for list display.
+
+
+[.fields-DecisionSummary]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| id
+| X
+| 
+|  `String`
+| Unique identifier of the curation decision.
+|     
+
+| about_entity_mention
+| X
+| 
+| <<EntityMentionPreview,EntityMentionPreview>>
+| 
+|     
+
+| current_placement
+| X
+| 
+| <<ClusterReference,ClusterReference>>
+| 
+|     
+
+| created_at
+| X
+| 
+|  `Date`
+| Timestamp when the decision was created.
+| date-time    
+
+| updated_at
+| 
+| X
+|  `Date`
+| Timestamp of the last update to this decision.
+| date-time    
+
+|===
+
+
+
+[#EntityMentionIdentifier]
+=== EntityMentionIdentifier
+
+A container that groups the attributes needed to identify an entity mention in a resolution request
+or response.
+
+As per ERS architectural decision, in the whole ERS and ERE systems, there is always a deterministic
+method to build a canonical identifier from the combination of &#x60;sourceId&#x60;, &#x60;requestId&#x60; and &#x60;entityType&#x60;
+(eg, string concatenation plus some prefix). Similarly, a cluster ID (mentioned in various places in 
+in this hereby ERE service schema) can be built from an entity that is initially the only cluster member.
+
+
+[.fields-EntityMentionIdentifier]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| source_id
+| X
+| 
+|  `String`
+| The ID or URI of the ERS client that originated the request. This identifies an application or a  person accessing the ERS system. 
+|     
+
+| request_id
+| X
+| 
+|  `String`
+| A string representing the unique ID of the request made to the ERS system. In general, this is unique only within the scope of the source and the entity type, ie, within &#x60;sourceId&#x60; and &#x60;entityType&#x60;.   Moreover, this is **not** the same as &#x60;ereRequestId&#x60;, which instead, is internal to the ERE and is  used to match responses to requests. 
+|     
+
+| entity_type
+| X
+| 
+|  `String`
+| A string representing the entity type (based on CET). This is typically a URI.  Note that this is at this level, and not at &#x60;EntityMention&#x60;, since, as said above,  it&#39;s needed to identify the entity, even when its content is not present. For the same reason, it&#39;s used both for &#x60;EREResolutionRequest&#x60; and &#x60;EREResolutionResponse&#x60; messages., 
+|     
+
+|===
+
+
+
+[#EntityMentionPreview]
+=== EntityMentionPreview
+
+Lightweight entity mention projection for display.
+
+
+[.fields-EntityMentionPreview]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| identified_by
+| X
+| 
+| <<EntityMentionIdentifier,EntityMentionIdentifier>>
+| 
+|     
+
+| parsed_representation
+| 
+| X
+|  `Map` of `AnyType`
+| Parsed key-value representation of the entity mention.
+|     
+
+|===
+
+
+
+[#ErrorResponse]
+=== ErrorResponse
+
+Standard error response body for OpenAPI documentation.
+
+
+[.fields-ErrorResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| detail
+| X
+| 
+|  `String`
+| Human-readable description of the error.
+|     
+
+|===
+
+
+
+[#HTTPValidationError]
+=== HTTPValidationError
+
+
+
+
+[.fields-HTTPValidationError]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| detail
+| 
+| 
+|  `List` of <<ValidationError,ValidationError>>
+| 
+|     
+
+|===
+
+
+
+[#LocationElement]
+=== LocationElement
+
+
+
+
+[.fields-LocationElement]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+|===
+
+
+
+[#LoginRequest]
+=== LoginRequest
+
+Request body for user login.
+
+
+[.fields-LoginRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| email
+| X
+| 
+|  `String`
+| Registered email address of the user.
+|     
+
+| password
+| X
+| 
+|  `String`
+| Plain-text password for authentication.
+|     
+
+|===
+
+
+
+[#PaginatedResultCanonicalEntityPreview]
+=== PaginatedResult[CanonicalEntityPreview]
+
+
+
+
+[.fields-PaginatedResultCanonicalEntityPreview]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| count
+| X
+| 
+|  `Integer`
+| Total number of items matching the query.
+|     
+
+| previous
+| 
+| X
+|  `Integer`
+| Previous page number, or null if on the first page.
+|     
+
+| next
+| 
+| X
+|  `Integer`
+| Next page number, or null if on the last page.
+|     
+
+| results
+| X
+| 
+|  `List` of <<CanonicalEntityPreview,CanonicalEntityPreview>>
+| Page of result items.
+|     
+
+|===
+
+
+
+[#PaginatedResultUserResponse]
+=== PaginatedResult[UserResponse]
+
+
+
+
+[.fields-PaginatedResultUserResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| count
+| X
+| 
+|  `Integer`
+| Total number of items matching the query.
+|     
+
+| previous
+| 
+| X
+|  `Integer`
+| Previous page number, or null if on the first page.
+|     
+
+| next
+| 
+| X
+|  `Integer`
+| Next page number, or null if on the last page.
+|     
+
+| results
+| X
+| 
+|  `List` of <<UserResponse,UserResponse>>
+| Page of result items.
+|     
+
+|===
+
+
+
+[#RefreshRequest]
+=== RefreshRequest
+
+Request body for token refresh.
+
+
+[.fields-RefreshRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| refresh_token
+| X
+| 
+|  `String`
+| Valid refresh token previously issued by the login endpoint.
+|     
+
+|===
+
+
+
+[#RegisterRequest]
+=== RegisterRequest
+
+Request body for user registration.
+
+
+[.fields-RegisterRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| email
+| X
+| 
+|  `String`
+| Email address that will serve as the user&#39;s login identifier.
+| email    
+
+| password
+| X
+| 
+|  `String`
+| Plain-text password (8–128 characters); stored hashed.
+|     
+
+|===
+
+
+
+[#RegistryStatistics]
+=== RegistryStatistics
+
+Statistics about the entity registry.
+
+
+[.fields-RegistryStatistics]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| total_entity_mentions
+| X
+| 
+|  `Integer`
+| Total number of entity mentions stored in the registry.
+|     
+
+| total_canonical_entities
+| X
+| 
+|  `Integer`
+| Total number of distinct canonical entity clusters.
+|     
+
+| average_cluster_size
+| X
+| 
+|  `BigDecimal`
+| Average number of entity mentions per canonical entity cluster.
+|     
+
+| resolution_requests
+| X
+| 
+|  `Integer`
+| Total number of entity resolution requests processed.
+|     
+
+|===
+
+
+
+[#Statistics]
+=== Statistics
+
+Aggregated statistics for the curation dashboard.
+
+
+[.fields-Statistics]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| registry
+| X
+| 
+| <<RegistryStatistics,RegistryStatistics>>
+| 
+|     
+
+| curation
+| X
+| 
+| <<CurationStatistics,CurationStatistics>>
+| 
+|     
+
+|===
+
+
+
+[#TokenResponse]
+=== TokenResponse
+
+JWT token pair response.
+
+
+[.fields-TokenResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| access_token
+| X
+| 
+|  `String`
+| Short-lived JWT used to authenticate API requests.
+|     
+
+| refresh_token
+| X
+| 
+|  `String`
+| Long-lived token used to obtain a new access token.
+|     
+
+| token_type
+| 
+| 
+|  `String`
+| Token scheme; always &#39;bearer&#39;.
+|     
+
+|===
+
+
+
+[#UserActionSummary]
+=== UserActionSummary
+
+User action summary for list display.
+
+
+[.fields-UserActionSummary]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| id
+| X
+| 
+|  `String`
+| Unique identifier of the user action.
+|     
+
+| about_entity_mention
+| X
+| 
+| <<EntityMentionPreview,EntityMentionPreview>>
+| 
+|     
+
+| candidates
+| X
+| 
+|  `List` of <<ClusterReference,ClusterReference>>
+| Candidate clusters presented to the curator.
+|     
+
+| selected_cluster
+| 
+| X
+| <<ClusterReference,ClusterReference>>
+| 
+|     
+
+| action_type
+| X
+| 
+| <<UserActionType,UserActionType>>
+| 
+|    ACCEPT_TOP, ACCEPT_ALTERNATIVE, REJECT_ALL,  
+
+| actor
+| X
+| 
+| <<ActorSummary,ActorSummary>>
+| 
+|     
+
+| created_at
+| X
+| 
+|  `Date`
+| Timestamp when the user action was recorded.
+| date-time    
+
+| metadata
+| 
+| X
+| `anyOf`
+| Optional additional metadata attached to the action.
+|     
+
+|===
+
+
+
+[#UserActionType]
+=== UserActionType
+
+Types of curator actions on entity mention resolutions
+
+
+
+
+[.fields-UserActionType]
+[cols="1"]
+|===
+| Enum Values
+
+| ACCEPT_TOP
+| ACCEPT_ALTERNATIVE
+| REJECT_ALL
+
+|===
+
+
+[#UserContext]
+=== UserContext
+
+Authenticated user context carried through the request lifecycle.
+
+
+[.fields-UserContext]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| id
+| X
+| 
+|  `String`
+| Unique identifier of the authenticated user.
+|     
+
+| email
+| X
+| 
+|  `String`
+| Email address of the authenticated user.
+|     
+
+| is_active
+| X
+| 
+|  `Boolean`
+| Whether the authenticated user&#39;s account is active.
+|     
+
+| is_superuser
+| X
+| 
+|  `Boolean`
+| Whether the authenticated user has superuser privileges.
+|     
+
+| is_verified
+| X
+| 
+|  `Boolean`
+| Whether the authenticated user&#39;s email has been verified.
+|     
+
+|===
+
+
+
+[#UserPatchRequest]
+=== UserPatchRequest
+
+Admin request to update user flags.
+
+
+[.fields-UserPatchRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| is_active
+| 
+| X
+|  `Boolean`
+| Set to true to enable the account or false to disable it.
+|     
+
+| is_superuser
+| 
+| X
+|  `Boolean`
+| Set to true to grant or false to revoke superuser privileges.
+|     
+
+| is_verified
+| 
+| X
+|  `Boolean`
+| Set to true to mark the email as verified or false to unverify.
+|     
+
+|===
+
+
+
+[#UserResponse]
+=== UserResponse
+
+Public user representation (no password).
+
+
+[.fields-UserResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| id
+| X
+| 
+|  `String`
+| Unique identifier of the user.
+|     
+
+| email
+| X
+| 
+|  `String`
+| Email address of the user.
+|     
+
+| is_active
+| X
+| 
+|  `Boolean`
+| Whether the user account is active and can log in.
+|     
+
+| is_superuser
+| X
+| 
+|  `Boolean`
+| Whether the user has superuser (admin) privileges.
+|     
+
+| is_verified
+| X
+| 
+|  `Boolean`
+| Whether the user&#39;s email address has been verified.
+|     
+
+| created_at
+| X
+| 
+|  `Date`
+| Timestamp when the user account was created.
+| date-time    
+
+| updated_at
+| 
+| X
+|  `Date`
+| Timestamp of the last update to the user account.
+| date-time    
+
+|===
+
+
+
+[#ValidationError]
+=== ValidationError
+
+
+
+
+[.fields-ValidationError]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| loc
+| X
+| 
+|  `List` of <<LocationElement,LocationElement>>
+| 
+|     
+
+| msg
+| X
+| 
+|  `String`
+| 
+|     
+
+| type
+| X
+| 
+|  `String`
+| 
+|     
+
+| input
+| 
+| X
+|  `oas_any_type_not_mapped`
+| 
+|     
+
+| ctx
+| 
+| 
+|  `Object`
+| 
+|     
+
+|===
+
+

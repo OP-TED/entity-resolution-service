@@ -1,6 +1,7 @@
 """Repository abstractions and MongoDB implementations for Request Registry records."""
 
 from abc import abstractmethod
+from datetime import UTC, datetime
 from typing import Any
 
 from erspec.models.core import EntityMentionIdentifier
@@ -11,11 +12,15 @@ from ers.commons.adapters.repository import (
     AsyncWriteRepository,
     BaseMongoRepository,
 )
-from ers.request_registry.domain.records import LookupRequestRecord, ResolutionRequestRecord
-from ers.request_registry.services.exceptions import (
+from ers.request_registry.domain.errors import (
     DuplicateTriadError,
     RepositoryConnectionError,
     RepositoryOperationError,
+)
+from ers.request_registry.domain.records import (
+    LookupRequestRecord,
+    ResolutionRequestRecord,
+    TriadKey,
 )
 
 
@@ -40,6 +45,24 @@ class ResolutionRequestRepository(
         self, source_id: str, limit: int = 100, offset: int = 0
     ) -> list[ResolutionRequestRecord]:
         """Return a paginated list of records for a given source_id."""
+
+    @abstractmethod
+    async def exists_by_source(self, source_id: str) -> bool:
+        """Return True if at least one resolution request exists for the given source."""
+
+    @abstractmethod
+    async def find_contexts_by_triads(
+        self, identifiers: list[EntityMentionIdentifier]
+    ) -> dict[TriadKey, str | None]:
+        """Return context values keyed by triad for a batch of identifiers.
+
+        Args:
+            identifiers: The mention triads to look up.
+
+        Returns:
+            A dict mapping each TriadKey to its stored context value, or None
+            if the context field is absent on the record (legacy records).
+        """
 
 
 class MongoResolutionRequestRepository(
@@ -99,6 +122,42 @@ class MongoResolutionRequestRepository(
         )
         return [self._from_document(doc) async for doc in cursor]
 
+    async def exists_by_source(self, source_id: str) -> bool:
+        """Return True if at least one resolution request exists for the given source."""
+        doc = await self._collection.find_one(
+            {"identifiedBy.source_id": source_id},
+            projection={"_id": 1},
+        )
+        return doc is not None
+
+    async def find_contexts_by_triads(
+        self, identifiers: list[EntityMentionIdentifier]
+    ) -> dict[TriadKey, str | None]:
+        """Return context values keyed by triad for a batch of identifiers.
+
+        Args:
+            identifiers: The mention triads to look up.
+
+        Returns:
+            A dict mapping each TriadKey to its stored context value, or None
+            if the context field is absent on the document (legacy records).
+        """
+        if not identifiers:
+            return {}
+        id_to_key: dict[str, TriadKey] = {
+            self._triad_id(i): TriadKey.from_identifier(i)
+            for i in identifiers
+        }
+        cursor = self._collection.find(
+            {"_id": {"$in": list(id_to_key.keys())}},
+            {"_id": 1, "context": 1},
+        )
+        result: dict[TriadKey, str | None] = {}
+        async for doc in cursor:
+            key = id_to_key[doc["_id"]]
+            result[key] = doc.get("context")
+        return result
+
 
 class MongoLookupStateRepository(BaseMongoRepository[LookupRequestRecord, str]):
     """MongoDB-backed repository for per-source snapshot state.
@@ -109,6 +168,19 @@ class MongoLookupStateRepository(BaseMongoRepository[LookupRequestRecord, str]):
     _model_class = LookupRequestRecord
     _id_field = "source_id"
     _collection_name = "lookup_states"
+
+    def _from_document(self, doc: dict[str, Any]) -> LookupRequestRecord:
+        """Convert a MongoDB document to LookupRequestRecord, restoring UTC tzinfo.
+
+        PyMongo returns datetime objects as naive UTC. The LookupRequestRecord
+        validator requires timezone-aware datetimes, so we add UTC tzinfo here.
+        """
+        doc[self._id_field] = doc.pop("_id")
+        for field in ("last_snapshot", "updated_at"):
+            val = doc.get(field)
+            if isinstance(val, datetime) and val.tzinfo is None:
+                doc[field] = val.replace(tzinfo=UTC)
+        return self._model_class.model_validate(doc)
 
     async def get(self, source_id: str) -> LookupRequestRecord | None:
         """Return the snapshot state for a source. Returns None if not found."""

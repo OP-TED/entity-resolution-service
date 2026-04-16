@@ -1,55 +1,64 @@
-from datetime import UTC, datetime
+"""Orchestrator for the POST /refresh-bulk endpoint."""
 
-from erspec.models.core import EntityMentionIdentifier
+from erspec.models.core import Decision
 
 from ers.ers_rest_api.domain.lookup import (
     LookupResponse,
     RefreshBulkRequest,
     RefreshBulkResponse,
 )
-from ers.resolution_decision_store.services.resolution_decision_store_service import (
-    ResolutionDecisionStoreServiceABC,
+from ers.request_registry.domain.records import TriadKey
+from ers.request_registry.services.request_registry_service import (
+    RequestRegistryService,
+    get_contexts_for_triads,
+)
+from ers.resolution_coordinator.services.bulk_refresh_coordinator_service import (
+    BulkRefreshCoordinatorService,
 )
 
 
-class RefreshBulkService:
-    """Orchestrator for the POST /refresh-bulk endpoint."""
+class RefreshBulkService:  # pylint: disable=too-few-public-methods
+    """Orchestrator for the POST /refresh-bulk endpoint.
 
-    def __init__(self, decision_store: ResolutionDecisionStoreServiceABC) -> None:
-        self._decision_store = decision_store
+    Delegates to BulkRefreshCoordinatorService (Spine C) and maps
+    the CursorPage[Decision] result to the REST API response DTO,
+    enriching each delta with the context from the request registry.
+    """
+
+    def __init__(
+        self,
+        bulk_coordinator: BulkRefreshCoordinatorService,
+        registry_service: RequestRegistryService,
+    ) -> None:
+        self._coordinator = bulk_coordinator
+        self._registry_service = registry_service
 
     async def handle_refresh_bulk(self, request: RefreshBulkRequest) -> RefreshBulkResponse:
         """Retrieve delta of changed assignments since the last synchronisation snapshot."""
-        lookup_state = await self._decision_store.get_lookup_state(request.source_id)
-        last_snapshot = lookup_state.last_snapshot if lookup_state else None
-
-        page = await self._decision_store.get_delta_for_source(
+        page = await self._coordinator.refresh_bulk(
             source_id=request.source_id,
-            last_snapshot=last_snapshot,
-            limit=request.limit,
-            continuation_cursor=request.continuation_cursor,
+            cursor=request.continuation_cursor,
+            page_size=request.limit,
         )
+
+        identifiers = [d.about_entity_mention for d in page.results]
+        contexts: dict[TriadKey, str | None] = await get_contexts_for_triads(identifiers, self._registry_service)
+
+        def _ctx(d: Decision) -> str | None:
+            return contexts.get(TriadKey.from_identifier(d.about_entity_mention))
 
         deltas = [
             LookupResponse(
-                identified_by=EntityMentionIdentifier(
-                    source_id=d.about_entity_mention.source_id,
-                    request_id=d.about_entity_mention.request_id,
-                    entity_type=d.about_entity_mention.entity_type,
-                ),
+                identified_by=d.about_entity_mention,
                 cluster_reference=d.current_placement,
                 last_updated=d.updated_at or d.created_at,
+                context=_ctx(d),
             )
-            for d in page.deltas
+            for d in page.results
         ]
-
-        await self._decision_store.advance_snapshot(
-            request.source_id,
-            datetime.now(UTC),
-        )
 
         return RefreshBulkResponse(
             deltas=deltas,
-            has_more=page.has_more,
-            continuation_cursor=page.continuation_cursor,
+            has_more=page.next_cursor is not None,
+            continuation_cursor=page.next_cursor,
         )

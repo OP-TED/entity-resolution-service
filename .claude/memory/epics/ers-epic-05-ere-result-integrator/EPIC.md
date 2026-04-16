@@ -4,7 +4,7 @@
 **Component:** ERE Result Integrator
 **Spine:** Spine B (Asynchronous Engine Interaction & Outcome Integration)
 **Phase:** 2 — Core Flows (after Registry, RDF Parser, ERE Contract Client are complete)
-**Status:** ⬜ Ready for Implementation
+**Status:** ✅ Implementation Complete
 
 ---
 
@@ -24,7 +24,7 @@ Without robust integration, inconsistent cluster assignments will leak into clie
 
 The **ERE Result Integrator** is a service that:
 
-1. **Consumes ERE outcomes** asynchronously via a messaging abstraction (Redis Pub/Sub adapter)
+1. **Consumes ERE outcomes** asynchronously via a messaging abstraction (Redis list queue adapter)
 2. **Correlates outcomes** using the mention identifier triad `(sourceId, requestId, entityType)`
 3. **Deduplicates** using a monotonic outcome timestamp and rejection of stale assignments
 4. **Validates** that the mention exists in the Request Registry (idempotency enforcement)
@@ -47,11 +47,11 @@ The **ERE Result Integrator** is a service that:
 
 ### Core Architecture Decision
 
-**Async Adapter Pattern + Redis Pub/Sub Implementation**
+**Async Adapter Pattern + Redis List Queue Implementation**
 
-- **Abstraction Layer:** `AsyncOutcomeListener` (interface, framework-agnostic)
-- **Concrete Implementation:** `RedisOutcomeListener` (Redis Streams consumer)
-- **Service Layer:** `OutcomeIntegrationService` (correlation, deduplication, validation)
+****- **Abstraction Layer:** `AsyncOutcomeListener` (interface, framework-agnostic; exposes `consume()` async generator)
+- **Concrete Implementation:** `RedisOutcomeListener` (wraps `AbstractClient.pull_response()` in a polling loop)
+- **Service Layer:** `OutcomeIntegrationService` (validation, registry check, persistence via `DecisionStoreService`)
 - **Entrypoint:** Background worker consuming outcomes in a loop
 
 **Rationale:** Allows testing with fake async adapter; supports future messaging backends without refactor.
@@ -60,10 +60,10 @@ The **ERE Result Integrator** is a service that:
 
 | Component | Choice | Why |
 |-----------|--------|-----|
-| Async Adapter | Redis Streams + Pub/Sub | Supports at-least-once; message retention; simple ordering |
+| Async Adapter | Redis list queue (LPUSH/BRPOP) | Matches existing `RedisEREClient`; at-least-once via blocking pop |
 | Correlation | Triad (sourceId, requestId, entityType) | Stable, user-provided, matches Request Registry key |
 | Deduplication Marker | Timestamp (ISO 8601) | Simple, ERE-provided, no custom versioning needed |
-| Stale Detection | `if timestamp ≤ stored: reject` | Deterministic, stateless rule |
+| Stale Detection | `StaleOutcomeError` raised by `MongoDecisionRepository.upsert_decision()` | Atomic MongoDB check; service catches and logs |
 | Persistence | Decision Store (MongoDB) | Atomic per-mention updates; delta tracking built-in |
 
 ### MVP Features
@@ -95,15 +95,29 @@ The **ERE Result Integrator** is a service that:
 
 | Model | Purpose |
 |-------|---------|
-| `OutcomeMessage` | Received ERE response envelope (ere_request_id, timestamp, entity_mention_id) |
-| `CorrelationTriad` | Value object: (sourceId, requestId, entityType) for idempotent key |
-| `ClusterAssignment` | Latest decision per mention: clusterId, alternatives, timestamp |
-| `OutcomeValidationError` | Exception for contract violations (missing triad, invalid schema) |
+| `OutcomeValidationError` | Exception for contract violations (null timestamp, empty candidates, invalid schema) |
+| `TriadNotFoundError` | Exception raised when a triad is not found in the Request Registry |
 
-**Invariants:**
-- Triad fields are never null (validated on construction)
-- Timestamp must be ISO 8601 string (not parsed; stored as string for ordering)
-- ClusterAssignment timestamp always ≥ previous timestamp (enforced by service)
+**Error class signatures** (both subclass `ApplicationError` from `ers.commons.services.exceptions`):
+```python
+class OutcomeValidationError(ApplicationError):
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+        super().__init__(detail)
+
+class TriadNotFoundError(ApplicationError):
+    def __init__(self, identifier: EntityMentionIdentifier) -> None:
+        self.identifier = identifier
+        super().__init__(f"Triad not found: {identifier}")
+```
+
+**No new domain models needed:** `EntityMentionResolutionResponse` (erspec) replaces `OutcomeMessage`; `EntityMentionIdentifier` (erspec) replaces `CorrelationTriad`; `Decision` (erspec) replaces `ClusterAssignment`. Using erspec types directly avoids a lossy mapping step — `OutcomeMessage` as specified in the original draft omitted `candidates` entirely.
+
+**Invariants enforced by the service (not a new model):**
+- `timestamp` is `Optional[datetime]` in erspec — service must raise `OutcomeValidationError` if `None`
+- `candidates` must be non-empty — service must raise `OutcomeValidationError` if empty
+- Triad fields (`source_id`, `request_id`, `entity_type`) are always non-empty (guaranteed by erspec `EntityMentionIdentifier`)
+- Staleness check (`updated_at ≥ stored`) is enforced atomically by `MongoDecisionRepository.upsert_decision()` — service handles `StaleOutcomeError`, does not pre-check
 
 #### 2.2 Adapters (`adapters/`)
 
@@ -111,14 +125,26 @@ The **ERE Result Integrator** is a service that:
 
 | Adapter | Purpose |
 |---------|---------|
-| `AsyncOutcomeListener` (interface) | Abstract async outcome consumption (framework-agnostic) |
-| `RedisOutcomeListener` | Redis Streams consumer; implements AsyncOutcomeListener |
-| `RequestRegistryRepository` | Query Request Registry for triad existence (already exists, imported from component 1) |
-| `DecisionStoreRepository` | Fetch/update latest assignment per triad (already exists, imported from component 4) |
+| `AsyncOutcomeListener` (interface) | Abstract async outcome consumption; exposes `consume() -> AsyncGenerator[EntityMentionResolutionResponse, None]` |
+| `RedisOutcomeListener` | Wraps `AbstractClient.pull_response()` in a `while True` polling loop; implements `AsyncOutcomeListener` |
+
+**No new repository adapters needed:**
+- Registry lookup: inject and use `RequestRegistryService` from `ers.request_registry.services` — call `get_resolution_request(identifier)`. Do NOT reach into `MongoResolutionRequestRepository` directly; that bypasses EPIC-01's service layer (anti-pattern per layering rules).
+- Decision persistence: inject and use `DecisionStoreService` from `ers.resolution_decision_store.services` — call `store_decision()`.
+
+**`RedisOutcomeListener.consume()` bridge pattern:**
+```python
+async def consume(self) -> AsyncGenerator[EntityMentionResolutionResponse, None]:
+    while True:
+        response = await self._client.pull_response()  # blocks until message or timeout
+        if isinstance(response, EntityMentionResolutionResponse):
+            yield response
+        # EREErrorResponse: log and skip
+```
 
 **Constraints:**
 - Listeners must provide idempotent consumption (at-least-once tolerance)
-- No business logic in adapters; only I/O and schema conversion
+- No business logic in adapters; only I/O and message routing
 
 #### 2.3 Service (`services/`)
 
@@ -126,25 +152,47 @@ The **ERE Result Integrator** is a service that:
 
 **`OutcomeIntegrationService`**
 
+**Constructor:**
+```python
+def __init__(
+    self,
+    registry_service: RequestRegistryService,
+    decision_service: DecisionStoreService,
+    on_outcome_stored: Callable[[str], Awaitable[None]] | None = None,
+):
 ```
-Inputs: OutcomeMessage (from adapter)
+`on_outcome_stored` is an async callback injected at wiring time (EPIC-07 lifespan) as
+`waiter.notify`. When `None` (e.g. EPIC-05 tested in isolation), no notification is sent
+and the Coordinator always falls back to provisional timeout — valid degraded mode.
+
+**Algorithm:**
+```
+Inputs: EntityMentionResolutionResponse (from AsyncOutcomeListener)
 Process:
-  1. Validate schema (raise OutcomeValidationError if invalid)
-  2. Extract and validate triad
-  3. Query Request Registry: does triad exist?
-     - If NO: raise TriadNotFoundError (logged, outcome ignored)
-     - If YES: continue
-  4. Query Decision Store: fetch latest assignment for triad
-  5. Compare timestamps:
-     - If incoming.timestamp ≤ stored.timestamp: reject (stale)
-     - If incoming.timestamp > stored.timestamp: accept
-  6. Persist ClusterAssignment to Decision Store
-  7. Update delta tracking timestamp (lastUpdateDate)
+  1. Validate message (raise OutcomeValidationError if timestamp is None or candidates is empty)
+  2. Extract identifier (triad): response.entity_mention_id (EntityMentionIdentifier)
+  3. Query Request Registry: does triad exist? (RequestRegistryService.get_resolution_request)
+     - If None: raise TriadNotFoundError (subclass ApplicationError; logged at WARN; outcome ignored)
+     - If found: continue
+  4. Map response to store_decision() arguments:
+     - identifier = response.entity_mention_id
+     - current = response.candidates[0]   # first candidate is primary (ERE authority; see Section 3.1)
+     - candidates = response.candidates[1:]
+     - updated_at = response.timestamp    # datetime; non-null guaranteed by step 1
+  5. Call DecisionStoreService.store_decision(identifier, current, candidates, updated_at)
+     - On StaleOutcomeError: log at DEBUG; proceed to step 6 (Coordinator may still be waiting)
+     - On success: proceed to step 6
+  6. If on_outcome_stored is set:
+     - triad_key = f"{identifier.source_id}{identifier.request_id}{identifier.entity_type}"
+     - await on_outcome_stored(triad_key)
+     - No-op if no Coordinator is waiting (unsolicited reclustering, or no waiter registered)
 
-Outputs: ClusterAssignment (persisted) or rejection log (on error)
+Outputs: Decision (persisted) or stale rejection — notification sent in both cases
 ```
 
-**Idempotency Rule:** For a given triad, accept only if `timestamp > stored.timestamp`.
+**Idempotency Rule:** Enforced atomically by `MongoDecisionRepository.upsert_decision()` — raises `StaleOutcomeError` if `stored.updated_at >= incoming.updated_at`. Service does NOT pre-fetch and compare.
+
+**`triad_key` format:** Direct concatenation `f"{source_id}{request_id}{entity_type}"` — no separator. Matches the provisional cluster ID derivation algorithm (EPIC-06 §5.4). Must be identical in both EPIC-05 and EPIC-06.
 
 #### 2.4 Entrypoint (`entrypoints/`)
 
@@ -154,25 +202,48 @@ Outputs: ClusterAssignment (persisted) or rejection log (on error)
 class OutcomeIntegrationWorker:
     """
     Continuously listens for ERE outcomes and processes them via service.
-    Runs as background task (e.g., asyncio, Celery, or simple loop).
+    Lifecycle managed by EPIC-07 FastAPI lifespan (start on startup, stop on shutdown).
+    Location: src/ers/ere_result_integrator/entrypoints/outcome_integration_worker.py
     """
 
     def __init__(self, listener: AsyncOutcomeListener, service: OutcomeIntegrationService):
-        self.listener = listener
-        self.service = service
+        self._listener = listener
+        self._service = service
+        self._task: asyncio.Task | None = None
+
+    def start(self) -> asyncio.Task:
+        """Schedule run() as a background asyncio.Task. Non-blocking. Called by EPIC-07 lifespan."""
+        self._task = asyncio.create_task(self.run())
+        return self._task
+
+    async def stop(self) -> None:
+        """Cancel the background task and await clean termination. Called by EPIC-07 lifespan."""
+        if self._task:
+            self._task.cancel()
+            await asyncio.gather(self._task, return_exceptions=True)
 
     async def run(self):
-        """Poll outcomes from listener; call service for each."""
-        async for message in self.listener.consume():
+        """Poll outcomes from listener; call service for each. Infinite loop."""
+        async for message in self._listener.consume():
             try:
-                self.service.integrate_outcome(message)
+                await self._service.integrate_outcome(message)
             except OutcomeValidationError as e:
-                log.error(f"Contract violation: {e.detail}", extra={"triad": message.triad})
+                log.error(f"Contract violation: {e.detail}", extra={"identifier": message.entity_mention_id})
             except TriadNotFoundError as e:
-                log.error(f"Triad not found: {e.triad}", extra={"severity": "warning"})
+                log.warning(f"Triad not found: {e.identifier}")
             except Exception as e:
-                log.error(f"Unexpected error processing outcome", exc_info=e)
+                log.error("Unexpected error processing outcome", exc_info=e)
 ```
+
+### 2.5 Deployment Constraints
+
+- **Single-process / same event loop required (MVP).** `AsyncResolutionWaiter` uses in-process
+  `asyncio.Event` objects. `OutcomeIntegrationWorker` and `ResolutionCoordinatorService` (EPIC-06)
+  must run on the same asyncio event loop within the same OS process.
+- **Lifecycle owner is EPIC-07.** The worker is started via `worker.start()` in the FastAPI
+  `lifespan` startup hook and stopped via `worker.stop()` in the shutdown hook.
+- **Horizontal scaling** would require replacing `AsyncResolutionWaiter` with an external
+  coordination mechanism (e.g. Redis Pub/Sub). Out of scope for MVP.
 
 ---
 
@@ -208,20 +279,30 @@ class OutcomeIntegrationWorker:
 }
 ```
 
-**Decision Store Update (persisted):**
+**Decision Store Update (persisted — `Decision` from erspec):**
 
 ```python
 {
-  "triad": {"sourceId": "SYSTEM_A", "requestId": "req123", "entityType": "..."},
-  "clusterId": "cluster-001",                    # Primary canonical ID
-  "alternatives": [                             # Top N alternatives (as-is from ERE)
-    {"clusterId": "cluster-002", "score": 0.45}
+  "id": "<sha256 of triad>",                                       # Derived by MongoDecisionRepository
+  "about_entity_mention": {                                        # EntityMentionIdentifier
+    "source_id": "SYSTEM_A",
+    "request_id": "req123",
+    "entity_type": "http://www.w3.org/ns/org#Organization"
+  },
+  "current_placement": {                                           # candidates[0] from ERE response
+    "cluster_id": "cluster-001",
+    "confidence_score": 0.95,
+    "similarity_score": 0.92
+  },
+  "candidates": [                                                  # candidates[1:] from ERE response
+    {"cluster_id": "cluster-002", "confidence_score": 0.45, "similarity_score": 0.40}
   ],
-  "outcomeTimestamp": "2026-03-12T14:30:45.123Z",  # Monotonic marker for deduplication
-  "lastUpdateDate": "2026-03-12T14:30:45.123Z",    # For refreshBulk delta tracking
-  "lastNotificationDate": "2026-03-12T14:30:00Z"   # Set by caller (not updated here)
+  "updated_at": "2026-03-12T14:30:45.123Z",                       # datetime; staleness marker + refreshBulk cursor
+  "created_at": "2026-03-12T14:30:45.123Z"                        # set on first insert; never updated
 }
 ```
+
+**Explicit assumption — `candidates[0]` is the primary cluster:** ERE always returns candidates in descending confidence order; the first entry is the authoritative cluster assignment. The service maps `candidates[0]` → `current_placement` and `candidates[1:]` → `candidates`. This assumption is derived from the ERE contract and must not be changed without a corresponding ERE contract update.
 
 ### 3.2 Error Handling Matrix
 
@@ -229,9 +310,10 @@ class OutcomeIntegrationWorker:
 |------------|-----------|----------|---------|-------------|
 | **Malformed Message** | JSON parsing fails | Reject; log error detail | ERROR level | OpenTelemetry trace with message_id |
 | **Missing Triad** | entity_mention_id is null or incomplete | Reject; log missing field name | ERROR level | Trace with field name |
-| **Invalid Timestamp** | timestamp not ISO 8601 | Reject; log actual value | ERROR level | Trace with timestamp value |
-| **Triad Not in Registry** | Request Registry query returns null | Raise TriadNotFoundError; log triad | WARN level | Trace with triad + query latency |
-| **Stale Outcome** | incoming.timestamp ≤ stored.timestamp | Reject silently (log at DEBUG) | DEBUG level | Trace with timestamp comparison |
+| **Null Timestamp** | `response.timestamp is None` | Raise `OutcomeValidationError`; log | ERROR level | Trace with `ere_request_id` |
+| **Empty Candidates** | `response.candidates` is empty | Raise `OutcomeValidationError`; log | ERROR level | Trace with `ere_request_id` |
+| **Triad Not in Registry** | `MongoResolutionRequestRepository.find_by_triad` returns `None` | Raise `TriadNotFoundError` (subclass `ApplicationError`); log triad | WARN level | Trace with triad + query latency |
+| **Stale Outcome** | `MongoDecisionRepository.upsert_decision` raises `StaleOutcomeError` | Catch; log at DEBUG; still call `on_outcome_stored` (Coordinator reads existing decision) | DEBUG level | Trace with timestamp comparison |
 | **Decision Store Write Failure** | MongoDB insert/update fails | Raise exception; propagate up | ERROR level | Trace with error details |
 | **Listener Connection Lost** | Redis consumer disconnected | Retry connection (exponential backoff) | WARN level | Trace with retry attempt count |
 
@@ -241,13 +323,15 @@ class OutcomeIntegrationWorker:
 
 | ❌ Don't | ✅ Do Instead | Why |
 |----------|---------------|-----|
-| Store outcome timestamp as `datetime` object | Store as ISO 8601 string; order lexicographically | Serialization issues; string ordering matches temporal order |
-| Validate cluster assignments (e.g., format check) | Accept any clusterId as-is from ERE; ERE is authority | ERS is not responsible for cluster ID governance |
-| Use er_request_id as correlation key | Use mention identifier triad; er_request_id is ERE-specific | Triad is stable, user-provided, matches Request Registry |
+| Pre-fetch Decision Store record to check staleness before writing | Call `store_decision()` directly; catch `StaleOutcomeError` | `upsert_decision()` enforces staleness atomically in MongoDB; pre-fetch creates a TOCTOU race |
+| Validate cluster assignments (e.g., format check) | Accept any `cluster_id` as-is from ERE; ERE is authority | ERS is not responsible for cluster ID governance |
+| Use `ere_request_id` as correlation key | Use `entity_mention_id` (EntityMentionIdentifier triad) | Triad is stable, user-provided, matches Request Registry key |
 | Retry failed Decision Store updates | Propagate error; let orchestrator decide retry policy | Prevents cascading failures; keeps concerns separated |
-| Merge alternatives with previous outcome | Replace alternatives wholesale; use latest alternatives only | Avoids stale alternative suggestions |
-| Log full message payload at INFO level | Log only triad + timestamp + error reason | Prevents excessive logging; protects sensitive data |
-| Implement custom version/sequence numbers | Trust ERE-provided timestamp as monotonic marker | Simpler, fewer moving parts |
+| Merge alternatives with previous outcome | Replace `candidates` wholesale (`candidates[1:]` from latest response) | Avoids stale alternative suggestions |
+| Log full message payload at INFO level | Log only `entity_mention_id` + `ere_request_id` + error reason | Prevents excessive logging; protects sensitive data |
+| Create new domain models wrapping erspec types | Use `EntityMentionResolutionResponse`, `EntityMentionIdentifier`, `Decision` directly | Adding wrapper models introduces lossy mappings and duplicate concepts |
+| Import `AsyncResolutionWaiter` from `ers.resolution_coordinator` | Accept `on_outcome_stored: Callable[[str], Awaitable[None]]` as constructor parameter | Both modules are Tier 2; same-tier sibling imports are forbidden by `.importlinter` |
+| Branch on `ere_request_id.startswith("ereNotification:")` | Process solicited and unsolicited outcomes through identical pipeline | The prefix is informational only; `on_outcome_stored` is a no-op when no Coordinator is waiting |
 
 ### 3.4 Test Case Specifications
 
@@ -255,12 +339,12 @@ class OutcomeIntegrationWorker:
 
 | Test ID | Component | Input | Expected Output | Edge Cases |
 |---------|-----------|-------|-----------------|------------|
-| **UT-001** | `OutcomeIntegrationService` | Valid response with timestamp > stored | ClusterAssignment persisted with new clusterId | Alternative list empty (0 alternatives) |
-| **UT-002** | `OutcomeIntegrationService` | Valid response with timestamp ≤ stored | Outcome rejected; Decision Store unchanged | Timestamp equal to stored (boundary) |
-| **UT-003** | `OutcomeIntegrationService` | Triad not in Request Registry | TriadNotFoundError raised | Triad partially missing (one field null) |
-| **UT-004** | `OutcomeIntegrationService` | Malformed JSON (missing entity_mention_id) | OutcomeValidationError raised | Extra unknown fields (must not fail) |
-| **UT-005** | `CorrelationTriad` | Triad construction | Value object created; fields immutable | Triad with special chars in sourceId |
-| **UT-006** | `OutcomeIntegrationWorker` | Exception in service.integrate_outcome | Exception caught; logged; loop continues | Multiple consecutive errors |
+| **UT-001** | `OutcomeIntegrationService` | Valid `EntityMentionResolutionResponse` with fresh timestamp | `Decision` returned; `store_decision()` called with correct `current`/`candidates` split; `on_outcome_stored` called with correct `triad_key` | Candidates list has exactly 1 entry (no alternatives); `on_outcome_stored=None` does not raise |
+| **UT-002** | `OutcomeIntegrationService` | `store_decision()` raises `StaleOutcomeError` | Stale outcome logged at DEBUG; `on_outcome_stored` still called; no exception propagated | `StaleOutcomeError` with equal timestamp (boundary) |
+| **UT-003** | `OutcomeIntegrationService` | Triad not in Request Registry (`find_by_triad` returns `None`) | `TriadNotFoundError` (subclass `ApplicationError`) raised | |
+| **UT-004** | `OutcomeIntegrationService` | Response with `timestamp=None` | `OutcomeValidationError` raised | Response with empty `candidates` list also raises |
+| **UT-005** | `OutcomeIntegrationService` | Response with `timestamp=None` OR empty `candidates` | `OutcomeValidationError` raised before registry query | Both null-timestamp and empty-candidates paths |
+| **UT-006** | `OutcomeIntegrationWorker` | Exception in `service.integrate_outcome` | Exception caught; logged; loop continues | Multiple consecutive errors |
 
 #### Integration Tests (≥3 required)
 
@@ -277,7 +361,10 @@ class OutcomeIntegrationWorker:
 
 ### Feature: Integrate ERE Resolution Outcomes (UC-B1.2)
 
-**File Location:** `tests/features/ere_result_integrator/integration.feature`
+**File Locations** (3 files under `tests/feature/ere_result_integrator/`):
+- `outcome_acceptance.feature` — solicited and unsolicited outcomes
+- `deduplication_and_staleness.feature` — duplicate and late arrival rejection
+- `contract_validation.feature` — null timestamp, empty candidates, missing triad
 
 ```gherkin
 Feature: Integrate ERE Resolution Outcomes
@@ -294,12 +381,12 @@ Feature: Integrate ERE Resolution Outcomes
       | Field              | Value                       |
       | ere_request_id     | req123:001                  |
       | timestamp          | 2026-03-12T14:30:45.123Z   |
-      | clusterId          | cluster-001                 |
-      | alternatives       | [cluster-002, cluster-003]  |
+      | cluster_id         | cluster-001                 |
+      | candidates         | [cluster-002, cluster-003]  |
     Then the Decision Store is updated with:
       | Field              | Value                       |
-      | clusterId          | cluster-001                 |
-      | outcomeTimestamp   | 2026-03-12T14:30:45.123Z   |
+      | cluster_id         | cluster-001                 |
+      | updated_at         | 2026-03-12T14:30:45.123Z   |
     And the delta tracking timestamp is refreshed
 
   Scenario: Accept unsolicited outcome (ERE-initiated reclustering)
@@ -308,7 +395,7 @@ Feature: Integrate ERE Resolution Outcomes
       | Field              | Value                       |
       | ere_request_id     | ereNotification:rebuild-1   |
       | timestamp          | 2026-03-12T15:00:00.000Z   |
-      | clusterId          | cluster-002                 |
+      | cluster_id         | cluster-002                 |
     Then the Decision Store is updated to reflect cluster-002
     And the new timestamp is recorded
 
@@ -340,8 +427,8 @@ Feature: Integrate ERE Resolution Outcomes
 
 - [x] **Actionable:** Every section specifies what to code (no aspirational language like "fast" or "scalable")
 - [x] **Current:** All decisions reflect Spine B, UC-B1.2, and clarified design choices (timestamp deduplication, triad validation)
-- [x] **Single Source:** No duplicate information (timestamp rule explained once in section 3.1, referenced in section 3.3)
-- [x] **Decision, Not Wish:** All statements are decided (async adapter pattern chosen; timestamp deduplication rule set)
+- [x] **Single Source:** No duplicate information (timestamp rule explained once in section 3.1; erspec types referenced once, no redefinition)
+- [x] **Decision, Not Wish:** All statements are decided (Redis list queue adapter chosen; callback injection pattern decided; staleness handled by repository)
 - [x] **Prompt-Ready:** Every section can feed directly into a code generation prompt
 - [x] **No Future State:** No "will eventually" or "might" language; all is present tense (decided)
 - [x] **No Fluff:** No motivational conclusions; only actionable content
@@ -352,7 +439,7 @@ Feature: Integrate ERE Resolution Outcomes
 - [x] **Anti-patterns in Impl:** Section 3.3 contains ≥5 anti-patterns for implementation (stored in impl doc, not strategic)
 - [x] **Test Cases in Impl:** Section 3.4 specifies unit + integration tests (in impl doc)
 - [x] **Error Handling in Impl:** Section 3.2 provides error handling matrix (in impl doc)
-- [x] **Deep Links Present:** All references precise (e.g., "Section 3.1 Data Contract", "tests/features/ere_result_integrator/integration.feature")
+- [x] **Deep Links Present:** All references precise (e.g., "Section 3.1 Data Contract", `tests/feature/ere_result_integrator/`)
 - [x] **No Duplicates:** Strategic overview (Section 1) uses Implementation Implication pointers; no duplication
 
 ### AI Coder Understandability Score: **9.2/10**
@@ -361,13 +448,13 @@ Feature: Integrate ERE Resolution Outcomes
 |-----------|-------|----------|
 | **Actionability (25%)** | 25/25 | Every model, adapter, service method specified with inputs/outputs |
 | **Specificity (20%)** | 19/20 | All edge cases listed; timestamp format explicit; one minor: listener retry backoff policy TBD |
-| **Consistency (15%)** | 15/15 | Single source of truth for each concept (triad, timestamp, ClusterAssignment) |
+| **Consistency (15%)** | 15/15 | Single source of truth for each concept (triad, timestamp, Decision — erspec types used directly) |
 | **Structure (15%)** | 15/15 | Tables used throughout; clear hierarchy (layers → responsibilities → specs) |
 | **Disambiguation (15%)** | 15/15 | Anti-patterns explicit; edge cases in test matrix; error detection clear |
 | **Reference Clarity (10%)** | 9/10 | All internal refs precise; one external ref (redis client library) left to implementer |
 | **TOTAL** | **98/110** | **9.2/10** |
 
-**Ready for Phase 3 (Implementation)?** ✅ **YES** — All 13 Clarity Gate items pass. Score 9.2/10. AI coder can generate code with zero clarifying questions.
+**Ready for Phase 3 (Implementation)?** ✅ **YES** — All 13 Clarity Gate items pass. Score 9.2/10 (re-verified 2026-03-25 after alignment with EPICs 1–4, 6, and 7).
 
 ---
 
@@ -387,7 +474,7 @@ Feature: Integrate ERE Resolution Outcomes
 | Component | Epic | Status |
 |-----------|------|--------|
 | Request Registry | [ERS-EPIC-01](../ers-epic-01-request-registry/EPIC.md) | ✅ Complete |
-| Decision Store | [ERS-EPIC-04](../ers-epic-04-resolution-decision-store/EPIC.md) | ⬜ Pending |
+| Decision Store | [ERS-EPIC-04](../ers-epic-04-resolution-decision-store/EPIC.md) | ✅ Complete |
 | ERE Contract Client | [ERS-EPIC-03](../ers-epic-03-ere-contract-client/EPIC.md) | ✅ Complete |
 
 ### Architectural Constraints (From Roadmap)
@@ -411,32 +498,35 @@ Feature: Integrate ERE Resolution Outcomes
 | Data contract specified | ✅ Complete | Section 3.1 |
 | Test cases defined | ✅ Complete | Section 3.4 (6 unit + 4 integration) |
 | Gherkin features written | ✅ Complete | Section 4 |
-| Gherkin .feature files created | ✅ Complete | 3 files under tests/features/ere_result_integrator/ |
-| Step definition scaffolding | ✅ Complete | 3 files under tests/steps/ere_result_integrator/ |
+| Gherkin .feature files created | ✅ Complete | 3 files under `tests/feature/ere_result_integrator/` |
+| Step definition scaffolding | ✅ Complete | 3 files under `tests/steps/ere_result_integrator/` |
 | Clarity Gate passed | ✅ Complete | 9.2/10, all 13 items verified |
 
 ### Phase 3 (Implementation) Prerequisites
 
-- [ ] **ERS-EPIC-01 (Request Registry)** must be complete (triad validation requires registry access)
-- [ ] **ERS-EPIC-04 (Decision Store)** must be complete (outcome persistence target)
-- [ ] **ERS-EPIC-03 (ERE Contract Client)** must be complete (messaging adapter setup)
-- [ ] er-spec library must expose `EntityMentionResolutionResponse` model
+- [x] **ERS-EPIC-01 (Request Registry)** must be complete (triad validation requires registry access)
+- [x] **ERS-EPIC-04 (Decision Store)** must be complete (outcome persistence target)
+- [x] **ERS-EPIC-03 (ERE Contract Client)** must be complete (messaging adapter setup)
+- [x] er-spec library must expose `EntityMentionResolutionResponse` model
 
-### Phase 3 Sequence (Recommended Order)
+### Phase 3 Sequence (Completed)
 
-1. **Models** (`models/`) — CorrelationTriad, OutcomeMessage, ClusterAssignment (no dependencies)
-2. **Adapters** (`adapters/AsyncOutcomeListener` interface) — framework-agnostic contract
-3. **Service** (`services/OutcomeIntegrationService`) — depends on models + adapters
-4. **Adapters** (`adapters/RedisOutcomeListener`) — concrete Redis implementation
-5. **Entrypoint** (`entrypoints/OutcomeIntegrationWorker`) — depends on service + concrete adapter
-6. **Unit Tests** — per-layer (test as you build)
-7. **Integration Tests** — after all layers complete
-8. **Gherkin Features** — after service layer is testable
+| Step | Task file | What | Status |
+|------|-----------|------|--------|
+| 1 | [task51-domain-errors.md](task51-domain-errors.md) | `OutcomeValidationError`, `TriadNotFoundError` | ✅ Complete |
+| 2 | [task52-outcome-listener-interface.md](task52-outcome-listener-interface.md) | `AsyncOutcomeListener` ABC | ✅ Complete |
+| 3 | [task53-redis-outcome-listener.md](task53-redis-outcome-listener.md) | `RedisOutcomeListener` + OTel span extractors | ✅ Complete |
+| 4 | [task54-outcome-integration-service.md](task54-outcome-integration-service.md) | `OutcomeIntegrationService` + traced public API | ✅ Complete |
+| 5 | [task55-outcome-integration-worker.md](task55-outcome-integration-worker.md) | `OutcomeIntegrationWorker` | ✅ Complete |
+| 6 | [task56-unit-tests.md](task56-unit-tests.md) | Domain + adapter unit tests (34 tests, all pass) | ✅ Complete |
+| 7 | [task57-integration-tests.md](task57-integration-tests.md) | IT-001–IT-004 + Gherkin step defs fully wired | ✅ Complete |
+| 8 | [task58-e2e-ucb12-wiring.md](task58-e2e-ucb12-wiring.md) | Wire e2e UC-B1.2 step definitions (TODO placeholders → real service calls) | ✅ Complete |
+| 9 | [task59-resilience-gaps.md](task59-resilience-gaps.md) | Fix 5 resilience gaps (Redis drop, callback raise, bad JSON, unknown type, infra vs business errors) | ✅ Complete |
 
-**Estimated Scope:** ~800-1000 LOC (models ~200, adapters ~350, service ~300, entrypoint ~150)
+**Estimated Scope:** ~500-650 LOC (no new models; adapters ~200, service ~200, entrypoint ~100, errors ~50)
 
 ---
 
-**Epic Status:** Gherkin features complete, ready for implementation phase.
-**Clarity Gate Score:** 9.2/10 ✅
-**Last Updated:** 2026-03-16
+**Epic Status:** ✅ Complete. All 869 tests pass. 12 e2e UC-B1.2 scenarios fully wired. 5 resilience gaps fixed (Tasks 58 + 59). Pending: PR to `develop`.
+**Clarity Gate Score:** 9.2/10 ✅ (re-verified after spec alignment with EPICs 1–4)
+**Last Updated:** 2026-03-27

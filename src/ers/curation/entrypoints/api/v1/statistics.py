@@ -13,7 +13,6 @@ router = APIRouter(prefix="/curation/stats", tags=["Statistics"])
 
 @router.get(
     "",
-    response_model=Statistics,
     responses={400: {"model": ErrorResponse}},
 )
 async def get_statistics(

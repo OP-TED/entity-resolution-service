@@ -1,9 +1,9 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Path, Query, status
 
 from ers.commons.domain.data_transfer_objects import PaginatedResult
-from ers.curation.entrypoints.api.auth import AdminUser, CurrentUser
+from ers.curation.entrypoints.api.auth import AdminUser, CurrentUser, VerifiedUser
 from ers.curation.entrypoints.api.dependencies import get_user_management_service
 from ers.curation.entrypoints.api.v1.schemas import ErrorResponse, Pagination
 from ers.users.domain.data_transfer_objects import (
@@ -19,13 +19,13 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.post(
     "",
-    response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     responses={
         400: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
         409: {"model": ErrorResponse},
     },
+    response_description="The newly created user.",
 )
 async def create_user(
     body: CreateUserRequest,
@@ -38,30 +38,31 @@ async def create_user(
 
 @router.get(
     "",
-    response_model=PaginatedResult[UserResponse],
     responses={400: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+    response_description="Paginated list of users.",
 )
 async def list_users(
     pagination: Pagination,
-    _admin: AdminUser,
+    _user: VerifiedUser,
     service: Annotated[UserManagementService, Depends(get_user_management_service)],
+    email: Annotated[str | None, Query(description="Partial email match")] = None,
 ) -> PaginatedResult[UserResponse]:
-    """List all users (admin only)."""
-    return await service.list_users(pagination)
+    """List all users (verified users)."""
+    return await service.list_users(pagination, email_search=email)
 
 
 @router.patch(
     "/{user_id}",
-    response_model=UserResponse,
     responses={
         400: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         409: {"model": ErrorResponse},
     },
+    response_description="The updated user.",
 )
 async def patch_user(
-    user_id: str,
+    user_id: Annotated[str, Path(description="Unique identifier of the user to update.")],
     body: UserPatchRequest,
     _admin: AdminUser,
     service: Annotated[UserManagementService, Depends(get_user_management_service)],
@@ -72,8 +73,8 @@ async def patch_user(
 
 @router.get(
     "/me",
-    response_model=UserContext,
     responses={401: {"model": ErrorResponse}},
+    response_description="The currently authenticated user.",
 )
 async def get_current_user(
     user: CurrentUser,

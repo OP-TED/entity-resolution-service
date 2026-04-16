@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime
 from typing import Any, ClassVar, TypeVar
 
+from pydantic import BaseModel
 from pymongo.asynchronous.database import AsyncDatabase
 
-T = TypeVar("T")
+T = TypeVar("T", bound=BaseModel)
 ID = TypeVar("ID")
 
 
@@ -45,6 +47,11 @@ class BaseMongoRepository(AsyncReadRepository[T, ID], AsyncWriteRepository[T, ID
     def _from_document(self, doc: dict[str, Any]) -> T:
         doc[self._id_field] = doc.pop("_id")
         doc.pop("object_description", None)
+        # PyMongo returns timezone-naive datetimes for BSON datetime fields.
+        # Attach UTC so downstream serialisation emits the RFC 3339 Z suffix.
+        for key, value in doc.items():
+            if isinstance(value, datetime) and value.tzinfo is None:
+                doc[key] = value.replace(tzinfo=UTC)
         return self._model_class.model_validate(doc)
 
     async def find_by_id(self, entity_id: ID) -> T | None:
