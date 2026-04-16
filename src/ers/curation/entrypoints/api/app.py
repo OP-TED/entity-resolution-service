@@ -15,6 +15,7 @@ from ers.commons.adapters.tracing import (
     configure_auto_instrumentation,
     configure_fastapi_telemetry,
     configure_tracing,
+    shutdown_tracing,
 )
 from ers.curation.entrypoints.api.exception_handlers import register_exception_handlers
 from ers.curation.entrypoints.api.health import router as health_router
@@ -52,6 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         await redis_client.close()
         await manager.close()
+        shutdown_tracing()
 
 
 async def _seed_admin_user(db: object) -> None:

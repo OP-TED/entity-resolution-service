@@ -50,6 +50,8 @@ def reset_tracing_state():
     tracing_module._extractors.clear()
     _reset_otel_globals()
     yield
+    if tracing_module._provider is not None:
+        tracing_module._provider.shutdown()
     tracing_module._provider = original_provider
     tracing_module._extractors.clear()
     tracing_module._extractors.update(original_extractors)

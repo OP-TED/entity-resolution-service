@@ -13,6 +13,7 @@ from ers.commons.adapters.tracing import (
     configure_auto_instrumentation,
     configure_fastapi_telemetry,
     configure_tracing,
+    shutdown_tracing,
 )
 from ers.ers_rest_api.entrypoints.api.exception_handlers import register_exception_handlers
 from ers.ers_rest_api.entrypoints.api.health import router as health_router
@@ -118,6 +119,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await redis_client.close()
         await listener_client.close()
         await manager.close()
+        shutdown_tracing()
 
 
 def _custom_openapi(app: FastAPI) -> dict[str, Any]:

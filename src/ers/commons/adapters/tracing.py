@@ -131,6 +131,16 @@ def configure_auto_instrumentation(config: Any) -> None:
     logger.info("OTel auto-instrumentation activated: pymongo, redis")
 
 
+def shutdown_tracing() -> None:
+    """Flush pending spans and shut down the TracerProvider.
+
+    Call once from each app's lifespan teardown (``finally`` block).
+    No-op when tracing was not configured.
+    """
+    if _provider is not None:
+        _provider.shutdown()
+
+
 # ---------------------------------------------------------------------------
 # Section 3 — Extractor registry
 # ---------------------------------------------------------------------------
