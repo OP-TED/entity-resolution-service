@@ -285,8 +285,8 @@ async def bulk_accept_decisions(
     service: DecisionCurationService,
 ) -> BulkActionResponse:
     """Traced entry point for bulk accept."""
-    result = await service.bulk_accept_decisions(decision_ids, actor)
     trace.get_current_span().set_attribute("curation.bulk_count", len(decision_ids))
+    result = await service.bulk_accept_decisions(decision_ids, actor)
     trace.get_current_span().set_attribute(
         "curation.bulk_success_count",
         sum(1 for r in result.results if r.status == BulkItemStatus.SUCCESS),
@@ -301,8 +301,8 @@ async def bulk_reject_decisions(
     service: DecisionCurationService,
 ) -> BulkActionResponse:
     """Traced entry point for bulk reject."""
-    result = await service.bulk_reject_decisions(decision_ids, actor)
     trace.get_current_span().set_attribute("curation.bulk_count", len(decision_ids))
+    result = await service.bulk_reject_decisions(decision_ids, actor)
     trace.get_current_span().set_attribute(
         "curation.bulk_success_count",
         sum(1 for r in result.results if r.status == BulkItemStatus.SUCCESS),
