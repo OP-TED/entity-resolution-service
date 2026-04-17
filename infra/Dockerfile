@@ -58,9 +58,9 @@ COPY --from=builder /app/src src
 
 # Development extras: project scripts and tests (for in-container testing)
 COPY --from=builder /app/scripts scripts/
-COPY --from=builder /app/tests tests/
+COPY --from=builder /app/test test/
 RUN if [ "$ENVIRONMENT" != "development" ]; then \
-      rm -rf scripts tests; \
+      rm -rf scripts test; \
     fi
 
 # Container entrypoint
