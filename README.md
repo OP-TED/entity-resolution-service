@@ -73,6 +73,14 @@ cd src && poetry run pre-commit install
 
 For AI-assisted development, see [`CLAUDE.md`](CLAUDE.md) and the [`.claude/memory`](.claude/memory) folder for architecture specs, epic planning, and agent configuration.
 
+
+## Repository Layout
+
+This repository follows the repository owner's requirements for project structure, which place the self-contained Python project (source code, dependencies, and build scripts) under `src/`. This layout is required for the repository owner's deployment tooling to locate and operate the project correctly.
+
+The canonical `Makefile` lives in `src/` alongside the project it builds; all make targets are intended to be run from that directory. The root-level `Makefile` is a convenience wrapper only — it forwards every target to `src/Makefile` via `make -C src` so that contributors who work from the repo root do not need to `cd src` first.
+
+
 ---
 
 ## Contributing
