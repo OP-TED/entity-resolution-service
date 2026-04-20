@@ -34,8 +34,8 @@ make install
 Configure the environment:
 
 ```bash
-cp infra/.env.example infra/.env
-# Edit infra/.env — set MongoDB URI, Redis URL, ports
+cp src/infra/.env.example src/infra/.env
+# Edit src/infra/.env — set MongoDB URI, Redis URL, ports
 ```
 
 ---
@@ -68,7 +68,7 @@ make ci-full          # full CI pipeline — run before opening a PR
 Pre-commit hooks (format + lint on every commit):
 
 ```bash
-cd src && poetry run pre-commit install
+poetry run pre-commit install
 ```
 
 For AI-assisted development, see [`CLAUDE.md`](CLAUDE.md) and the [`.claude/memory`](.claude/memory) folder for architecture specs, epic planning, and agent configuration.
@@ -76,9 +76,9 @@ For AI-assisted development, see [`CLAUDE.md`](CLAUDE.md) and the [`.claude/memo
 
 ## Repository Layout
 
-This repository follows the repository owner's requirements for project structure, which place the self-contained Python project (source code, dependencies, and build scripts) under `src/`. This layout is required for the repository owner's deployment tooling to locate and operate the project correctly.
+This repository follows the repository owner's requirements for project structure, which place the self-contained Python project (source code, dependencies, and tooling config) under `src/`. This layout is required for the repository owner's deployment tooling to locate and operate the project correctly.
 
-The canonical `Makefile` lives in `src/` alongside the project it builds; all make targets are intended to be run from that directory. The root-level `Makefile` is a convenience wrapper only — it forwards every target to `src/Makefile` via `make -C src` so that contributors who work from the repo root do not need to `cd src` first.
+The canonical `Makefile` lives at the repo root and owns all build logic. Recipes invoke `cd src &&` internally so that Poetry, Ruff, mypy, and pytest all resolve correctly against the `src/` project. All `make` targets are run from the repo root — no need to `cd src` first.
 
 
 ---
