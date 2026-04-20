@@ -9,8 +9,8 @@ x-api-env: &api-env
 
 x-api-common: &api-common
   build:
-    context: ..
-    dockerfile: infra/Dockerfile
+    context: ../..
+    dockerfile: src/infra/Dockerfile
     args:
       ENVIRONMENT: development
   env_file:
@@ -18,7 +18,7 @@ x-api-common: &api-common
   environment:
     <<: *api-env
   volumes:
-    - ../config:/app/config:ro
+    - ../../src/config:/app/config:ro
   restart: unless-stopped
   depends_on:
     ferretdb:
@@ -26,12 +26,12 @@ x-api-common: &api-common
   develop:
     watch:
       - action: sync
-        path: ../src
+        path: ../../src
         target: /app/src
       - action: rebuild
-        path: ../pyproject.toml
+        path: ../../src/pyproject.toml
       - action: rebuild
-        path: ../poetry.lock
+        path: ../../src/poetry.lock
   networks:
     - local
 
