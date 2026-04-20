@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.4.0-informational)](src/VERSION)
+[![Version](https://img.shields.io/badge/version-1.0.0-informational)](src/VERSION)
 
 ERS is the coordination backbone of an entity resolution platform. It receives RDF entity mention submissions, registers them, and orchestrates their resolution through a pluggable Entity Resolution Engine (ERE) over Redis. For each mention it returns a canonical cluster identifier — either confirmed by the ERE or provisionally issued when the engine does not respond within the configured time budget.
 
