@@ -191,27 +191,27 @@ check-architecture: ## Check architecture constraints with import-linter
 
 test: ## Run all tests (with coverage)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running all tests$(END_BUILD_PRINT)"
-	@ poetry run pytest -c pytest.ini $(TEST_PATH) $(COV_FLAGS) --junitxml=${REPO_ROOT}/test-results.xml
+	@ poetry run pytest -c pytest.ini --rootdir=.. $(TEST_PATH) $(COV_FLAGS) --junitxml=${REPO_ROOT}/test-results.xml
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) All tests passed$(END_BUILD_PRINT)"
 
 test-unit: ## Run unit tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running unit tests$(END_BUILD_PRINT)"
-	@ poetry run pytest -c pytest.ini $(TEST_PATH) -m "unit"
+	@ poetry run pytest -c pytest.ini --rootdir=.. $(TEST_PATH) -m "unit"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Unit tests passed$(END_BUILD_PRINT)"
 
 test-feature: ## Run BDD feature tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running feature tests$(END_BUILD_PRINT)"
-	@ poetry run pytest -c pytest.ini $(TEST_PATH) -m "feature"
+	@ poetry run pytest -c pytest.ini --rootdir=.. $(TEST_PATH) -m "feature"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Feature tests passed$(END_BUILD_PRINT)"
 
 test-e2e: ## Run end-to-end tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running e2e tests$(END_BUILD_PRINT)"
-	@ poetry run pytest -c pytest.ini $(TEST_PATH) -m "e2e"
+	@ poetry run pytest -c pytest.ini --rootdir=.. $(TEST_PATH) -m "e2e"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) E2e tests passed$(END_BUILD_PRINT)"
 
 test-integration: ## Run integration tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running integration tests$(END_BUILD_PRINT)"
-	@ poetry run pytest -c pytest.ini $(TEST_PATH) -m "integration"
+	@ poetry run pytest -c pytest.ini --rootdir=.. $(TEST_PATH) -m "integration"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Integration tests passed$(END_BUILD_PRINT)"
 
 #-----------------------------------------------------------------------------
@@ -239,7 +239,7 @@ ci-full: check-all clean-code ## CI full: quality + all tests + clean-code
 coverage-report: ## Generate HTML coverage report in reports/
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Generating coverage report$(END_BUILD_PRINT)"
 	@ mkdir -p ${REPO_ROOT}/reports
-	@ poetry run pytest -c pytest.ini $(TEST_PATH) $(COV_FLAGS) --cov-report=html:${REPO_ROOT}/reports/htmlcov -m "unit or feature"
+	@ poetry run pytest -c pytest.ini --rootdir=.. $(TEST_PATH) $(COV_FLAGS) --cov-report=html:${REPO_ROOT}/reports/htmlcov -m "unit or feature"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Coverage report at ${REPO_ROOT}/reports/htmlcov/index.html$(END_BUILD_PRINT)"
 
 quality-report: ## Generate Radon quality report in reports/
