@@ -10,20 +10,15 @@ The system is engine-authoritative: the ERE determines canonical identity, ERS n
 
 ---
 
-## Requirements
- 
+## Getting Started
+
+### Prerequisites
+
 - Python 3.12+
-- Docker + Docker Compose
 - [Poetry](https://python-poetry.org/) 2.x
-- **External Infrastructure:**
-  - Redis (for ERE orchestration)
-  - MongoDB (via FerretDB)
-  - PostgreSQL (backend for FerretDB)
+- Docker + Docker Compose
 
-
----
-
-## Installation
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/meaningfy-ws/entity-resolution-service.git
@@ -31,25 +26,46 @@ cd entity-resolution-service
 make install
 ```
 
-Configure the environment:
+### 2. Configure the environment
 
 ```bash
 cp src/infra/.env.example src/infra/.env
-# Edit src/infra/.env — set MongoDB URI, Redis URL, ports
 ```
 
----
+The defaults work for local development. Notable variables in `src/infra/.env`:
 
-## Running
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `UVICORN_PORT` | `8000` | Curation API port |
+| `ERS_API_PORT` | `8001` | ERS REST API port |
+| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_PASSWORD` | `changeme` | Redis password — **must match ERE** |
+| `ADMIN_EMAIL` | `admin@ers.local` | Default admin account |
+| `ADMIN_PASSWORD` | `changeme` | Default admin password |
+
+### 3. Start the stack
 
 ```bash
-make up        # start all services
-make rebuild   # rebuild Docker images and start
-make down      # stop all services
-make logs      # follow service logs
+make up       # start all services (Curation API, ERS API, Redis, FerretDB, Postgres)
+make logs     # follow service logs
+make down     # stop all services
 ```
 
-The API is available at `http://localhost:${UVICORN_PORT:-8000}`.
+| Service | URL |
+|---------|-----|
+| Curation API | `http://localhost:8000` |
+| ERS REST API | `http://localhost:8001` |
+| FerretDB (MongoDB) | `localhost:27017` |
+| Redis | `localhost:6379` |
+
+### What this stack does NOT include
+
+This repo starts the ERS backend and its infrastructure (Redis, database). It does **not** include the Entity Resolution Engine (ERE) or the web UI.
+
+Without ERE running and connected to the **same Redis instance**, entity mentions will be accepted and registered but resolution will never complete — ERS will issue provisional cluster IDs until the ERE responds.
+
+- To add ERE: follow the Getting Started section in [entity-resolution-engine-basic](https://github.com/meaningfy-ws/entity-resolution-engine-basic#getting-started).
+- To add the web UI: follow the Getting Started section in [entity-resolution-service-webapp](https://github.com/meaningfy-ws/entity-resolution-service-webapp#getting-started).
 
 ---
 
