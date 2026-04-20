@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.4.0-informational)](VERSION)
+[![Version](https://img.shields.io/badge/version-0.4.0-informational)](src/VERSION)
 
 ERS is the coordination backbone of an entity resolution platform. It receives RDF entity mention submissions, registers them, and orchestrates their resolution through a pluggable Entity Resolution Engine (ERE) over Redis. For each mention it returns a canonical cluster identifier — either confirmed by the ERE or provisionally issued when the engine does not respond within the configured time budget.
 
@@ -68,7 +68,7 @@ make ci-full          # full CI pipeline — run before opening a PR
 Pre-commit hooks (format + lint on every commit):
 
 ```bash
-poetry run pre-commit install
+cd src && poetry run pre-commit install
 ```
 
 For AI-assisted development, see [`CLAUDE.md`](CLAUDE.md) and the [`.claude/memory`](.claude/memory) folder for architecture specs, epic planning, and agent configuration.
