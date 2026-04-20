@@ -59,7 +59,7 @@ dependencies = [
 
 [tool.poetry]
 packages = [
-    { include = "ers", from = "src" }
+    { include = "ers", from = "." }
 ]
 
 
