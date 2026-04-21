@@ -3,9 +3,9 @@ set -euo pipefail
 
 # --- Dev-only: database seeding ---
 if [ "${SEED_DB:-false}" = "true" ]; then
-  if python -c "import scripts.seed_db" 2>/dev/null; then
+  if [ -f /app/scripts/seed_db.py ]; then
     echo "Seeding DB..."
-    python -m scripts.seed_db --mentions 1000 --clusters 15
+    python /app/scripts/seed_db.py --mentions 1000 --clusters 15
   else
     echo "Warning: SEED_DB=true but seed script not available (production image)" >&2
   fi
