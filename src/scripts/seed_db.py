@@ -29,7 +29,7 @@ from ers.users.adapters.user_repository import MongoUserRepository
 from ers.users.domain.users import User
 
 # only used for seeding/testing
-from tests.unit.factories import (
+from test.unit.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
     EntityMentionIdentifierFactory,
