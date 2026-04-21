@@ -1,6 +1,6 @@
 [project]
 name = "ers-core"
-version = "0.4.0"
+version = "1.0.0"
 description = "Core Python backend service for entity resolution — REST API, decision persistence, and ERE orchestration via Redis."
 authors = [
     { name = "Meaningfy", email = "hi@meaningfy.ws" }
@@ -8,8 +8,7 @@ authors = [
 maintainers = [
     { name = "Meaningfy", email = "hi@meaningfy.ws" }
 ]
-readme = "README.md"
-license = { file = "LICENSE" }
+license = { text = "Apache-2.0" }
 requires-python = ">=3.12,<3.15"
 classifiers = [
     "Programming Language :: Python",
@@ -59,7 +58,7 @@ dependencies = [
 
 [tool.poetry]
 packages = [
-    { include = "ers", from = "src" }
+    { include = "ers", from = "." }
 ]
 
 

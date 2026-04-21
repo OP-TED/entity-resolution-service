@@ -3,20 +3,20 @@ SHELL=/bin/bash -o pipefail
 BUILD_PRINT = \e[1;34m
 END_BUILD_PRINT = \e[0m
 
-PROJECT_PATH = $(shell pwd)
-SRC_PATH = ${PROJECT_PATH}/src
-TEST_PATH = ${PROJECT_PATH}/test
-BUILD_PATH = ${PROJECT_PATH}/dist
+REPO_ROOT    = $(shell pwd)
+SRC_PATH     = $(REPO_ROOT)/src
+TEST_PATH    = $(REPO_ROOT)/test
+BUILD_PATH   = $(REPO_ROOT)/dist
 PACKAGE_NAME = ers
-COMPOSE_FILE = ${PROJECT_PATH}/infra/compose.dev.yaml
-ENV_FILE = ${PROJECT_PATH}/infra/.env
+COMPOSE_FILE = $(SRC_PATH)/infra/compose.dev.yaml
+ENV_FILE     = $(SRC_PATH)/infra/.env
 # TODO: bump to v7.22.0 once released — v7.21.0 drops descriptions from nullable
 #       (anyOf) properties in the asciidoc generator. The fix is in the 7.22.0-SNAPSHOT
 #       but no stable release or Docker image exists yet.
 OPENAPI_GENERATOR_IMAGE = openapitools/openapi-generator-cli:v7.21.0
 DOCS_API_REL ?= docs/api-docs
-DOCS_API_PATH = ${PROJECT_PATH}/${DOCS_API_REL}
-DOCS_TEMPLATE_PATH = ${PROJECT_PATH}/docs/templates/asciidoc
+DOCS_API_PATH = $(REPO_ROOT)/$(DOCS_API_REL)
+DOCS_TEMPLATE_PATH = $(REPO_ROOT)/docs/templates/asciidoc
 ASCIIDOC_PROPS = useMethodAndPath=true,useIntroduction=true,useTableTitles=true,skipExamples=true
 
 ICON_DONE = [✔]
@@ -25,7 +25,10 @@ ICON_WARNING = [!]
 ICON_PROGRESS = [-]
 
 # Coverage flags — appended only in coverage-aware targets
-COV_FLAGS = --cov=src --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=80
+COV_FLAGS = --cov=ers \
+            --cov-report=term-missing \
+            --cov-report=xml:$(REPO_ROOT)/coverage.xml \
+            --cov-fail-under=80
 
 #-----------------------------------------------------------------------------
 # Dev commands
@@ -94,33 +97,33 @@ install-poetry: ## Install Poetry if not present
 
 install: install-poetry ## Install project dependencies
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Installing ERS requirements$(END_BUILD_PRINT)"
-	@ poetry install --with dev,test,lint
+	@ cd src && poetry install --with dev,test,lint
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) ERS requirements are installed$(END_BUILD_PRINT)"
 
 lock: ## Update poetry.lock
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Locking dependencies$(END_BUILD_PRINT)"
-	@ poetry lock
+	@ cd src && poetry lock
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Lock file updated$(END_BUILD_PRINT)"
 
 build: ## Build the package distribution
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Building package$(END_BUILD_PRINT)"
-	@ poetry build
+	@ cd src && poetry build
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Package built successfully$(END_BUILD_PRINT)"
 
 seed-db: ## Seed the database with mock data (needs running database and config)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Seeding database with mock data$(END_BUILD_PRINT)"
-	@ poetry run python -m scripts.seed_db
+	@ cd src && poetry run python -m scripts.seed_db
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Database seeding complete$(END_BUILD_PRINT)"
 
 openapi: ## Generate OpenAPI schema into resources/
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Generating OpenAPI schemas$(END_BUILD_PRINT)"
-	@ poetry run python -m scripts.export_openapi
+	@ cd src && poetry run python -m scripts.export_openapi
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) OpenAPI schemas generated$(END_BUILD_PRINT)"
 
 # Usage: $(call run-openapi-asciidoc,<schema-file>,<output-subdir>)
 define run-openapi-asciidoc
 	@ MSYS_NO_PATHCONV=1 docker run --rm \
-		-v "$(PROJECT_PATH)/resources:/input" \
+		-v "$(SRC_PATH)/resources:/input" \
 		-v "$(DOCS_API_PATH)/$(2):/output" \
 		-v "$(DOCS_TEMPLATE_PATH):/templates" \
 		$(OPENAPI_GENERATOR_IMAGE) generate \
@@ -140,9 +143,9 @@ api-docs: ## Generate AsciiDoc API reference from OpenAPI schemas (override: DOC
 	$(call run-openapi-asciidoc,ers-openapi-schema.json,ers)
 	$(call run-openapi-asciidoc,curation-openapi-schema.json,curation)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Fixing cross-references$(END_BUILD_PRINT)"
-	@ cd $(PROJECT_PATH) && poetry run python -m scripts.fix_asciidoc_xrefs \
-		$(DOCS_API_REL)/ers/index.adoc \
-		$(DOCS_API_REL)/curation/index.adoc
+	@ cd src && poetry run python -m scripts.fix_asciidoc_xrefs \
+		$(DOCS_API_PATH)/ers/index.adoc \
+		$(DOCS_API_PATH)/curation/index.adoc
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) API reference docs generated at $(DOCS_API_REL)/$(END_BUILD_PRINT)"
 
 #-----------------------------------------------------------------------------
@@ -152,17 +155,17 @@ api-docs: ## Generate AsciiDoc API reference from OpenAPI schemas (override: DOC
 
 format: ## Format code with Ruff
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Formatting code$(END_BUILD_PRINT)"
-	@ poetry run ruff format $(SRC_PATH) $(TEST_PATH)
+	@ cd src && poetry run ruff format ers $(TEST_PATH)
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Format complete$(END_BUILD_PRINT)"
 
 lint-fix: ## Run Ruff checks with auto-fix
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running Ruff auto-fix$(END_BUILD_PRINT)"
-	@ poetry run ruff check --fix $(SRC_PATH) $(TEST_PATH)
+	@ cd src && poetry run ruff check --fix ers $(TEST_PATH)
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Ruff auto-fix complete$(END_BUILD_PRINT)"
 
 pre-commit: ## Run pre-commit hooks on all files
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running pre-commit hooks$(END_BUILD_PRINT)"
-	@ poetry run pre-commit run --all-files
+	@ cd src && poetry run pre-commit run --all-files
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Pre-commit hooks passed$(END_BUILD_PRINT)"
 
 #-----------------------------------------------------------------------------
@@ -172,42 +175,42 @@ pre-commit: ## Run pre-commit hooks on all files
 
 lint: ## Run Ruff linting checks
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running Ruff checks$(END_BUILD_PRINT)"
-	@ poetry run ruff check $(SRC_PATH) $(TEST_PATH)
+	@ cd src && poetry run ruff check ers $(TEST_PATH)
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Ruff checks passed$(END_BUILD_PRINT)"
 
 typecheck: ## Run mypy type checks
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running mypy$(END_BUILD_PRINT)"
-	@ poetry run mypy $(SRC_PATH)
+	@ cd src && poetry run mypy ers
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Type checks passed$(END_BUILD_PRINT)"
 
 check-architecture: ## Check architecture constraints with import-linter
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Checking architecture constraints$(END_BUILD_PRINT)"
-	@ poetry run lint-imports
+	@ cd src && poetry run lint-imports --config $(REPO_ROOT)/.importlinter
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Architecture checks passed$(END_BUILD_PRINT)"
 
 test: ## Run all tests (with coverage)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running all tests$(END_BUILD_PRINT)"
-	@ poetry run pytest $(TEST_PATH) $(COV_FLAGS) --junitxml=test-results.xml
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) $(COV_FLAGS) --junitxml=$(REPO_ROOT)/test-results.xml
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) All tests passed$(END_BUILD_PRINT)"
 
 test-unit: ## Run unit tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running unit tests$(END_BUILD_PRINT)"
-	@ poetry run pytest $(TEST_PATH) -m "unit"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "unit"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Unit tests passed$(END_BUILD_PRINT)"
 
 test-feature: ## Run BDD feature tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running feature tests$(END_BUILD_PRINT)"
-	@ poetry run pytest $(TEST_PATH) -m "feature"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "feature"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Feature tests passed$(END_BUILD_PRINT)"
 
 test-e2e: ## Run end-to-end tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running e2e tests$(END_BUILD_PRINT)"
-	@ poetry run pytest $(TEST_PATH) -m "e2e"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "e2e"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) E2e tests passed$(END_BUILD_PRINT)"
 
 test-integration: ## Run integration tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running integration tests$(END_BUILD_PRINT)"
-	@ poetry run pytest $(TEST_PATH) -m "integration"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "integration"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Integration tests passed$(END_BUILD_PRINT)"
 
 #-----------------------------------------------------------------------------
@@ -234,16 +237,16 @@ ci-full: check-all clean-code ## CI full: quality + all tests + clean-code
 
 coverage-report: ## Generate HTML coverage report in reports/
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Generating coverage report$(END_BUILD_PRINT)"
-	@ mkdir -p reports
-	@ poetry run pytest $(TEST_PATH) $(COV_FLAGS) --cov-report=html:reports/htmlcov -m "unit or feature"
-	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Coverage report at reports/htmlcov/index.html$(END_BUILD_PRINT)"
+	@ mkdir -p $(REPO_ROOT)/reports
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) $(COV_FLAGS) --cov-report=html:$(REPO_ROOT)/reports/htmlcov -m "unit or feature"
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Coverage report at $(REPO_ROOT)/reports/htmlcov/index.html$(END_BUILD_PRINT)"
 
 quality-report: ## Generate Radon quality report in reports/
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Generating quality report$(END_BUILD_PRINT)"
-	@ mkdir -p reports
-	@ poetry run radon cc $(SRC_PATH) -s -a -j > reports/complexity.json
-	@ poetry run radon mi $(SRC_PATH) -s -j > reports/maintainability.json
-	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Quality reports at reports/$(END_BUILD_PRINT)"
+	@ mkdir -p $(REPO_ROOT)/reports
+	@ cd src && poetry run radon cc ers -s -a -j > $(REPO_ROOT)/reports/complexity.json
+	@ cd src && poetry run radon mi ers -s -j > $(REPO_ROOT)/reports/maintainability.json
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Quality reports at $(REPO_ROOT)/reports/$(END_BUILD_PRINT)"
 
 #-----------------------------------------------------------------------------
 # Clean code analysis (separate)
@@ -252,17 +255,17 @@ quality-report: ## Generate Radon quality report in reports/
 
 complexity: ## Radon cyclomatic complexity analysis
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Checking cyclomatic complexity$(END_BUILD_PRINT)"
-	@ poetry run radon cc $(SRC_PATH) -s -a
+	@ cd src && poetry run radon cc ers -s -a
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Complexity analysis complete$(END_BUILD_PRINT)"
 
 maintainability: ## Radon maintainability index
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Checking maintainability index$(END_BUILD_PRINT)"
-	@ poetry run radon mi $(SRC_PATH) -s
+	@ cd src && poetry run radon mi ers -s
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Maintainability analysis complete$(END_BUILD_PRINT)"
 
 clean-code: ## Xenon threshold checks
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running Xenon threshold checks$(END_BUILD_PRINT)"
-	@ poetry run xenon $(SRC_PATH) --max-absolute B --max-modules A --max-average A
+	@ cd src && poetry run xenon ers --max-absolute B --max-modules A --max-average A
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Clean code checks passed$(END_BUILD_PRINT)"
 
 #-----------------------------------------------------------------------------
@@ -271,7 +274,7 @@ clean-code: ## Xenon threshold checks
 .PHONY: check-env up down down-volumes rebuild rebuild-clean logs watch
 
 check-env:
-	@ test -f $(ENV_FILE) || (echo -e "$(BUILD_PRINT)$(ICON_ERROR) Missing $(ENV_FILE). Run: cp infra/.env.example infra/.env$(END_BUILD_PRINT)" && exit 1)
+	@ test -f $(ENV_FILE) || (echo -e "$(BUILD_PRINT)$(ICON_ERROR) Missing $(ENV_FILE). Run: cp src/infra/.env.example src/infra/.env$(END_BUILD_PRINT)" && exit 1)
 
 up: check-env ## Start services (docker compose up -d)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Starting services$(END_BUILD_PRINT)"
@@ -314,14 +317,14 @@ watch: check-env ## Start services with file watching (hot-reload)
 clean: ## Remove build artifacts and caches
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Cleaning build artifacts and caches$(END_BUILD_PRINT)"
 	@ rm -rf $(BUILD_PATH)
-	@ rm -rf .pytest_cache
-	@ rm -rf .mypy_cache
-	@ rm -rf .ruff_cache
-	@ rm -rf .tox
-	@ rm -rf .coverage htmlcov coverage.xml test-results.xml
-	@ rm -rf *.egg-info
-	@ rm -rf reports
-	@ poetry run ruff clean 2>/dev/null || true
+	@ rm -rf $(REPO_ROOT)/.pytest_cache src/.pytest_cache
+	@ rm -rf src/.mypy_cache
+	@ rm -rf src/.ruff_cache
+	@ rm -rf src/.tox
+	@ rm -rf $(REPO_ROOT)/coverage.xml $(REPO_ROOT)/test-results.xml
+	@ rm -rf src/*.egg-info
+	@ rm -rf $(REPO_ROOT)/reports
+	@ cd src && poetry run ruff clean 2>/dev/null || true
 	@ find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	@ find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@ find . -type f -name "*.pyo" -delete 2>/dev/null || true

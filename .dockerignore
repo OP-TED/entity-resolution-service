@@ -23,11 +23,11 @@ __pycache__
 !.env.example
 
 # Docker (no need to send these into the build context)
-infra/Dockerfile
-infra/compose.dev.yaml
-infra/README.md
-infra/.env
-infra/.env.*
+src/infra/Dockerfile
+src/infra/compose.dev.yaml
+src/infra/README.md
+src/infra/.env
+src/infra/.env.*
 
 # AI / tooling config
 .claude

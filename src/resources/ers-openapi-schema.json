@@ -943,7 +943,7 @@
           "PROVISIONAL"
         ],
         "title": "ResolutionOutcome",
-        "description": "Possible outcomes of a single entity mention resolution.\n\nCANONICAL \u2014 the cluster ID was produced by the Entity Resolution Engine.\nPROVISIONAL \u2014 the cluster ID was derived deterministically (singleton)."
+        "description": "Possible outcomes of a single entity mention resolution.\n\nCANONICAL \u2014 the assignment was produced by the Entity Resolution Engine,\n    or an existing decision is being replayed (the stored answer is\n    authoritative regardless of how it was originally written).\nPROVISIONAL \u2014 the cluster ID was issued by ERS as a deterministic draft\n    identifier because ERE did not respond within the execution window.\n    This is a short-lived state; ERE will process the mention\n    asynchronously and may supersede it via the delta-sync channel."
       },
       "ValidationError": {
         "properties": {
