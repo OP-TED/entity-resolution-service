@@ -17,6 +17,17 @@ from ers.request_registry.domain.records import ResolutionRequestRecord
 from ers.users.domain.users import User
 
 
+def _escape_turtle_string(value: str) -> str:
+    if not value:
+        return value
+    value = value.replace("\\", "\\\\")
+    value = value.replace('"', '\\"')
+    value = value.replace("\n", "\\n")
+    value = value.replace("\r", "\\r")
+    value = value.replace("\t", "\\t")
+    return value
+
+
 class EntityMentionIdentifierFactory(ModelFactory):
     __model__ = EntityMentionIdentifier
 
@@ -119,12 +130,83 @@ class ResolutionRequestRecordFactory(EntityMentionFactory):
         return datetime.now(UTC)
 
     @classmethod
+    def _organisation_turtle(cls, payload: dict) -> str:
+        legal_name = _escape_turtle_string(payload["name"])
+        country_code = _escape_turtle_string(payload["country_code"])
+        address_props = [f'epo:hasCountryCode "{country_code}"']
+        if nuts_code := payload.get("nuts_code"):
+            address_props.append(f'epo:hasNutsCode "{_escape_turtle_string(nuts_code)}"')
+        if post_code := payload.get("post_code"):
+            address_props.append(f'locn:postCode "{_escape_turtle_string(post_code)}"')
+        if post_name := payload.get("post_name"):
+            address_props.append(f'locn:postName "{_escape_turtle_string(post_name)}"')
+        if thoroughfare := payload.get("thoroughfare"):
+            address_props.append(f'locn:thoroughfare "{_escape_turtle_string(thoroughfare)}"')
+        address_content = " ;\n        ".join(address_props)
+        uid = cls.__faker__.uuid4()
+        return (
+            "@prefix org: <http://www.w3.org/ns/org#> .\n"
+            "@prefix cccev: <http://data.europa.eu/m8g/> .\n"
+            "@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n"
+            "@prefix locn: <http://www.w3.org/ns/locn#> .\n"
+            "@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\n"
+            f'epd:ent{uid} a org:Organization ;\n'
+            f'    epo:hasLegalName "{legal_name}" ;\n'
+            f'    cccev:registeredAddress [\n'
+            f'        {address_content}\n'
+            f'    ] .\n'
+        )
+
+    @classmethod
+    def _procedure_turtle(cls, payload: dict) -> str:
+        uid = cls.__faker__.uuid4()
+        identifier = _escape_turtle_string(payload["identifier"])
+        title = _escape_turtle_string(payload["title"])
+        description = _escape_turtle_string(payload["description"])
+        legal_basis = _escape_turtle_string(payload["legal_basis"])
+        procedure_type = _escape_turtle_string(payload["procedure_type"])
+        purpose_nature = _escape_turtle_string(payload["purpose_nature"])
+        purpose_classification = _escape_turtle_string(payload["purpose_classification"])
+        legal_basis_uri = (
+            f"http://publications.europa.eu/resource/authority/legal-basis/{legal_basis}"
+        )
+        procedure_type_uri = (
+            "http://publications.europa.eu/resource/authority/"
+            f"procurement-procedure-type/{procedure_type}"
+        )
+        nature_uri = (
+            f"http://publications.europa.eu/resource/authority/contract-nature/{purpose_nature}"
+        )
+        cpv_uri = f"http://data.europa.eu/cpv/cpv/{purpose_classification}"
+        return (
+            "@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n"
+            "@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\n"
+            f"epd:ent{uid} a epo:Procedure ;\n"
+            f'    epo:hasTitle "{title}" ;\n'
+            f'    epo:hasDescription "{description}" ;\n'
+            f"    epo:hasID [\n"
+            f'        epo:hasIdentifierValue "{identifier}"\n'
+            f"    ] ;\n"
+            f"    epo:hasLegalBasis <{legal_basis_uri}> ;\n"
+            f"    epo:hasProcedureType <{procedure_type_uri}> ;\n"
+            f"    epo:hasPurpose [\n"
+            f"        epo:hasContractNatureType <{nature_uri}> ;\n"
+            f"        epo:hasMainClassification <{cpv_uri}>\n"
+            f"    ] .\n"
+        )
+
+    @classmethod
     def build_for_entity_type(cls, entity_type: str, **kwargs) -> ResolutionRequestRecord:
-        payload_json = json.dumps(cls._payload_for(entity_type))
-        content_hash = hashlib.sha256(payload_json.encode()).hexdigest()
+        payload = cls._payload_for(entity_type)
+        if entity_type == "PROCEDURE":
+            turtle_content = cls._procedure_turtle(payload)
+        else:
+            turtle_content = cls._organisation_turtle(payload)
+        content_hash = hashlib.sha256(turtle_content.encode()).hexdigest()
         return cls.build(
-            content=payload_json,
-            parsed_representation=payload_json,
+            content=turtle_content,
+            content_type="text/turtle",
+            parsed_representation=json.dumps(payload),
             content_hash=content_hash,
             **kwargs,
         )
