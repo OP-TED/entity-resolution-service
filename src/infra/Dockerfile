@@ -53,7 +53,7 @@ WORKDIR /app
 
 # Core application
 COPY --from=builder /app/.venv .venv
-COPY --from=builder /app/ers src/ers
+COPY --from=builder /app/ers ers/
 
 # Development extras: seed script (used by entrypoint when SEED_DB=true)
 COPY --from=builder /app/scripts scripts/
