@@ -277,6 +277,7 @@ check-env:
 	@ test -f $(ENV_FILE) || (echo -e "$(BUILD_PRINT)$(ICON_ERROR) Missing $(ENV_FILE). Run: cp src/infra/.env.example src/infra/.env$(END_BUILD_PRINT)" && exit 1)
 
 up: check-env ## Start services (docker compose up -d)
+	@ docker network create ersys-local || true
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Starting services$(END_BUILD_PRINT)"
 	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up -d
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services started$(END_BUILD_PRINT)"
