@@ -123,7 +123,7 @@ openapi: ## Generate OpenAPI schema into resources/
 # Usage: $(call run-openapi-asciidoc,<schema-file>,<output-subdir>)
 define run-openapi-asciidoc
 	@ MSYS_NO_PATHCONV=1 docker run --rm \
-		-v "$(SRC_PATH)/resources:/input" \
+		-v "$(REPO_ROOT)/resources:/input" \
 		-v "$(DOCS_API_PATH)/$(2):/output" \
 		-v "$(DOCS_TEMPLATE_PATH):/templates" \
 		$(OPENAPI_GENERATOR_IMAGE) generate \

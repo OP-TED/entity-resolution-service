@@ -20,12 +20,12 @@ def export(app_factory, output_path: Path) -> None:
 def main() -> None:
     export(
         create_curation_app,
-        Path("resources/curation-openapi-schema.json"),
+        Path("../resources/curation-openapi-schema.json"),
     )
 
     export(
         create_ers_rest_api_app,
-        Path("resources/ers-openapi-schema.json"),
+        Path("../resources/ers-openapi-schema.json"),
     )
 
 
