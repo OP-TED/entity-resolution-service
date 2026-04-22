@@ -180,10 +180,11 @@ class ResolutionRequestRecordFactory(EntityMentionFactory):
         cpv_uri = f"http://data.europa.eu/cpv/cpv/{purpose_classification}"
         return (
             "@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n"
-            "@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\n"
+            "@prefix epd: <http://data.europa.eu/a4g/resource/> .\n"
+            "@prefix dct: <http://purl.org/dc/terms/> .\n\n"
             f"epd:ent{uid} a epo:Procedure ;\n"
-            f'    epo:hasTitle "{title}" ;\n'
-            f'    epo:hasDescription "{description}" ;\n'
+            f'    dct:title "{title}" ;\n'
+            f'    dct:description "{description}" ;\n'
             f"    epo:hasID [\n"
             f'        epo:hasIdentifierValue "{identifier}"\n'
             f"    ] ;\n"
