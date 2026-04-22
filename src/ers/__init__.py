@@ -113,8 +113,8 @@ class RedisConfig:
     def REDIS_DB(self, config_value: str) -> int:
         return int(config_value)
 
-    @env_property(default_value="changeme")
-    def REDIS_PASSWORD(self, config_value: str) -> str:
+    @env_property()
+    def REDIS_PASSWORD(self, config_value: str | None) -> str | None:
         return config_value
 
     @env_property(default_value="ere_requests")
