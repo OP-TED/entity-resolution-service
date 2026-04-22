@@ -1,6 +1,6 @@
 [project]
 name = "ers-core"
-version = "0.4.0"
+version = "1.0.0"
 description = "Core Python backend service for entity resolution — REST API, decision persistence, and ERE orchestration via Redis."
 authors = [
     { name = "Meaningfy", email = "hi@meaningfy.ws" }
@@ -8,8 +8,7 @@ authors = [
 maintainers = [
     { name = "Meaningfy", email = "hi@meaningfy.ws" }
 ]
-readme = "README.md"
-license = { file = "LICENSE" }
+license = { text = "Apache-2.0" }
 requires-python = ">=3.12,<3.15"
 classifiers = [
     "Programming Language :: Python",
@@ -36,7 +35,7 @@ dependencies = [
     "fastapi (>=0.128.5,<0.129.0)",
     "pymongo (>=4.16.0,<5.0.0)",
     "uvicorn (>=0.41.0,<0.42.0)",
-    "ers-spec @ git+https://github.com/OP-TED/entity-resolution-spec.git@develop",
+    "ers-spec @ git+https://github.com/OP-TED/entity-resolution-spec.git@release/1.0.0#subdirectory=src",
     "pyjwt (>=2.11.0,<3.0.0)",
     "argon2-cffi (>=25.1.0,<26.0.0)",
     "linkml-runtime (>1.9.6,<2.0.0)",
@@ -59,7 +58,7 @@ dependencies = [
 
 [tool.poetry]
 packages = [
-    { include = "ers", from = "src" }
+    { include = "ers", from = "." }
 ]
 
 

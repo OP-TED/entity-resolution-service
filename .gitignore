@@ -224,4 +224,4 @@ settings.local.json
 AGENTS.md
 data
 .import_linter_cache
-.coverage
+.coverage.claude/worktrees/

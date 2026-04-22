@@ -9,8 +9,8 @@ x-api-env: &api-env
 
 x-api-common: &api-common
   build:
-    context: ..
-    dockerfile: infra/Dockerfile
+    context: ../..
+    dockerfile: src/infra/Dockerfile
     args:
       ENVIRONMENT: development
   env_file:
@@ -18,7 +18,7 @@ x-api-common: &api-common
   environment:
     <<: *api-env
   volumes:
-    - ../config:/app/config:ro
+    - ../../src/config:/app/config:ro
   restart: unless-stopped
   depends_on:
     ferretdb:
@@ -26,14 +26,14 @@ x-api-common: &api-common
   develop:
     watch:
       - action: sync
-        path: ../src
+        path: ../../src
         target: /app/src
       - action: rebuild
-        path: ../pyproject.toml
+        path: ../../src/pyproject.toml
       - action: rebuild
-        path: ../poetry.lock
+        path: ../../src/poetry.lock
   networks:
-    - local
+    - ersys-local
 
 services:
   curation-api:
@@ -45,7 +45,7 @@ services:
     environment:
       <<: *api-env
       SEED_DB: "true"  # dev-only: seed DB on startup
-      REDIS_HOST: "redis"
+      REDIS_HOST: "ersys-redis"
 
   ers-api:
     <<: *api-common
@@ -55,7 +55,7 @@ services:
       - "${ERS_API_PORT:-8001}:8001"
     environment:
       <<: *api-env
-      REDIS_HOST: "redis"
+      REDIS_HOST: "ersys-redis"
 
   postgres:
     image: ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0
@@ -73,7 +73,7 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - local
+      - ersys-local
 
   ferretdb:
     image: ghcr.io/ferretdb/ferretdb:2.7.0
@@ -92,12 +92,12 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - local
+      - ersys-local
 
-  redis:
+  ersys-redis:
     image: redis:7-alpine
     restart: unless-stopped
-    container_name: "redis"
+    container_name: "ersys-redis"
     ports:
       - "6379:6379"
     command: redis-server --requirepass ${REDIS_PASSWORD:-changeme}
@@ -107,10 +107,11 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - local
+      - ersys-local
 
 volumes:
   postgres-data:
 
 networks:
-  local:
+  ersys-local:
+    external: true

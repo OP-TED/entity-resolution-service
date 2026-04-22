@@ -1,34 +1,34 @@
 ARG ENVIRONMENT=production
- 
-ARG ENVIRONMENT=production
- 
+
 # =============================================================================
 # Builder stage: install dependencies
 # =============================================================================
 FROM python:3.14-slim AS builder
- 
+
 ARG ENVIRONMENT
- 
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
-     PYTHONUNBUFFERED=1 \
-     POETRY_VERSION=2.3.1 \
-     POETRY_VIRTUALENVS_IN_PROJECT=true \
-     POETRY_NO_INTERACTION=1
- 
+    PYTHONUNBUFFERED=1 \
+    POETRY_VERSION=2.3.1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=true \
+    POETRY_NO_INTERACTION=1
+
 RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
- 
+
 WORKDIR /app
- 
-COPY pyproject.toml poetry.lock LICENSE ./
- 
+
+COPY src/pyproject.toml src/poetry.lock LICENSE ./
+
 RUN if [ "$ENVIRONMENT" = "development" ]; then \
       poetry install --no-root; \
     else \
       poetry install --no-root --only main; \
     fi
- 
-COPY . .
- 
+
+COPY src/ers ers/
+COPY src/scripts scripts/
+COPY test/ test/
+
 RUN if [ "$ENVIRONMENT" = "development" ]; then \
       poetry install; \
     else \
@@ -54,17 +54,17 @@ WORKDIR /app
 
 # Core application
 COPY --from=builder /app/.venv .venv
-COPY --from=builder /app/src src
+COPY --from=builder /app/ers ers/
+COPY --from=builder /app/test test/
 
-# Development extras: project scripts and tests (for in-container testing)
+# Development extras: seed script (used by entrypoint when SEED_DB=true)
 COPY --from=builder /app/scripts scripts/
-COPY --from=builder /app/tests tests/
 RUN if [ "$ENVIRONMENT" != "development" ]; then \
-      rm -rf scripts tests; \
+      rm -rf scripts; \
     fi
 
 # Container entrypoint
-COPY --chmod=755 infra/entrypoint.sh /entrypoint.sh
+COPY --chmod=755 src/infra/entrypoint.sh /entrypoint.sh
 
 USER appuser
 

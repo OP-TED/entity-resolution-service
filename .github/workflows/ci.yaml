@@ -77,7 +77,7 @@ jobs:
       # Python & Poetry
       - name: Read Python version from pyproject.toml
         id: python-version
-        run: echo "version=$(grep -m1 'python = ' pyproject.toml | grep -oP '\d+\.\d+' | head -1)" >> $GITHUB_OUTPUT
+        run: echo "version=$(grep -m1 'python = ' src/pyproject.toml | grep -oP '\d+\.\d+' | head -1)" >> $GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -98,7 +98,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/pypoetry
-          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+          key: poetry-${{ runner.os }}-${{ hashFiles('src/poetry.lock') }}
           restore-keys: |
             poetry-${{ runner.os }}-
 

@@ -1,6 +1,6 @@
 [run]
 branch = True
-source = src
+source = ers
 omit = */__init__.py
 
 [report]
