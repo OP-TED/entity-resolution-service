@@ -27,6 +27,7 @@ RUN if [ "$ENVIRONMENT" = "development" ]; then \
 
 COPY src/ers ers/
 COPY src/scripts scripts/
+COPY test/ test/
 
 RUN if [ "$ENVIRONMENT" = "development" ]; then \
       poetry install; \
@@ -54,6 +55,7 @@ WORKDIR /app
 # Core application
 COPY --from=builder /app/.venv .venv
 COPY --from=builder /app/ers ers/
+COPY --from=builder /app/test test/
 
 # Development extras: seed script (used by entrypoint when SEED_DB=true)
 COPY --from=builder /app/scripts scripts/
