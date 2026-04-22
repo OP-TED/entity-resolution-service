@@ -21,7 +21,7 @@ The system is engine-authoritative: the ERE determines canonical identity, ERS n
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/meaningfy-ws/entity-resolution-service.git
+git clone https://github.com/OP-TED/entity-resolution-service.git
 cd entity-resolution-service
 make install
 ```
@@ -64,8 +64,8 @@ This repo starts the ERS backend and its infrastructure (Redis, database). It do
 
 Without ERE running and connected to the **same Redis instance**, entity mentions will be accepted and registered but resolution will never complete — ERS will issue provisional cluster IDs until the ERE responds.
 
-- To add ERE: follow the Getting Started section in [entity-resolution-engine-basic](https://github.com/meaningfy-ws/entity-resolution-engine-basic#getting-started).
-- To add the web UI: follow the Getting Started section in [entity-resolution-service-webapp](https://github.com/meaningfy-ws/entity-resolution-service-webapp#getting-started).
+- To add ERE: follow the Getting Started section in [entity-resolution-engine-basic](https://github.com/OP-TED/entity-resolution-engine-basic#getting-started).
+- To add the web UI: follow the Getting Started section in [entity-resolution-service-webapp](https://github.com/OP-TED/entity-resolution-service-webapp#getting-started).
 
 ---
 
