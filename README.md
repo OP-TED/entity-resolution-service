@@ -38,7 +38,7 @@ The defaults work for local development. Notable variables in `src/infra/.env`:
 |----------|---------|-------------|
 | `UVICORN_PORT` | `8000` | Curation API port |
 | `ERS_API_PORT` | `8001` | ERS REST API port |
-| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_HOST` | `ersys-redis` | Redis host (joins shared ersys-local network) |
 | `REDIS_PASSWORD` | `changeme` | Redis password — **must match ERE** |
 | `ADMIN_EMAIL` | `admin@ers.local` | Default admin account |
 | `ADMIN_PASSWORD` | `changeme` | Default admin password |
@@ -49,6 +49,9 @@ The defaults work for local development. Notable variables in `src/infra/.env`:
 make up       # start all services (Curation API, ERS API, Redis, FerretDB, Postgres)
 make logs     # follow service logs
 make down     # stop all services
+
+Note: `make up` creates a shared external network `ersys-local` used for cross-component communication.
+To remove it manually: `docker network rm ersys-local`
 ```
 
 | Service | URL |
