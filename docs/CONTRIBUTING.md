@@ -21,7 +21,7 @@ Before fixing a non-trivial bug or implementing a feature, open an issue or disc
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/meaningfy-ws/entity-resolution-service.git
+git clone https://github.com/OP-TED/entity-resolution-service.git
 cd entity-resolution-service
 
 # 2. Install all dependencies (runtime + dev + test + lint)
