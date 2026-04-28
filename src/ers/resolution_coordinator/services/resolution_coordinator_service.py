@@ -77,13 +77,13 @@ class ResolutionCoordinatorService:
     ) -> None:
         single_budget: float = config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET
         bulk_budget: float = config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET
-        if single_budget <= 0:  # pylint: disable=comparison-with-callable
+        if single_budget < 0:  # pylint: disable=comparison-with-callable
             raise ValueError(
-                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET must be > 0"
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET must be >= 0"
             )
-        if bulk_budget <= 0:  # pylint: disable=comparison-with-callable
+        if bulk_budget < 0:  # pylint: disable=comparison-with-callable
             raise ValueError(
-                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET must be > 0"
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET must be >= 0"
             )
         self._registry_service = registry_service
         self._ere_publish_service = ere_publish_service
@@ -152,7 +152,11 @@ class ResolutionCoordinatorService:
         if existing is not None:
             return existing, ResolutionOutcome.CANONICAL
 
-        # 3+4+5. Publish → wait → provisional fallback
+        # 3. Immediate provisional mode — budget == 0 means ERE is not consulted.
+        if config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET == 0:
+            return await self._issue_provisional(identifier)
+
+        # 4+5+6. Publish → wait → provisional fallback
         triad_key = (
             f"{identifier.source_id}"
             f"{identifier.request_id}"
@@ -211,10 +215,14 @@ class ResolutionCoordinatorService:
             return []
         tasks = [self.resolve_single(m) for m in entity_mentions]
         try:
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET,
-            )
+            bulk_budget = config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET
+            if bulk_budget == 0:
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+            else:
+                results = await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True),
+                    timeout=bulk_budget,
+                )
             return list(results)
         except TimeoutError as exc:
             raise ResolutionTimeoutError(

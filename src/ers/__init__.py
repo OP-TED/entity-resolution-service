@@ -170,8 +170,11 @@ class ResolutionCoordinatorConfig:
     def ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET(self, config_value: str) -> float:
         """Maximum time budget for a single-mention resolution response.
 
-        Also serves as the ERE wait window — if ERE does not respond within
+        Also serves as the ERE wait window - if ERE does not respond within
         this budget, a provisional identifier is issued and returned to the client.
+
+        Set to 0 to enable immediate provisional mode: ERS skips ERE submission
+        entirely and issues a provisional identifier without any Redis interaction.
         """
         return float(config_value)
 
@@ -180,6 +183,10 @@ class ResolutionCoordinatorConfig:
         """Maximum time budget for a bulk resolution response (all mentions combined).
 
         Each mention waits up to SINGLE_REQUEST_TIME_BUDGET for ERE internally.
+
+        Set to 0 to remove the outer gather timeout entirely - the bulk call runs
+        until all individual mentions complete. Use with SINGLE_REQUEST_TIME_BUDGET=0
+        for immediate provisional mode with no Redis interaction.
         """
         return float(config_value)
 
