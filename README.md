@@ -42,6 +42,8 @@ The defaults work for local development. Notable variables in `src/infra/.env`:
 | `REDIS_PASSWORD` | `changeme` | Redis password — **must match ERE** |
 | `ADMIN_EMAIL` | `admin@ers.local` | Default admin account |
 | `ADMIN_PASSWORD` | `changeme` | Default admin password |
+| `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET` | `30` | Seconds ERS waits per mention for an ERE response before issuing a provisional identifier. Set to `0` to skip ERE entirely and issue provisional IDs immediately (no Redis required). |
+| `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET` | `120` | Outer timeout in seconds for a bulk resolution request covering all mentions. Set to `0` to remove the outer timeout; use with `SINGLE_REQUEST_TIME_BUDGET=0` for fully immediate provisional bulk mode. |
 
 ### 3. Start the stack
 
@@ -66,6 +68,8 @@ To remove it manually: `docker network rm ersys-local`
 This repo starts the ERS backend and its infrastructure (Redis, database). It does **not** include the Entity Resolution Engine (ERE) or the web UI.
 
 Without ERE running and connected to the **same Redis instance**, entity mentions will be accepted and registered but resolution will never complete — ERS will issue provisional cluster IDs until the ERE responds.
+
+To skip ERE submission entirely and receive provisional identifiers immediately (no Redis required), set both `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0` and `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET=0`. This is useful for environments where ERE is not deployed and provisional IDs are the intended steady-state output.
 
 - To add ERE: follow the Getting Started section in [entity-resolution-engine-basic](https://github.com/OP-TED/entity-resolution-engine-basic#getting-started).
 - To add the web UI: follow the Getting Started section in [entity-resolution-service-webapp](https://github.com/OP-TED/entity-resolution-service-webapp#getting-started).
