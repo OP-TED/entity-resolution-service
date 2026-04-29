@@ -162,7 +162,6 @@ def create_app() -> FastAPI:
     # have no handler and are silently dropped.
     _ers_log = logging.getLogger("ers")
     _ers_log.setLevel(logging.DEBUG if config.DEBUG else logging.INFO)
-    _ers_log.propagate = False
     for _h in logging.getLogger("uvicorn").handlers:
         _ers_log.addHandler(_h)
 
