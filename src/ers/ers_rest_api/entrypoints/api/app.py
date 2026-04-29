@@ -157,6 +157,15 @@ def _custom_openapi(app: FastAPI) -> dict[str, Any]:
 
 def create_app() -> FastAPI:
     """Application factory for the ERS REST API."""
+    # Wire the ers logger into uvicorn's handler so application logs are visible.
+    # Uvicorn only configures its own logger hierarchy; without this, ers.* records
+    # have no handler and are silently dropped.
+    _ers_log = logging.getLogger("ers")
+    _ers_log.setLevel(logging.DEBUG if config.DEBUG else logging.INFO)
+    _ers_log.propagate = False
+    for _h in logging.getLogger("uvicorn").handlers:
+        _ers_log.addHandler(_h)
+
     # Bootstrap OTel tracing (no-op when TRACING_ENABLED=False).
     configure_tracing(config)
     configure_auto_instrumentation(config)
