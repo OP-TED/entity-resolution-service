@@ -43,7 +43,7 @@ The defaults work for local development. Notable variables in `src/infra/.env`:
 | `ADMIN_EMAIL` | `admin@ers.local` | Default admin account |
 | `ADMIN_PASSWORD` | `changeme` | Default admin password |
 | `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET` | `30` | Seconds ERS waits per mention for an ERE response before issuing a provisional identifier. Set to `0` to skip ERE entirely and issue provisional IDs immediately (no Redis required). |
-| `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET` | `120` | Outer timeout in seconds for a bulk resolution request covering all mentions. Set to `0` to remove the outer timeout; use with `SINGLE_REQUEST_TIME_BUDGET=0` for fully immediate provisional bulk mode. |
+| `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET` | `120` | Outer timeout in seconds for a bulk resolution request covering all mentions. Set to `0` to remove the outer timeout; use with `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0` for fully immediate provisional bulk mode. |
 
 ### 3. Start the stack
 
