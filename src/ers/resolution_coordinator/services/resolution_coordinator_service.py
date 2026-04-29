@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import logging
 from datetime import UTC, datetime
 
 from erspec.models.core import (
@@ -48,6 +49,8 @@ from ers.resolution_decision_store.domain.errors import (
 from ers.resolution_decision_store.services.decision_store_service import (
     DecisionStoreService,
 )
+
+_log = logging.getLogger(__name__)
 
 _PARSING_ERRORS = (
     ValueError,
@@ -154,6 +157,11 @@ class ResolutionCoordinatorService:
 
         # 3. Immediate provisional mode — budget == 0 means ERE is not consulted.
         if config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET == 0:
+            _log.debug(
+                "ERE processing disabled (SINGLE_REQUEST_TIME_BUDGET=0): issuing"
+                " provisional identifier immediately for %s/%s/%s.",
+                identifier.source_id, identifier.request_id, identifier.entity_type,
+            )
             return await self._issue_provisional(identifier)
 
         # 4+5+6. Publish → wait → provisional fallback

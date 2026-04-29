@@ -111,6 +111,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     worker.start()
     _log.info("OutcomeIntegrationWorker started in lifespan")
 
+    if config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET == 0:
+        _log.info(
+            "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0: ERE processing disabled for"
+            " single requests - ERS will generate provisional identifiers immediately"
+            " without submitting to ERE."
+        )
+    if config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET == 0:
+        _log.info(
+            "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET=0: outer bulk timeout disabled -"
+            " no asyncio.wait_for wrapper applied to bulk resolution gather."
+        )
+
     try:
         yield
     finally:
