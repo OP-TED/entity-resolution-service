@@ -182,11 +182,13 @@ class ResolutionCoordinatorConfig:
     def ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET(self, config_value: str) -> float:
         """Maximum time budget for a bulk resolution response (all mentions combined).
 
-        Each mention waits up to SINGLE_REQUEST_TIME_BUDGET for ERE internally.
+        Each mention waits up to ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET for ERE
+        internally.
 
         Set to 0 to remove the outer gather timeout entirely - the bulk call runs
-        until all individual mentions complete. Use with SINGLE_REQUEST_TIME_BUDGET=0
-        for immediate provisional mode with no Redis interaction.
+        until all individual mentions complete. Use with
+        ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0 for immediate provisional mode
+        with no Redis interaction.
         """
         return float(config_value)
 
