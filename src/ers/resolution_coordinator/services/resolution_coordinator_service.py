@@ -158,7 +158,7 @@ class ResolutionCoordinatorService:
         # 3. Immediate provisional mode — budget == 0 means ERE is not consulted.
         if config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET == 0:
             _log.debug(
-                "ERE processing disabled (SINGLE_REQUEST_TIME_BUDGET=0): issuing"
+                "ERE processing disabled (ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0): issuing"
                 " provisional identifier immediately for %s/%s/%s.",
                 identifier.source_id, identifier.request_id, identifier.entity_type,
             )
