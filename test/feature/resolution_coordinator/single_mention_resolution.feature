@@ -56,3 +56,10 @@ Feature: Resolve a Single Entity Mention (Spine A Intake)
     And the Decision Store is unavailable
     When the resolution request is submitted
     Then a resolution timeout error is raised
+
+  Scenario: Issue provisional immediately when time budget is zero
+    Given a valid entity mention with correlation triad ("SYSTEM_Z", "req-100", "Organization")
+    And the time budget is configured to zero
+    When the resolution request is submitted
+    Then a provisional singleton identifier is returned
+    And no request is published to the ERE

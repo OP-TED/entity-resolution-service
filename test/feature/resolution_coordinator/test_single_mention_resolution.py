@@ -97,6 +97,11 @@ def test_decision_store_unavailable():
     pass
 
 
+@scenario(FEATURE_FILE, "Issue provisional immediately when time budget is zero")
+def test_immediate_provisional_zero_budget():
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Fixtures + helpers
 # ---------------------------------------------------------------------------
@@ -161,6 +166,7 @@ def _triad_key(mention: EntityMention) -> str:
 
 def _run_resolve(ctx) -> None:
     notify_fn = ctx.pop("ere_notification_task", None)
+    run_config = ctx.get("override_config", _FAST_CONFIG)
 
     async def _call():
         if notify_fn is not None:
@@ -168,7 +174,7 @@ def _run_resolve(ctx) -> None:
         return await ctx["service"].resolve_single(ctx["mention"])
 
     try:
-        with patch(_CONFIG_PATH, _FAST_CONFIG):
+        with patch(_CONFIG_PATH, run_config):
             ctx["result"], ctx["outcome"] = asyncio.run(_call())
         ctx["raised_exception"] = None
     except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -302,6 +308,19 @@ def ere_already_wrote(ctx):
         )
     )
     ctx["decision_svc"].get_decision_by_triad = AsyncMock(side_effect=[None, ere_decision])
+
+
+@given("the time budget is configured to zero")
+def time_budget_zero(ctx):
+    ctx["override_config"] = type("C", (), {
+        "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0,
+        "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 5.0,
+    })()
+    ident = ctx["mention"].identifiedBy
+    prov_id = derive_provisional_cluster_id(ident)
+    prov_decision = _make_decision(ident, cluster_id=prov_id)
+    ctx["decision_svc"].get_decision_by_triad = AsyncMock(return_value=None)
+    ctx["decision_svc"].store_decision = AsyncMock(return_value=prov_decision)
 
 
 @given("the Decision Store is unavailable")

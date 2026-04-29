@@ -469,3 +469,78 @@ async def test_it009_bulk_refresh_unknown_source(bulk_refresh):
         await bulk_refresh.refresh_bulk("UNKNOWN_SOURCE")
 
     assert exc_info.value.source_id == "UNKNOWN_SOURCE"
+
+
+# ---------------------------------------------------------------------------
+# IT-010: Zero single budget — immediate provisional, no Redis publish
+# ---------------------------------------------------------------------------
+
+_ZERO_SINGLE_BUDGET_CONFIG = type("C", (), {
+    "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0,
+    "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 5.0,
+})()
+
+
+@pytest.mark.integration
+async def test_it010_zero_single_budget_immediate_provisional(
+    registry_service, decision_service, waiter
+):
+    """IT-010: single budget == 0 → provisional issued immediately, publish_request never called."""
+    mention = make_mention(source="IT_SYS", req="req-it-010")
+    tracking_publish = AsyncMock(spec=EREPublishService)
+
+    with patch(_CONFIG_PATH, _ZERO_SINGLE_BUDGET_CONFIG):
+        svc = ResolutionCoordinatorService(
+            registry_service=registry_service,
+            ere_publish_service=tracking_publish,
+            decision_store_service=decision_service,
+            waiter=waiter,
+        )
+        decision, outcome = await svc.resolve_single(mention)
+
+    expected_prov_id = derive_provisional_cluster_id(mention.identifiedBy)
+    assert outcome == ResolutionOutcome.PROVISIONAL
+    assert decision.current_placement.cluster_id == expected_prov_id
+    tracking_publish.publish_request.assert_not_called()
+
+    stored = await decision_service.get_decision_by_triad(mention.identifiedBy)
+    assert stored is not None
+    assert stored.current_placement.cluster_id == expected_prov_id
+
+
+# ---------------------------------------------------------------------------
+# IT-011: Zero both budgets — bulk all provisional, no outer timeout, no Redis
+# ---------------------------------------------------------------------------
+
+_ZERO_BOTH_BUDGETS_CONFIG = type("C", (), {
+    "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0,
+    "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 0,
+})()
+
+
+@pytest.mark.integration
+async def test_it011_zero_bulk_budget_all_provisional(
+    registry_service, decision_service, waiter
+):
+    """IT-011: both budgets == 0 → bulk returns all provisional with no Redis publish."""
+    mentions = [
+        make_mention(source="IT11_SYS", req=f"req-it-011-{i}") for i in range(3)
+    ]
+    tracking_publish = AsyncMock(spec=EREPublishService)
+
+    with patch(_CONFIG_PATH, _ZERO_BOTH_BUDGETS_CONFIG):
+        svc = ResolutionCoordinatorService(
+            registry_service=registry_service,
+            ere_publish_service=tracking_publish,
+            decision_store_service=decision_service,
+            waiter=waiter,
+        )
+        results = await svc.resolve_bulk(mentions)
+
+    assert len(results) == 3
+    for i, (decision, outcome) in enumerate(results):
+        expected_prov_id = derive_provisional_cluster_id(mentions[i].identifiedBy)
+        assert outcome == ResolutionOutcome.PROVISIONAL
+        assert decision.current_placement.cluster_id == expected_prov_id
+
+    tracking_publish.publish_request.assert_not_called()

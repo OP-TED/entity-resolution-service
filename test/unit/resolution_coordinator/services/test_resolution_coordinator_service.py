@@ -125,11 +125,11 @@ def coordinator(registry_svc, publish_svc, decision_svc, waiter):
 # ---------------------------------------------------------------------------
 
 class TestInitValidation:
-    def test_rejects_zero_single_budget(self, monkeypatch, registry_svc, publish_svc, decision_svc, waiter):
+    def test_rejects_negative_single_budget(self, monkeypatch, registry_svc, publish_svc, decision_svc, waiter):
         monkeypatch.setattr(
             "ers.resolution_coordinator.services.resolution_coordinator_service.config",
             type("C", (), {
-                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0,
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": -1,
                 "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
             })(),
         )
@@ -504,3 +504,109 @@ class TestLookupByTriad:
         result = await coordinator.lookup_by_triad(make_identifier())
 
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# TC-IMM: Immediate provisional mode — single budget == 0
+# ---------------------------------------------------------------------------
+
+class TestImmediateProvisionalMode:
+    """When ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET == 0, resolve_single skips ERE."""
+
+    @pytest.fixture
+    def zero_single_svc(self, monkeypatch, registry_svc, publish_svc, decision_svc):
+        monkeypatch.setattr(
+            "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+            type("C", (), {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+            })(),
+        )
+        return ResolutionCoordinatorService(
+            registry_svc, publish_svc, decision_svc, AsyncResolutionWaiter()
+        )
+
+    async def test_zero_single_budget_accepted_in_constructor(
+        self, zero_single_svc
+    ):
+        """budget == 0 must NOT raise ValueError at construction time."""
+        assert zero_single_svc is not None
+
+    async def test_zero_single_budget_returns_provisional_immediately(
+        self, zero_single_svc, publish_svc, decision_svc
+    ):
+        decision_svc.get_decision_by_triad.return_value = None
+        provisional = make_decision(cluster_id="prov-instant")
+        decision_svc.store_decision.return_value = provisional
+
+        decision, outcome = await zero_single_svc.resolve_single(make_entity_mention())
+
+        assert outcome == ResolutionOutcome.PROVISIONAL
+        assert decision.current_placement.cluster_id == "prov-instant"
+        publish_svc.publish_request.assert_not_called()
+
+    async def test_zero_single_budget_skips_waiter(
+        self, zero_single_svc, publish_svc, decision_svc
+    ):
+        decision_svc.get_decision_by_triad.return_value = None
+        decision_svc.store_decision.return_value = make_decision(cluster_id="prov-x")
+
+        await zero_single_svc.resolve_single(make_entity_mention())
+
+        publish_svc.publish_request.assert_not_called()
+
+    async def test_zero_single_budget_still_returns_existing_decision(
+        self, zero_single_svc, decision_svc, publish_svc
+    ):
+        """Idempotent replay takes priority even in zero-budget mode."""
+        existing = make_decision(cluster_id="cl-existing")
+        decision_svc.get_decision_by_triad.return_value = existing
+
+        decision, outcome = await zero_single_svc.resolve_single(make_entity_mention())
+
+        assert outcome == ResolutionOutcome.CANONICAL
+        assert decision.current_placement.cluster_id == "cl-existing"
+        publish_svc.publish_request.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# TC-BULK0: Zero bulk budget — no outer asyncio.wait_for timeout
+# ---------------------------------------------------------------------------
+
+class TestZeroBulkBudget:
+    """When ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET == 0, resolve_bulk runs without outer timeout."""
+
+    @pytest.fixture
+    def zero_bulk_svc(self, monkeypatch, registry_svc, publish_svc, decision_svc):
+        monkeypatch.setattr(
+            "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+            type("C", (), {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 0,
+            })(),
+        )
+        return ResolutionCoordinatorService(
+            registry_svc, publish_svc, decision_svc, AsyncResolutionWaiter()
+        )
+
+    async def test_zero_bulk_budget_accepted_in_constructor(
+        self, zero_bulk_svc
+    ):
+        """bulk_budget == 0 must NOT raise ValueError at construction time."""
+        assert zero_bulk_svc is not None
+
+    async def test_zero_bulk_budget_returns_all_provisional(
+        self, zero_bulk_svc, decision_svc, publish_svc
+    ):
+        """With both budgets == 0, bulk returns provisional for every mention."""
+        mentions = [make_entity_mention("S", f"r{i}", "Organization") for i in range(3)]
+        provisionals = [make_decision(cluster_id=f"prov-{i}") for i in range(3)]
+
+        decision_svc.get_decision_by_triad.return_value = None
+        decision_svc.store_decision.side_effect = provisionals
+
+        results = await zero_bulk_svc.resolve_bulk(mentions)
+
+        assert len(results) == 3
+        assert all(outcome == ResolutionOutcome.PROVISIONAL for _, outcome in results)
+        publish_svc.publish_request.assert_not_called()
