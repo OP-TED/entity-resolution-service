@@ -78,20 +78,11 @@ To skip ERE submission entirely and receive provisional identifiers immediately 
 
 ## Application configuration
 
-### `src/config/rdf_mention_config.yaml`
-
-Maps RDF entity types to extraction rules used when parsing incoming entity mentions. It tells ERS how to identify each entity type in RDF and which property paths to follow when extracting attribute values.
-
-**`namespaces`** — prefix registry used to resolve shortened property paths throughout the file. Each entry maps a prefix (e.g. `epo`) to its full IRI base (e.g. `http://data.europa.eu/a4g/ontology#`). All prefixes used in `fields` values must be declared here.
-
-**`entity_types`** — one entry per supported entity type (e.g. `ORGANISATION`, `PROCEDURE`). Each entry contains:
-
-| Key | Type | Purpose |
-|-----|------|---------|
-| `rdf_type` | prefixed IRI string | RDF class that identifies this entity type (e.g. `org:Organization`) |
-| `fields` | mapping of field name → property path | Attributes to extract; `/` separates hops for multi-step traversal (e.g. `cccev:registeredAddress/epo:hasCountryCode`) |
-
-Field names defined here must match the field names expected by the Entity Resolution Engine. To add a new entity type, add a new key under `entity_types` with its `rdf_type` and the `fields` to extract. To add a new attribute to an existing type, add a new key under its `fields` mapping with the corresponding RDF property path.
+ERS is configured through environment variables and the YAML mapping file
+`src/config/rdf_mention_config.yaml`, which defines how RDF entity types are parsed and
+which attributes are extracted from each. The full reference for both — including all
+environment variables, their defaults, and the structure of the mapping file — is in
+[docs/configuration.md](docs/configuration.md).
 
 ## Development
 
