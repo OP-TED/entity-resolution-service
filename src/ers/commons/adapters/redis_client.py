@@ -206,6 +206,21 @@ class RedisEREClient(AbstractClient):
         log.debug("Redis ERE client, received response id: %s", response.ere_request_id)
         return response
 
+    async def publish_notification(self, channel: str, triad_key: str) -> None:
+        """Publish triad_key to a Redis Pub/Sub channel.
+
+        Args:
+            channel: Redis Pub/Sub channel name (e.g. ``ers_notifications``).
+            triad_key: Notification payload — concatenated source_id + request_id + entity_type.
+
+        Raises:
+            ConnectionError: If the Redis connection is unavailable.
+        """
+        try:
+            await self._redis_client.publish(channel, triad_key)
+        except _RedisLibConnectionError as exc:
+            raise ConnectionError(str(exc)) from exc
+
     async def ping(self) -> bool:
         """Check if the Redis server is reachable.
 

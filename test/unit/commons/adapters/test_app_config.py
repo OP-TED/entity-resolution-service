@@ -7,6 +7,7 @@ from ers import (
     MongoDBConfig,
     ObservabilityConfig,
     RDFMentionParserConfig,
+    RedisConfig,
     config,
 )
 
@@ -93,6 +94,16 @@ class TestObservabilityConfig:
     def test_tracing_enabled_true_from_env(self, monkeypatch):
         monkeypatch.setenv("TRACING_ENABLED", "true")
         assert ObservabilityConfig().TRACING_ENABLED is True
+
+
+class TestRedisConfig:
+    def test_notifications_channel_default(self, monkeypatch):
+        monkeypatch.delenv("ERS_NOTIFICATIONS_CHANNEL", raising=False)
+        assert RedisConfig().ERS_NOTIFICATIONS_CHANNEL == "ers_notifications"
+
+    def test_notifications_channel_from_env(self, monkeypatch):
+        monkeypatch.setenv("ERS_NOTIFICATIONS_CHANNEL", "custom_channel")
+        assert RedisConfig().ERS_NOTIFICATIONS_CHANNEL == "custom_channel"
 
 
 class TestAppConfigResolverSingleton:

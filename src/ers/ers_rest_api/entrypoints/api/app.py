@@ -94,10 +94,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         repository=MongoDecisionRepository(db),
     )
 
+    from ers.resolution_coordinator.entrypoints.notification_subscriber_worker import (
+        NotificationSubscriberWorker,
+    )
+
+    notifications_channel = config.ERS_NOTIFICATIONS_CHANNEL
+    ere_client = app.state.redis_client
     outcome_service = OutcomeIntegrationService(
         registry_service=registry_service,
         decision_service=decision_service,
-        on_outcome_stored=waiter.notify,
+        on_outcome_stored=lambda key: ere_client.publish_notification(notifications_channel, key),
     )
 
     # Separate Redis client for the listener (needs its own BRPOP connection)
@@ -110,6 +116,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     worker = OutcomeIntegrationWorker(listener=listener, service=outcome_service)
     worker.start()
     _log.info("OutcomeIntegrationWorker started in lifespan")
+
+    # Dedicated subscriber connection (SUBSCRIBE mode cannot share LPUSH/BRPOP connections)
+    subscriber_worker = NotificationSubscriberWorker(
+        redis_config=redis_config,
+        channel=notifications_channel,
+        waiter=waiter,
+    )
+    subscriber_worker.start()
+    _log.info("NotificationSubscriberWorker started in lifespan")
 
     if config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET == 0:
         _log.info(
@@ -128,6 +143,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         await worker.stop()
         _log.info("OutcomeIntegrationWorker stopped")
+        await subscriber_worker.stop()
+        _log.info("NotificationSubscriberWorker stopped")
         await redis_client.close()
         await listener_client.close()
         await manager.close()

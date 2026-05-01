@@ -125,6 +125,10 @@ class RedisConfig:
     def ERE_RESPONSE_CHANNEL(self, config_value: str) -> str:
         return config_value
 
+    @env_property(default_value="ers_notifications")
+    def ERS_NOTIFICATIONS_CHANNEL(self, config_value: str) -> str:
+        return config_value
+
 
 class DecisionStoreConfig:
     @env_property(default_value="5")
