@@ -129,6 +129,14 @@ class RedisConfig:
     def ERS_NOTIFICATIONS_CHANNEL(self, config_value: str) -> str:
         return config_value
 
+    @env_property(default_value="5.0")
+    def REDIS_SOCKET_CONNECT_TIMEOUT(self, config_value: str) -> float:
+        """Seconds to wait when establishing a new Redis connection before raising an error.
+
+        Applied to all Redis connections created from RedisConnectionConfig.from_settings().
+        """
+        return float(config_value)
+
 
 class DecisionStoreConfig:
     @env_property(default_value="5")

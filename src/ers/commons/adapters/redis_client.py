@@ -13,11 +13,12 @@ log = logging.getLogger(__name__)
 class RedisConnectionConfig:
     """Simple data class to hold Redis connection configuration."""
 
-    def __init__(self, host: str, port: int, db: int, password: str | None = None):
+    def __init__(self, host: str, port: int, db: int, password: str | None = None, socket_connect_timeout: float | None = None):
         self.host = host
         self.port = port
         self.db = db
         self.password = password
+        self.socket_connect_timeout = socket_connect_timeout
 
     @classmethod
     def from_settings(cls, settings) -> "RedisConnectionConfig":
@@ -34,6 +35,7 @@ class RedisConnectionConfig:
             port=settings.REDIS_PORT,
             db=settings.REDIS_DB,
             password=settings.REDIS_PASSWORD,
+            socket_connect_timeout=settings.REDIS_SOCKET_CONNECT_TIMEOUT,
         )
 
     def __str__(self) -> str:

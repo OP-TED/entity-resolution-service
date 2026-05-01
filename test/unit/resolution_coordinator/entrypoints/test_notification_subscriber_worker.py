@@ -56,6 +56,32 @@ async def empty_generator():
         yield
 
 
+class TestRedisClientConstruction:
+    async def test_socket_connect_timeout_forwarded_to_redis_client(self):
+        redis_config = MagicMock()
+        redis_config.socket_connect_timeout = 7.0
+        worker = NotificationSubscriberWorker(
+            redis_config=redis_config,
+            channel="test",
+            waiter=AsyncMock(),
+        )
+
+        mock_pubsub = MagicMock()
+        mock_pubsub.subscribe = AsyncMock()
+        mock_pubsub.unsubscribe = AsyncMock()
+        mock_pubsub.listen = lambda: empty_generator()
+
+        mock_redis = MagicMock()
+        mock_redis.pubsub.return_value = mock_pubsub
+        mock_redis.aclose = AsyncMock()
+
+        with patch(_PATCH_TARGET, return_value=mock_redis) as mock_redis_cls:
+            await worker.run()
+
+        _, kwargs = mock_redis_cls.call_args
+        assert kwargs.get("socket_connect_timeout") == 7.0
+
+
 class TestLifecycle:
     async def test_start_returns_asyncio_task(self):
         worker = make_worker()

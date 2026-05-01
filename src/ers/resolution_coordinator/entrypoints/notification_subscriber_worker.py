@@ -99,6 +99,7 @@ class NotificationSubscriberWorker:
                     port=self._redis_config.port,
                     db=self._redis_config.db,
                     password=self._redis_config.password,
+                    socket_connect_timeout=self._redis_config.socket_connect_timeout,
                 )
                 pubsub = redis_client.pubsub()
                 try:

@@ -105,6 +105,14 @@ class TestRedisConfig:
         monkeypatch.setenv("ERS_NOTIFICATIONS_CHANNEL", "custom_channel")
         assert RedisConfig().ERS_NOTIFICATIONS_CHANNEL == "custom_channel"
 
+    def test_socket_connect_timeout_default(self, monkeypatch):
+        monkeypatch.delenv("REDIS_SOCKET_CONNECT_TIMEOUT", raising=False)
+        assert RedisConfig().REDIS_SOCKET_CONNECT_TIMEOUT == 5.0
+
+    def test_socket_connect_timeout_from_env(self, monkeypatch):
+        monkeypatch.setenv("REDIS_SOCKET_CONNECT_TIMEOUT", "10")
+        assert RedisConfig().REDIS_SOCKET_CONNECT_TIMEOUT == 10.0
+
 
 class TestAppConfigResolverSingleton:
     def test_config_singleton_has_all_keys(self):
