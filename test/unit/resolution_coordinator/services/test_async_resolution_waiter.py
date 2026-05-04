@@ -4,6 +4,7 @@ asyncio_mode = auto (pytest.ini) — no @pytest.mark.asyncio decorator needed.
 """
 
 import asyncio
+import gc
 
 import pytest
 
@@ -42,12 +43,14 @@ class TestNotify:
     async def test_notify_sets_event(self):
         waiter = AsyncResolutionWaiter()
         event = await waiter.get_or_create(KEY)
-        await waiter.notify(KEY)
+        result = await waiter.notify(KEY)
         assert event.is_set()
+        assert result is True
 
     async def test_notify_unknown_key_is_noop(self):
         waiter = AsyncResolutionWaiter()
-        await waiter.notify("nonexistent-key")  # must not raise
+        result = await waiter.notify("nonexistent-key")
+        assert result is False
 
     async def test_notify_unblocks_all_waiters(self):
         waiter = AsyncResolutionWaiter()
@@ -61,16 +64,18 @@ class TestNotify:
 
         tasks = [asyncio.create_task(wait_and_record()) for _ in range(3)]
         await asyncio.sleep(0)  # yield so all tasks start and block on event.wait()
-        await waiter.notify(KEY)
+        result = await waiter.notify(KEY)
         await asyncio.gather(*tasks)
         assert len(unblocked) == 3
+        assert result is True
 
     async def test_notify_after_all_released_is_noop(self):
         waiter = AsyncResolutionWaiter()
         event = await waiter.get_or_create(KEY)
         await waiter.release(KEY)
         del event  # drop last strong ref → WeakValueDict evicts entry
-        await waiter.notify(KEY)  # must not raise
+        result = await waiter.notify(KEY)
+        assert result is False
 
 
 class TestRelease:
@@ -100,4 +105,6 @@ class TestWeakRefCleanup:
             await asyncio.wait_for(asyncio.shield(event.wait()), timeout=0.01)
         await waiter.release(KEY)
         del event  # drop last strong ref → WeakValueDict evicts entry
-        await waiter.notify(KEY)  # must not raise
+        gc.collect()  # pytest.raises holds traceback refs; force eviction
+        result = await waiter.notify(KEY)
+        assert result is False

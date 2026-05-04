@@ -17,6 +17,8 @@ ERS ran correctly with a single instance but silently broke under horizontal sca
 
 **Fix (Option A — Redis Pub/Sub broadcast):** After the BRPOP winner writes the canonical decision to MongoDB, it `PUBLISH`es the `triad_key` to a shared Redis channel (`ers_notifications`). Each ERS instance runs a lightweight subscriber background task that receives all broadcasts and calls `waiter.notify(triad_key)` locally. The instance with a live event unblocks its waiting coroutine; all others discard the no-op silently. `AsyncResolutionWaiter` itself is unchanged.
 
+**Potential enhancement — conditional publishing:** Currently `publish_notification` is called unconditionally, including when the BRPOP winner is the same instance that sent the request (meaning Pub/Sub is used for an in-process signal). A small follow-on improvement: make `AsyncResolutionWaiter.notify()` return `bool` (True = local event found and set), and only call `publish_notification` when it returns False. This eliminates all Pub/Sub overhead in single-instance deployments and removes the category error of using a cross-process primitive for in-process signaling. See the Decisions section in `2026-05-01-option-a-implementation.md` for full analysis.
+
 ---
 
 ## 2. What Changed

@@ -22,6 +22,19 @@ from ers.ers_rest_api.entrypoints.api.v1.router import v1_router
 _log = logging.getLogger(__name__)
 
 
+def make_outcome_stored_callback(waiter, ere_client, channel):
+    """Return an async callback that notifies locally first, then via Pub/Sub.
+
+    Only publishes to ``channel`` when the local waiter has no event for the
+    triad key — i.e. the ERE response was pulled by a different ERS instance.
+    Single-instance deployments never touch Redis Pub/Sub on this path.
+    """
+    async def _on_outcome_stored(key: str) -> None:
+        if not await waiter.notify(key):
+            await ere_client.publish_notification(channel, key)
+    return _on_outcome_stored
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage MongoDB, Redis, AsyncResolutionWaiter and EPIC-05 worker lifecycle."""
@@ -103,7 +116,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     outcome_service = OutcomeIntegrationService(
         registry_service=registry_service,
         decision_service=decision_service,
-        on_outcome_stored=lambda key: ere_client.publish_notification(notifications_channel, key),
+        on_outcome_stored=make_outcome_stored_callback(waiter, ere_client, notifications_channel),
     )
 
     # Separate Redis client for the listener (needs its own BRPOP connection)

@@ -291,3 +291,34 @@ Feature: Cross-instance ERE outcome notification
 | 1 | Which client for `publish_notification`? | Reuse `app.state.redis_client` — `aioredis.Redis` uses a connection pool; LPUSH and PUBLISH draw from it independently without interference. No fourth connection. |
 | 2 | Subscriber connection ownership? | Inject `RedisConnectionConfig`; the worker creates and owns its `aioredis.Redis` internally. Consistent with how `OutcomeIntegrationWorker` is structured; testable via testcontainers without class-level mocking. |
 | 3 | Channel name default? | `ers_notifications` (underscore) — consistent with existing channel names `ere_requests` and `ere_responses`. The env var is `ERS_NOTIFICATIONS_CHANNEL`. |
+
+---
+
+## 10. Potential Enhancement — Conditional Pub/Sub Publishing
+
+**Current behaviour:** `on_outcome_stored` in `app.py` is `lambda key: ere_client.publish_notification(notifications_channel, key)` — unconditional. Every resolved triad goes through Redis Pub/Sub even when the BRPOP winner is the same instance that sent the request.
+
+**Proposed change:** Only publish to `ers_notifications` when the local waiter has no event for the triad key (i.e. the request originated from a different instance).
+
+**Implementation (small, localised):**
+1. `AsyncResolutionWaiter.notify()` returns `bool` — `True` if a local event was found and set, `False` if the key is unknown locally.
+2. `TriadNotifier` protocol in `notification_subscriber_worker.py` updated to match.
+3. `on_outcome_stored` in `app.py` becomes a two-step async function:
+   ```python
+   async def on_outcome_stored(key: str) -> None:
+       if not await waiter.notify(key):
+           await ere_client.publish_notification(notifications_channel, key)
+   ```
+
+**Pros:**
+- Single-instance deployments: eliminates all Pub/Sub overhead. Every resolution currently burns a Redis round-trip for notification; with this change the subscriber worker becomes genuinely idle until a second instance appears.
+- Multi-instance, same-instance BRPOP win: direct `event.set()` replaces a Redis round-trip.
+- Architecturally correct: Pub/Sub is a cross-process primitive; using it for in-process signaling is a category error.
+- No race condition: the event is registered in `_events` before the ERE request is sent, so by the time `on_outcome_stored` fires it either exists (pending) or is already GC-evicted (timed out). No window where it would appear after the check.
+
+**Cons / caveats:**
+- `AsyncResolutionWaiter.notify()` return type changes (`None` → `bool`); test files need updating.
+- `on_outcome_stored` grows from a one-liner lambda to a two-step async function.
+- False-positive publish: if the originating instance's waiter already timed out (GC evicted the event), `notify()` returns `False` → unnecessary Pub/Sub publish → no-op on all instances. Benign — same behaviour as today.
+
+**Verdict:** Reasonable follow-on improvement. Small risk, clear benefit for single-instance deployments (the common case during development and small-scale operation).

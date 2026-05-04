@@ -424,22 +424,28 @@ with the existing timeout budget.
 different instance than the one handling the client request. The BRPOP winner runs
 `OutcomeIntegrationService.integrate_outcome()` as before: validates the response, writes the
 canonical decision to MongoDB via `DecisionStoreService.store_decision()`, then — new step —
-publishes only the `triad_key` string to `ers:notifications` via Redis `PUBLISH`.
+calls `waiter.notify(triad_key)` locally. If that returns `True` (the originating request lives
+on this instance), the event is set directly and no Pub/Sub is needed. If it returns `False`
+(the request lives on a different instance), the winner publishes the `triad_key` to
+`ers_notifications` via Redis `PUBLISH`.
 
 **Redis broadcasts** the message to every connected subscriber simultaneously. Each ERS instance's
 subscriber task receives the `triad_key`. The subscriber calls `AsyncResolutionWaiter.notify(triad_key)`:
 on the instance that is waiting for that triad, `notify()` finds the live `asyncio.Event` and
-calls `event.set()`; on all other instances, the lookup returns `None` and the call is a no-op.
+calls `event.set()`; on all other instances, the lookup returns `False` and the call is a no-op.
 
 **Back in `resolve_single()`**, `event.set()` unblocks the suspended `event.wait()`. The coroutine
 reads the canonical decision from MongoDB and returns `(decision, ResolutionOutcome.CANONICAL)` to
-the client. `AsyncResolutionWaiter` itself is completely unchanged.
+the client.
+
+**Single-instance deployments** never reach the `PUBLISH` path: the BRPOP winner is always the
+originating instance, so `waiter.notify()` always returns `True` and Redis Pub/Sub is untouched.
 
 If the Pub/Sub notification is lost (subscriber reconnect gap, Redis restart), the waiter times
 out and falls through to `_issue_provisional()` — the existing single-instance fallback behaviour.
 No correctness regression beyond the current provisional path.
 
-### 7.2 Interaction Diagram
+### 7.2 Interaction Diagram — Cross-Instance (ERS2 wins BRPOP)
 
 ```mermaid
 sequenceDiagram
@@ -463,16 +469,51 @@ sequenceDiagram
     EREQ->>ERE: BRPOP — request delivered
     ERE->>ERES: LPUSH — canonical resolution
 
-    Note over ERS1,ERS2: BRPOP race — any instance wins
+    Note over ERS1,ERS2: BRPOP race — ERS2 wins
     ERES->>ERS2: BRPOP — ERS2 wins
     ERS2->>DB: store_decision() — canonical write
+    Note right of ERS2: waiter.notify() → False<br/>(no local event)<br/>→ PUBLISH needed
     ERS2->>PUB: PUBLISH triad_key
 
     par broadcast fan-out
-        PUB->>ERS1: subscriber task → waiter.notify()<br/>→ event.set() ✓
+        PUB->>ERS1: subscriber task → waiter.notify()<br/>→ True → event.set() ✓
     and
-        PUB->>ERS2: subscriber task → waiter.notify()<br/>→ no waiter → no-op
+        PUB->>ERS2: subscriber task → waiter.notify()<br/>→ False → no-op
     end
+
+    deactivate ERS1
+    ERS1->>DB: read canonical decision
+    ERS1->>Client: CANONICAL result
+```
+
+### 7.2b Interaction Diagram — Same-Instance (ERS1 wins BRPOP, no Pub/Sub)
+
+This path applies to all single-instance deployments and to the fraction of
+multi-instance requests where the BRPOP winner happens to be the originating instance.
+
+```mermaid
+sequenceDiagram
+    participant Client as API Client
+    participant ERS1 as ERS Instance 1
+    participant EREQ as Redis<br/>ere_request
+    participant ERE as ERE
+    participant ERES as Redis<br/>ere_response
+    participant DB as MongoDB<br/>decisions
+
+    Note over ERS1: Subscriber worker running but idle — no PUBLISH will arrive
+
+    Client->>ERS1: POST /resolve
+    ERS1->>DB: register triad (request registry)
+    ERS1->>EREQ: LPUSH — ERE request
+    activate ERS1
+    Note right of ERS1: AsyncResolutionWaiter<br/>Event.wait() ⏳
+
+    EREQ->>ERE: BRPOP — request delivered
+    ERE->>ERES: LPUSH — canonical resolution
+
+    ERES->>ERS1: BRPOP — ERS1 wins (same instance)
+    ERS1->>DB: store_decision() — canonical write
+    Note right of ERS1: waiter.notify() → True<br/>event.set() ✓<br/>No PUBLISH — Pub/Sub unused
 
     deactivate ERS1
     ERS1->>DB: read canonical decision
