@@ -445,7 +445,22 @@ If the Pub/Sub notification is lost (subscriber reconnect gap, Redis restart), t
 out and falls through to `_issue_provisional()` — the existing single-instance fallback behaviour.
 No correctness regression beyond the current provisional path.
 
-### 7.2 Interaction Diagram — Cross-Instance (ERS2 wins BRPOP)
+### 7.2 Interaction Diagram — BRPOP Race Outcomes
+
+Two outcomes are possible once ERE pushes its response onto `ere_response`:
+
+- **Same-instance win** — the originating ERS instance wins the BRPOP race, calls
+  `waiter.notify()` locally (returns `True`), and unblocks the waiting coroutine directly.
+  No message is published to `ers_notifications`. This is the only path taken in
+  single-instance deployments, so Redis Pub/Sub is never exercised in that topology.
+
+- **Cross-instance win** — a different ERS instance wins the BRPOP race, writes the
+  canonical decision, then `PUBLISH`es the `triad_key` to `ers_notifications`. Every
+  subscriber receives the broadcast; only the originating instance finds a live
+  `asyncio.Event` for that key and unblocks it — all other instances treat it as a no-op.
+
+Both paths share the same request flow up to the BRPOP race. The `alt` block shows
+what happens depending on which instance wins the response queue.
 
 ```mermaid
 sequenceDiagram
@@ -458,7 +473,7 @@ sequenceDiagram
     participant PUB as Redis<br/>ers_notifications
     participant DB as MongoDB<br/>decisions
 
-    Note over ERS1,ERS2: Lifespan startup — each instance SUBSCRIBE to ers_notifications
+    Note over ERS1,ERS2: Lifespan startup — each instance subscribes to ers_notifications
 
     Client->>ERS1: POST /resolve
     ERS1->>DB: register triad (request registry)
@@ -469,51 +484,21 @@ sequenceDiagram
     EREQ->>ERE: BRPOP — request delivered
     ERE->>ERES: LPUSH — canonical resolution
 
-    Note over ERS1,ERS2: BRPOP race — ERS2 wins
-    ERES->>ERS2: BRPOP — ERS2 wins
-    ERS2->>DB: store_decision() — canonical write
-    Note right of ERS2: waiter.notify() → False<br/>(no local event)<br/>→ PUBLISH needed
-    ERS2->>PUB: PUBLISH triad_key
-
-    par broadcast fan-out
-        PUB->>ERS1: subscriber task → waiter.notify()<br/>→ True → event.set() ✓
-    and
-        PUB->>ERS2: subscriber task → waiter.notify()<br/>→ False → no-op
+    alt ERS1 wins BRPOP (same instance — single-instance or lucky race)
+        ERES->>ERS1: BRPOP — ERS1 wins
+        ERS1->>DB: store_decision() — canonical write
+        Note right of ERS1: waiter.notify() → True<br/>event.set() ✓<br/>No PUBLISH — Pub/Sub unused
+    else ERS2 wins BRPOP (cross-instance)
+        ERES->>ERS2: BRPOP — ERS2 wins
+        ERS2->>DB: store_decision() — canonical write
+        Note right of ERS2: waiter.notify() → False<br/>(no local event)<br/>→ PUBLISH needed
+        ERS2->>PUB: PUBLISH triad_key
+        par broadcast fan-out
+            PUB->>ERS1: subscriber task → waiter.notify()<br/>→ True → event.set() ✓
+        and
+            PUB->>ERS2: subscriber task → waiter.notify()<br/>→ False → no-op
+        end
     end
-
-    deactivate ERS1
-    ERS1->>DB: read canonical decision
-    ERS1->>Client: CANONICAL result
-```
-
-### 7.2b Interaction Diagram — Same-Instance (ERS1 wins BRPOP, no Pub/Sub)
-
-This path applies to all single-instance deployments and to the fraction of
-multi-instance requests where the BRPOP winner happens to be the originating instance.
-
-```mermaid
-sequenceDiagram
-    participant Client as API Client
-    participant ERS1 as ERS Instance 1
-    participant EREQ as Redis<br/>ere_request
-    participant ERE as ERE
-    participant ERES as Redis<br/>ere_response
-    participant DB as MongoDB<br/>decisions
-
-    Note over ERS1: Subscriber worker running but idle — no PUBLISH will arrive
-
-    Client->>ERS1: POST /resolve
-    ERS1->>DB: register triad (request registry)
-    ERS1->>EREQ: LPUSH — ERE request
-    activate ERS1
-    Note right of ERS1: AsyncResolutionWaiter<br/>Event.wait() ⏳
-
-    EREQ->>ERE: BRPOP — request delivered
-    ERE->>ERES: LPUSH — canonical resolution
-
-    ERES->>ERS1: BRPOP — ERS1 wins (same instance)
-    ERS1->>DB: store_decision() — canonical write
-    Note right of ERS1: waiter.notify() → True<br/>event.set() ✓<br/>No PUBLISH — Pub/Sub unused
 
     deactivate ERS1
     ERS1->>DB: read canonical decision

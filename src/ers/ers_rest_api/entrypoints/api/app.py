@@ -30,7 +30,10 @@ def make_outcome_stored_callback(waiter, ere_client, channel):
     Single-instance deployments never touch Redis Pub/Sub on this path.
     """
     async def _on_outcome_stored(key: str) -> None:
-        if not await waiter.notify(key):
+        if await waiter.notify(key):
+            _log.debug("ERE outcome for triad '%s': resolved on this instance, no cross-instance notification needed", key)
+        else:
+            _log.debug("ERE outcome for triad '%s': no local waiter, publishing to '%s'", key, channel)
             await ere_client.publish_notification(channel, key)
     return _on_outcome_stored
 
