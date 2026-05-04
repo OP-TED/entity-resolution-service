@@ -9,6 +9,7 @@ The worker subscribes to a Redis Pub/Sub channel and calls
 ``asyncio.Event`` waiting on that key in the local process.
 """
 import asyncio
+import contextlib
 import logging
 from typing import Protocol
 
@@ -26,7 +27,7 @@ _BACKOFF_CAP = 30
 class TriadNotifier(Protocol):
     """Structural protocol satisfied by AsyncResolutionWaiter."""
 
-    async def notify(self, triad_key: str) -> None: ...
+    async def notify(self, triad_key: str) -> bool: ...
 
 
 class NotificationSubscriberWorker:
@@ -120,14 +121,10 @@ class NotificationSubscriberWorker:
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, _BACKOFF_CAP)
                 finally:
-                    try:
+                    with contextlib.suppress(Exception):
                         await pubsub.unsubscribe(self._channel)
-                    except Exception:
-                        pass
-                    try:
+                    with contextlib.suppress(Exception):
                         await redis_client.aclose()
-                    except Exception:
-                        pass
         except asyncio.CancelledError:
             _log.info("NotificationSubscriberWorker stopped")
             raise
