@@ -411,7 +411,9 @@ def ordering_applied(
     assert filters.ordering is not None
 
 
-@then(parsers.parse('only decisions for entity mentions matching "{query}" are returned'))
+@then(
+    parsers.parse('only decisions for entity mentions matching "{query}" are returned')
+)
 def search_applied(
     response: Any,
     query: str,
@@ -459,7 +461,9 @@ def decisions_for_types_with_confidence(
     decision_repository: AsyncMock,
     entity_mention_repository: AsyncMock,
 ) -> None:
-    _setup_decisions(decision_repository, entity_mention_repository, 2, prefix="d-combo")
+    _setup_decisions(
+        decision_repository, entity_mention_repository, 2, prefix="d-combo"
+    )
     ctx["entity_types"] = (type_a, type_b)
 
 
@@ -510,7 +514,9 @@ ENTITY_TYPES_URL = "/api/v1/curation/entity-types"
 
 
 @when(
-    parsers.parse('the curator filters decisions by an unsupported entity type "{entity_type}"'),
+    parsers.parse(
+        'the curator filters decisions by an unsupported entity type "{entity_type}"'
+    ),
     target_fixture="response",
 )
 def filter_by_invalid_entity_type(client: TestClient, entity_type: str) -> Any:
@@ -537,4 +543,7 @@ def request_entity_types(client: TestClient) -> Any:
 @then("the configured entity types are returned in sorted order")
 def entity_types_returned(response: Any) -> None:
     assert response.status_code == 200
-    assert response.json() == ["ORGANISATION", "PROCEDURE"]
+    assert response.json() == [
+        {"name": "ORGANISATION", "display_name_field": "legal_name"},
+        {"name": "PROCEDURE", "display_name_field": "title"},
+    ]
