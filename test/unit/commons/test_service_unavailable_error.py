@@ -1,4 +1,3 @@
-import pytest
 from ers.commons.services.exceptions import ApplicationError, ServiceUnavailableError
 
 
