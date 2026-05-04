@@ -14,3 +14,7 @@ class NotFoundError(ApplicationError):
         self.entity_id = entity_id
         message = f"{entity_type} with id '{entity_id}' not found"
         super().__init__(message)
+
+
+class ServiceUnavailableError(ApplicationError):
+    """Raised when a required backend service (e.g. MongoDB, Redis) is unreachable."""
