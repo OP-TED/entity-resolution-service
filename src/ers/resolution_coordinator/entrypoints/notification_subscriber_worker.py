@@ -94,13 +94,7 @@ class NotificationSubscriberWorker:
         backoff = _BACKOFF_INITIAL
         try:
             while True:
-                redis_client = aioredis.Redis(
-                    host=self._redis_config.host,
-                    port=self._redis_config.port,
-                    db=self._redis_config.db,
-                    password=self._redis_config.password,
-                    socket_connect_timeout=self._redis_config.socket_connect_timeout,
-                )
+                redis_client = aioredis.Redis(**self._redis_config.to_redis_kwargs())
                 pubsub = redis_client.pubsub()
                 try:
                     await pubsub.subscribe(self._channel)
@@ -126,8 +120,14 @@ class NotificationSubscriberWorker:
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, _BACKOFF_CAP)
                 finally:
-                    await pubsub.unsubscribe(self._channel)
-                    await redis_client.aclose()
+                    try:
+                        await pubsub.unsubscribe(self._channel)
+                    except Exception:
+                        pass
+                    try:
+                        await redis_client.aclose()
+                    except Exception:
+                        pass
         except asyncio.CancelledError:
             _log.info("NotificationSubscriberWorker stopped")
             raise

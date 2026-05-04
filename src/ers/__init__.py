@@ -131,9 +131,13 @@ class RedisConfig:
 
     @env_property(default_value="5.0")
     def REDIS_SOCKET_CONNECT_TIMEOUT(self, config_value: str) -> float:
-        """Seconds to wait when establishing a new Redis connection before raising an error.
+        """Maximum seconds to wait for the TCP handshake when connecting to Redis.
 
-        Applied to all Redis connections created from RedisConnectionConfig.from_settings().
+        This is a connection-establishment timeout only — it does not affect how long
+        individual commands (LPUSH, BRPOP, PUBLISH, ...) wait for a response once
+        connected. Applied to all Redis connections (ERE queue and notification subscriber)
+        so that a down or unreachable Redis host fails fast instead of blocking
+        indefinitely on the OS-level TCP timeout.
         """
         return float(config_value)
 

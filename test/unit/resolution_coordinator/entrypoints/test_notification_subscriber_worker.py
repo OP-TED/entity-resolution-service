@@ -60,6 +60,13 @@ class TestRedisClientConstruction:
     async def test_socket_connect_timeout_forwarded_to_redis_client(self):
         redis_config = MagicMock()
         redis_config.socket_connect_timeout = 7.0
+        redis_config.to_redis_kwargs.return_value = {
+            "host": "localhost",
+            "port": 6379,
+            "db": 0,
+            "password": None,
+            "socket_connect_timeout": 7.0,
+        }
         worker = NotificationSubscriberWorker(
             redis_config=redis_config,
             channel="test",

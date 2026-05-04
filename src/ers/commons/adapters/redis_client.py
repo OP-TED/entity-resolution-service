@@ -38,6 +38,20 @@ class RedisConnectionConfig:
             socket_connect_timeout=settings.REDIS_SOCKET_CONNECT_TIMEOUT,
         )
 
+    def to_redis_kwargs(self) -> dict:
+        """Build keyword arguments for ``aioredis.Redis`` from this config.
+
+        Returns:
+            Dict suitable for unpacking into ``aioredis.Redis(**config.to_redis_kwargs())``.
+        """
+        return {
+            "host": self.host,
+            "port": self.port,
+            "db": self.db,
+            "password": self.password,
+            "socket_connect_timeout": self.socket_connect_timeout,
+        }
+
     def __str__(self) -> str:
         return (
             f'RedisConnectionConfig ( host: "{self.host}", port: "{self.port}", db: "{self.db}" )'
@@ -125,12 +139,7 @@ class RedisEREClient(AbstractClient):
         if isinstance(config_or_client, RedisConnectionConfig):
             self.config = config_or_client
             log.info("Redis ERE client: connecting to %s", self.config)
-            self._redis_client = aioredis.Redis(
-                host=self.config.host,
-                port=self.config.port,
-                db=self.config.db,
-                password=self.config.password,
-            )
+            self._redis_client = aioredis.Redis(**self.config.to_redis_kwargs())
         else:
             log.info("Redis ERE client: using existing redis client #%s", id(config_or_client))
             conn_args = config_or_client.connection_pool.connection_kwargs
