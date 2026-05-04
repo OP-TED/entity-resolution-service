@@ -147,7 +147,7 @@ class TestRefreshBulkEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "source_id" in body["detail"]
+        assert "source_id" in body["message"]
 
     async def test_empty_source_id_returns_400(self, client: AsyncClient) -> None:
         response = await client.post(
@@ -170,7 +170,7 @@ class TestRefreshBulkEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "source_id" in body["detail"]
+        assert "source_id" in body["message"]
 
     async def test_zero_limit_returns_400(self, client: AsyncClient) -> None:
         response = await client.post(

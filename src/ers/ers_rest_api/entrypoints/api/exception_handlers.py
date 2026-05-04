@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from ers.commons.domain.exceptions import DomainError
-from ers.commons.services.exceptions import ApplicationError
+from ers.commons.services.exceptions import ApplicationError, ServiceUnavailableError
 from ers.ers_rest_api.domain.errors import ErrorCode
 from ers.ers_rest_api.services.exceptions import MentionNotFoundError
 from ers.request_registry.services.exceptions import IdempotencyConflictError
@@ -39,7 +39,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=400,
             content={
                 "error_code": ErrorCode.VALIDATION_ERROR,
-                "detail": _format_validation_detail(exc),
+                "message": _format_validation_detail(exc),
             },
         )
 
@@ -52,7 +52,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=400,
             content={
                 "error_code": ErrorCode.PARSING_FAILED,
-                "detail": exc.message,
+                "message": exc.message,
             },
         )
 
@@ -65,7 +65,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=422,
             content={
                 "error_code": ErrorCode.IDEMPOTENCY_CONFLICT,
-                "detail": exc.message,
+                "message": exc.message,
             },
         )
 
@@ -78,7 +78,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=404,
             content={
                 "error_code": ErrorCode.MENTION_NOT_FOUND,
-                "detail": exc.message,
+                "message": exc.message,
             },
         )
 
@@ -91,7 +91,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=404,
             content={
                 "error_code": ErrorCode.SOURCE_NOT_FOUND,
-                "detail": exc.message,
+                "message": exc.message,
             },
         )
 
@@ -104,7 +104,20 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=504,
             content={
                 "error_code": ErrorCode.SERVICE_TIMEOUT,
-                "detail": exc.message,
+                "message": exc.message,
+            },
+        )
+
+    @app.exception_handler(ServiceUnavailableError)
+    async def service_unavailable_handler(
+        request: Request,
+        exc: ServiceUnavailableError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error_code": ErrorCode.SERVICE_UNAVAILABLE,
+                "message": exc.message,
             },
         )
 
@@ -117,7 +130,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=400,
             content={
                 "error_code": ErrorCode.VALIDATION_ERROR,
-                "detail": exc.message,
+                "message": exc.message,
             },
         )
 
@@ -130,7 +143,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=400,
             content={
                 "error_code": ErrorCode.VALIDATION_ERROR,
-                "detail": exc.message,
+                "message": exc.message,
             },
         )
 
@@ -147,6 +160,6 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=500,
             content={
                 "error_code": ErrorCode.SERVICE_ERROR,
-                "detail": "Internal server error",
+                "message": "Internal server error",
             },
         )

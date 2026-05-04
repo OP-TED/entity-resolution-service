@@ -34,7 +34,7 @@ def _map_error(
         identified_by=identifier,
         error=ErrorResponse(
             error_code=ErrorCode.SERVICE_ERROR,
-            detail=(
+            message=(
                 f"Failed to resolve mention ({identifier.source_id}, "
                 f"{identifier.request_id}, {identifier.entity_type}): {exc}"
             ),

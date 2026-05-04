@@ -21,7 +21,7 @@ CLUSTER = ClusterReference(
     confidence_score=0.9,
     similarity_score=0.8,
 )
-ERROR = ErrorResponse(error_code=ErrorCode.MENTION_NOT_FOUND, detail="not found")
+ERROR = ErrorResponse(error_code=ErrorCode.MENTION_NOT_FOUND, message="not found")
 
 
 class TestEntityMentionResolutionResultValidator:

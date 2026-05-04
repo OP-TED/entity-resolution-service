@@ -17,10 +17,11 @@ class ErrorCode(StrEnum):
     SOURCE_NOT_FOUND = "SOURCE_NOT_FOUND"
     SERVICE_ERROR = "SERVICE_ERROR"
     SERVICE_TIMEOUT = "SERVICE_TIMEOUT"
+    SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
 
 
 class ErrorResponse(FrozenDTO):
     """Standard error response body returned by all ERS REST API endpoints."""
 
     error_code: ErrorCode
-    detail: str = Field(description="Human-readable explanation of the error.")
+    message: str = Field(description="Human-readable explanation of the error.")
