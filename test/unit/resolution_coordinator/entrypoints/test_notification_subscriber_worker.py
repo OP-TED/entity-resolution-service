@@ -124,9 +124,8 @@ class TestLifecycle:
             if False:
                 yield
 
-        with mock_redis_with_listen(fail_then_done):
-            with patch("asyncio.sleep", new=AsyncMock()):
-                await worker.run()
+        with mock_redis_with_listen(fail_then_done), patch("asyncio.sleep", new=AsyncMock()):
+            await worker.run()
 
         # After ConnectionError the event was cleared; after reconnect it is set again
         assert worker.subscribed.is_set()
@@ -167,9 +166,8 @@ class TestReconnect:
                 raise RedisConnectionError("Redis down")
             yield make_message("key1")
 
-        with mock_redis_with_listen(fail_then_succeed):
-            with patch("asyncio.sleep", new=AsyncMock()):
-                await worker.run()
+        with mock_redis_with_listen(fail_then_succeed), patch("asyncio.sleep", new=AsyncMock()):
+            await worker.run()
 
         waiter.notify.assert_awaited_once_with("key1")
 
@@ -185,10 +183,8 @@ class TestReconnect:
             if False:
                 yield
 
-        with mock_redis_with_listen(fail_then_done):
-            with caplog.at_level(logging.WARNING):
-                with patch("asyncio.sleep", new=AsyncMock()):
-                    await worker.run()
+        with mock_redis_with_listen(fail_then_done), caplog.at_level(logging.WARNING), patch("asyncio.sleep", new=AsyncMock()):
+            await worker.run()
 
         assert any(r.levelno >= logging.WARNING for r in caplog.records)
 
@@ -209,9 +205,8 @@ class TestReconnect:
         async def capture_sleep(delay):
             sleep_calls.append(delay)
 
-        with mock_redis_with_listen(always_fails):
-            with patch("asyncio.sleep", side_effect=capture_sleep):
-                await worker.run()
+        with mock_redis_with_listen(always_fails), patch("asyncio.sleep", side_effect=capture_sleep):
+            await worker.run()
 
         assert sleep_calls[:4] == [1, 2, 4, 8]
         assert all(s <= 30 for s in sleep_calls)

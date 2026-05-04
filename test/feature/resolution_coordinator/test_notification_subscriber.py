@@ -203,9 +203,8 @@ def connection_drops(ctx):
             "ers.resolution_coordinator.entrypoints.notification_subscriber_worker.aioredis.Redis",
             return_value=mock_redis,
         )
-        with _patch:
-            with patch("asyncio.sleep", new=AsyncMock()):
-                await worker.run()
+        with _patch, patch("asyncio.sleep", new=AsyncMock()):
+            await worker.run()
 
         # Check timeout
         try:
