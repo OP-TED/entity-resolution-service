@@ -32,7 +32,13 @@ router = APIRouter(prefix="/curation/decisions", tags=["Decisions"])
 
 @router.get(
     "",
-    responses={400: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        503: {
+            "model": ErrorResponse,
+            "description": "MongoDB unavailable",
+        },
+    },
     response_description="Cursor-paginated list of curation decisions.",
 )
 async def list_decisions(
