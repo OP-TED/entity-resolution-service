@@ -184,3 +184,75 @@ class TestOutcomeIntegrationWorker:
             await worker.run()
 
         assert any("infrastructure" in r.message.lower() for r in caplog.records)
+
+    async def test_run_uses_exponential_backoff_on_consecutive_connection_errors(self):
+        """Consecutive ConnectionErrors double the sleep duration (1s -> 2s)."""
+        call_count = 0
+
+        async def fails_twice_then_yields():
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                raise ConnectionError("Redis down")
+            yield make_response()
+
+        listener = MagicMock(spec=AsyncOutcomeListener)
+        listener.consume.side_effect = fails_twice_then_yields
+        service = create_autospec(OutcomeIntegrationService, instance=True)
+        service.integrate_outcome = AsyncMock(return_value=None)
+
+        sleep_calls = []
+
+        async def record_sleep(duration):
+            sleep_calls.append(duration)
+
+        with patch("asyncio.sleep", new=record_sleep):
+            worker = OutcomeIntegrationWorker(listener=listener, service=service)
+            await worker.run()
+
+        assert sleep_calls == [1.0, 2.0]
+
+    async def test_run_resets_backoff_after_successful_message(self):
+        """Backoff resets to 1s once a message is received successfully.
+
+        Scenario across three consume() calls (side_effect):
+        - consume() #1: raises ConnectionError at entry
+            -> sleep(1.0), backoff becomes 2.0
+        - consume() #2: yields one message (backoff resets to 1.0), then raises
+          ConnectionError mid-iteration (propagates to outer try/except)
+            -> sleep(1.0)  (NOT 2.0 -- confirms reset)
+        - consume() #3: yields one message then exhausts -> break
+
+        Both sleeps must be 1.0, confirming the backoff was reset after the
+        first successful message receive.
+        """
+        call_count = 0
+        msg = make_response()
+
+        async def fail_succeed_fail_succeed():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ConnectionError("down")
+            if call_count == 2:
+                yield msg                        # success - backoff resets to 1.0
+                raise ConnectionError("down again")  # mid-iteration error -> outer except
+            # call_count >= 3: yield then exhaust -> break
+            yield msg
+
+        listener = MagicMock(spec=AsyncOutcomeListener)
+        listener.consume.side_effect = fail_succeed_fail_succeed
+        service = create_autospec(OutcomeIntegrationService, instance=True)
+        service.integrate_outcome = AsyncMock(return_value=None)
+
+        sleep_calls = []
+
+        async def record_sleep(duration):
+            sleep_calls.append(duration)
+
+        with patch("asyncio.sleep", new=record_sleep):
+            worker = OutcomeIntegrationWorker(listener=listener, service=service)
+            await worker.run()
+
+        # Both sleeps should be 1.0 - backoff reset between failures
+        assert sleep_calls == [1.0, 1.0]

@@ -22,6 +22,9 @@ from ers.ere_result_integrator.services.outcome_integration_service import (
 
 _log = logging.getLogger(__name__)
 
+_BACKOFF_INITIAL = 1.0
+_BACKOFF_CAP = 30.0
+
 
 class OutcomeIntegrationWorker:
     """Background worker that polls ERE outcomes and processes them via the service.
@@ -70,7 +73,9 @@ class OutcomeIntegrationWorker:
     async def run(self) -> None:
         """Polling loop - pull one outcome, process it, repeat.
 
-        Restarts automatically after a Redis ``ConnectionError`` (5 s back-off).
+        Restarts automatically after a Redis ``ConnectionError`` using
+        exponential backoff (1s -> 2s -> 4s ... capped at 30s). Backoff resets
+        to 1s after any successful message receive.
         ``OutcomeValidationError`` and ``TriadNotFoundError`` are logged and
         swallowed so the loop continues. Infrastructure ``ConnectionError`` from
         the service layer (registry / decision store) is logged distinctly and
@@ -78,10 +83,12 @@ class OutcomeIntegrationWorker:
         crashing the background task.
         """
         _log.info("OutcomeIntegrationWorker started")
+        backoff = _BACKOFF_INITIAL
         try:
             while True:
                 try:
                     async for message in self._listener.consume():
+                        backoff = _BACKOFF_INITIAL
                         try:
                             await integrate_outcome(message, self._service)
                         except OutcomeValidationError as exc:
@@ -115,8 +122,11 @@ class OutcomeIntegrationWorker:
                             )
                     break  # listener exhausted normally (test or graceful shutdown)
                 except ConnectionError as exc:
-                    _log.error("Redis disconnected - retrying in 5 s", exc_info=exc)
-                    await asyncio.sleep(5)
+                    _log.error(
+                        "Redis disconnected - retrying in %.0fs", backoff, exc_info=exc
+                    )
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, _BACKOFF_CAP)
                     _log.info("Attempting to reconnect to Redis outcome listener")
         except asyncio.CancelledError:
             _log.info("OutcomeIntegrationWorker stopped")
