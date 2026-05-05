@@ -161,6 +161,12 @@ Update `MongoDecisionRepository.ensure_indexes` to add a refresh-bulk-specific p
 - The cold-start branch in `query_decisions_delta` MUST emit `decision_store.cold_start = true`.
 - No new log lines required beyond existing instrumentation.
 
+**Status: wired as of PR #98 review fixes.**
+
+Implementation:
+- `decision_store.placement_unchanged = True` set via `trace.get_current_span().set_attribute()` in `DecisionStoreService.store_decision` before the early return.
+- `decision_store.cold_start = True` set via `trace.get_current_span().set_attribute()` in `MongoDecisionRepository.find_delta_for_source` in the cold-start branch.
+
 ## Acceptance Criteria
 
 ### AC1 — First-time insert creates with `updated_at = None`
@@ -302,3 +308,44 @@ Update `MongoDecisionRepository.ensure_indexes` to add a refresh-bulk-specific p
 4. Update bulk-refresh tests (U-09, BDD F-01..F-03) to reflect new semantic.
 5. Update spec documents (`EPIC.md` IT-008 acceptance, `task65-...md` table).
 6. Single PR — no production data, no staged rollout needed.
+
+## Known Minor Items Resolved in PR #98 Review
+
+### B1 — CI lint failure fixed
+Removed unused `pytest` import from
+`test/feature/resolution_decision_store/test_store_decision_idempotency.py`.
+`asyncio` is used and was retained.
+
+### N1 — Minimum-length guard on `search_identifiers`
+`MongoEntityMentionCurationRepository.search_identifiers` now rejects queries
+shorter than `MIN_SEARCH_LENGTH = 3` characters with an empty result, without
+touching the database. A sub-3-character `$regex` pattern causes a full-collection
+scan. New module-level constant exported as `MIN_SEARCH_LENGTH`. Five new unit
+tests added in `test/unit/curation/adapters/test_entity_mention_repository.py`.
+
+### B2 + B3 + N2 — Atomic upsert refactor (architecture decision)
+
+The previous `upsert_decision` in `MongoDecisionRepository` performed a
+`find_one` pre-read outside of any try/except, which:
+- Leaked raw `ConnectionFailure` to callers (B3)
+- Created a race window where two concurrent writers could both see None and the
+  slower writer silently no-oped its update (B2)
+- Issued a redundant DB round-trip on every write (N2 — the service's
+  `find_by_triad` already read the doc for the same-placement short-circuit)
+
+**Resolution:** The repository no longer does its own pre-read. Instead,
+`upsert_decision` accepts an `existing: Decision | None` parameter from the
+service (which already holds the result of `find_by_triad`). Based on this:
+
+- `existing=None` → `_execute_insert`: `find_one_and_update(upsert=True, filter={_id})`.
+  `DuplicateKeyError` on concurrent insert race is converted to `StaleOutcomeError`.
+  `updated_at` stays absent (R1 insert path, `$setOnInsert` only).
+- `existing=Decision` → `_execute_update`: `find_one_and_update(upsert=False, filter=R2_DISJUNCTION)`.
+  `updated_at` is set in `$set`. All `ConnectionFailure` is caught and wrapped as
+  `RepositoryConnectionError` inside each private helper.
+
+The complexity was kept under the C901 threshold (10) by extracting the two
+error-handling try/except blocks into `_execute_insert` and `_execute_update`.
+
+### B4 — R8 span attributes wired
+See updated R8 section above.

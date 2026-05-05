@@ -8,6 +8,12 @@ from ers.request_registry.adapters.records_repository import (
     ResolutionRequestRepository,
 )
 
+# Minimum number of characters required to trigger a substring regex search.
+# Queries shorter than this threshold would cause a full-collection scan because
+# a 1- or 2-character regex pattern matches too broadly to be filtered by a
+# range index. Three characters is the practical minimum for useful results.
+MIN_SEARCH_LENGTH = 3
+
 
 class EntityMentionCurationRepository(ResolutionRequestRepository):
     """Repository for entity mention retrieval in curation.
@@ -57,12 +63,26 @@ class MongoEntityMentionCurationRepository(
         DocumentDB. DocumentDB does not support text indexes or the ``$text``
         operator at all; ``$regex`` is the cross-engine portable choice.
 
+        Queries shorter than ``MIN_SEARCH_LENGTH`` (3 characters) are rejected
+        with an empty result without touching the database. A 1- or 2-character
+        regex pattern matches the overwhelming majority of documents and would
+        cause a full-collection scan with no practical utility.
+
         Trade-off: ``$regex`` does not provide linguistic stemming, scoring, or
         result ranking — it returns documents whose ``content`` or
         ``parsed_representation`` contains the literal substring (escaped
         before regex compilation to avoid metacharacter injection).
+
+        Args:
+            text: The substring to search for. Must be at least ``MIN_SEARCH_LENGTH``
+                characters; shorter inputs (including empty string) return ``[]``
+                without querying the database.
+
+        Returns:
+            A list of ``EntityMentionIdentifier`` objects for matching documents,
+            or an empty list when the query is too short or produces no results.
         """
-        if not text:
+        if not text or len(text) < MIN_SEARCH_LENGTH:
             return []
         pattern = re.escape(text)
         cursor = self._collection.find(

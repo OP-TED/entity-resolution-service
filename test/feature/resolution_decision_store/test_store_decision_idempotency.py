@@ -22,7 +22,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock
 
-import pytest
 from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
 from pytest_bdd import given, parsers, scenarios, then, when
 

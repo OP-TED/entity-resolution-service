@@ -217,5 +217,52 @@ async def test_warm_filter_uses_gt(mock_repo):
     )
 
 
+# ── R8: cold-start span attribute ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_cold_start_sets_span_attribute():
+    """R8: cold-start branch (updated_since=None) emits decision_store.cold_start=True."""
+    from unittest.mock import MagicMock, patch
+
+    from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
+
+    mock_collection = MagicMock()
+    mock_collection.find = MagicMock(return_value=_make_cursor_mock([]))
+    mock_db = MagicMock()
+    mock_db.__getitem__ = MagicMock(return_value=mock_collection)
+
+    repo = MongoDecisionRepository(mock_db)
+    mock_span = MagicMock()
+
+    with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+        await repo.find_delta_for_source(source_id="S", updated_since=None)
+
+    mock_span.set_attribute.assert_any_call("decision_store.cold_start", True)
+
+
+@pytest.mark.asyncio
+async def test_warm_path_does_not_set_cold_start_attribute():
+    """R8: warm path (updated_since=T) must NOT emit decision_store.cold_start."""
+    from unittest.mock import MagicMock, patch
+
+    from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
+
+    t0 = datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC)
+    mock_collection = MagicMock()
+    mock_collection.find = MagicMock(return_value=_make_cursor_mock([]))
+    mock_db = MagicMock()
+    mock_db.__getitem__ = MagicMock(return_value=mock_collection)
+
+    repo = MongoDecisionRepository(mock_db)
+    mock_span = MagicMock()
+
+    with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+        await repo.find_delta_for_source(source_id="S", updated_since=t0)
+
+    called_attrs = [call.args[0] for call in mock_span.set_attribute.call_args_list]
+    assert "decision_store.cold_start" not in called_attrs
+
+
 class TestQueryDecisionsDelta:
     """Legacy class-based tests — skipped by pytest-asyncio auto mode; kept for reference."""

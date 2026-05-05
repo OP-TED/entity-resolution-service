@@ -1,6 +1,6 @@
 """Unit tests for DecisionStoreService."""
 from datetime import UTC, datetime
-from unittest.mock import create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
@@ -250,3 +250,54 @@ async def test_short_circuit_ignores_candidates_difference():
 
     mock_repo.upsert_decision.assert_not_awaited()
     assert result is existing
+
+
+# ── R8 span attribute tests ───────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_no_op_short_circuit_sets_span_attribute():
+    """R8: same-placement no-op emits decision_store.placement_unchanged=True span attribute."""
+    mock_repo = create_autospec(MongoDecisionRepository, instance=True)
+    now = datetime.now(UTC)
+    existing = Decision(
+        id="hash123",
+        about_entity_mention=make_identifier(),
+        current_placement=make_cluster("c1"),
+        candidates=[],
+        created_at=now,
+        updated_at=None,
+    )
+    mock_repo.find_by_triad.return_value = existing
+
+    mock_span = MagicMock()
+    with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+        svc = DecisionStoreService(repository=mock_repo)
+        await svc.store_decision(make_identifier(), make_cluster("c1"), [], now)
+
+    mock_span.set_attribute.assert_any_call("decision_store.placement_unchanged", True)
+
+
+@pytest.mark.asyncio
+async def test_genuine_write_does_not_set_placement_unchanged_attribute():
+    """R8: genuine placement change must NOT emit decision_store.placement_unchanged."""
+    mock_repo = create_autospec(MongoDecisionRepository, instance=True)
+    now = datetime.now(UTC)
+    existing = Decision(
+        id="hash123",
+        about_entity_mention=make_identifier(),
+        current_placement=make_cluster("c1"),
+        candidates=[],
+        created_at=now,
+        updated_at=None,
+    )
+    mock_repo.find_by_triad.return_value = existing
+    mock_repo.upsert_decision.return_value = make_decision(now)
+
+    mock_span = MagicMock()
+    with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+        svc = DecisionStoreService(repository=mock_repo)
+        await svc.store_decision(make_identifier(), make_cluster("c2"), [], now)
+
+    called_attrs = [call.args[0] for call in mock_span.set_attribute.call_args_list]
+    assert "decision_store.placement_unchanged" not in called_attrs

@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 
 from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
+from opentelemetry import trace
 
 from ers import config
 from ers.commons.adapters.tracing import trace_function
@@ -51,6 +52,7 @@ class DecisionStoreService:
                 "Placement unchanged — short-circuiting write",
                 extra={"cluster_id": current.cluster_id},
             )
+            trace.get_current_span().set_attribute("decision_store.placement_unchanged", True)
             return existing
 
         max_candidates = config.DECISION_STORE_MAX_CANDIDATES
@@ -59,11 +61,14 @@ class DecisionStoreService:
                 "Candidate list truncated",
                 extra={"original": len(candidates), "max": max_candidates},
             )
+        # Pass existing so the repository skips its own pre-read (N2).
+        # existing=None → insert path; existing=Decision → update path (R2 stale filter).
         return await self._repository.upsert_decision(
             identifier=identifier,
             current=current,
             candidates=candidates[:max_candidates],
             updated_at=updated_at,
+            existing=existing,
         )
 
     async def get_decision_by_triad(
