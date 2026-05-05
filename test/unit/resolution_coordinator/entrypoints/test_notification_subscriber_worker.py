@@ -347,9 +347,8 @@ class TestCleanup:
         mock_redis.pubsub.return_value = mock_pubsub
         mock_redis.aclose = AsyncMock()
 
-        with patch(_PATCH_TARGET, return_value=mock_redis):
-            with contextlib.suppress(asyncio.CancelledError):
-                await worker.run()
+        with patch(_PATCH_TARGET, return_value=mock_redis), contextlib.suppress(asyncio.CancelledError):
+            await worker.run()
 
         mock_redis.aclose.assert_awaited()
 

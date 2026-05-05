@@ -9,6 +9,7 @@ The worker subscribes to a Redis Pub/Sub channel and calls
 ``asyncio.Event`` waiting on that key in the local process.
 """
 import asyncio
+import contextlib
 import logging
 from typing import Protocol
 
@@ -137,21 +138,17 @@ class NotificationSubscriberWorker:
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, _BACKOFF_CAP)
                 finally:
-                    # Two-phase cleanup. Each leg swallows ordinary Exceptions but
-                    # not BaseException, so CancelledError still propagates. The
-                    # outer try/finally guarantees aclose runs even when the first
-                    # await is cancelled mid-flight, preventing a connection leak
-                    # on shutdown.
+                    # Two-phase cleanup. Each leg swallows ordinary Exceptions
+                    # but not BaseException, so CancelledError still propagates.
+                    # The outer try/finally guarantees aclose runs even when the
+                    # first await is cancelled mid-flight, preventing a
+                    # connection leak on shutdown.
                     try:
-                        try:
+                        with contextlib.suppress(Exception):
                             await asyncio.shield(pubsub.unsubscribe(self._channel))
-                        except Exception:  # noqa: BLE001 — best-effort cleanup
-                            pass
                     finally:
-                        try:
+                        with contextlib.suppress(Exception):
                             await asyncio.shield(redis_client.aclose())
-                        except Exception:  # noqa: BLE001 — best-effort cleanup
-                            pass
         except asyncio.CancelledError:
             _log.info("NotificationSubscriberWorker stopped")
             raise

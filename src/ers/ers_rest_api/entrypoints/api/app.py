@@ -10,9 +10,6 @@ from fastapi.openapi.utils import get_openapi
 from ers import config
 from ers.commons.adapters.mongo_client import MongoClientManager
 from ers.commons.adapters.redis_client import RedisConnectionConfig, RedisEREClient
-from ers.resolution_coordinator.services.async_resolution_waiter import (
-    AsyncResolutionWaiter,
-)
 from ers.commons.adapters.tracing import (
     configure_auto_instrumentation,
     configure_fastapi_telemetry,
@@ -22,6 +19,9 @@ from ers.commons.adapters.tracing import (
 from ers.ers_rest_api.entrypoints.api.exception_handlers import register_exception_handlers
 from ers.ers_rest_api.entrypoints.api.health import router as health_router
 from ers.ers_rest_api.entrypoints.api.v1.router import v1_router
+from ers.resolution_coordinator.services.async_resolution_waiter import (
+    AsyncResolutionWaiter,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ async def _await_subscriber_ready(worker: _ReadinessSignal, timeout: float) -> N
         return
     try:
         await asyncio.wait_for(worker.subscribed.wait(), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _log.warning(
             "Notification subscriber not ready after %.1fs; cross-instance "
             "notifications may be lost during this window. The pod will "
