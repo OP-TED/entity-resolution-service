@@ -18,6 +18,7 @@ from ers import config
 from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.commons.adapters.tracing import trace_function
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+from ers.commons.services.exceptions import ServiceUnavailableError
 from ers.ere_contract_client.domain.errors import (
     ChannelUnavailableError,
     RedisConnectionError,
@@ -31,7 +32,10 @@ from ers.rdf_mention_parser.domain.exceptions import (
     MultipleEntitiesFoundError,
     UnsupportedEntityTypeError,
 )
-from ers.request_registry.domain.errors import DuplicateTriadError
+from ers.request_registry.domain.errors import (
+    DuplicateTriadError,
+    RepositoryConnectionError as _RegistryConnectionError,
+)
 from ers.request_registry.services.request_registry_service import (
     RequestRegistryService,
 )
@@ -60,6 +64,11 @@ _PARSING_ERRORS = (
     EntityTypeMismatchError,
     MultipleEntitiesFoundError,
     EmptyExtractionError,
+)
+
+_MONGO_CONNECTION_ERRORS = (
+    _RegistryConnectionError,
+    RepositoryConnectionError,  # ers.resolution_decision_store.domain.errors
 )
 
 
@@ -146,6 +155,8 @@ class ResolutionCoordinatorService:
             raise ParsingFailedError(str(exc), cause=exc) from exc
         except DuplicateTriadError:
             pass  # Concurrent registration — another coroutine inserted first; proceed.
+        except _MONGO_CONNECTION_ERRORS as exc:
+            raise ServiceUnavailableError(str(exc)) from exc
 
         # 2. Check existing decision — instant return for replays (always CANONICAL)
         identifier = entity_mention.identifiedBy
@@ -187,7 +198,9 @@ class ResolutionCoordinatorService:
                 )
                 if decision is not None:
                     return decision, ResolutionOutcome.CANONICAL
-            except (TimeoutError, RedisConnectionError, ChannelUnavailableError):
+            except (RedisConnectionError, ChannelUnavailableError) as exc:
+                raise ServiceUnavailableError(str(exc)) from exc
+            except TimeoutError:
                 pass
 
             return await self._issue_provisional(identifier)
@@ -277,7 +290,7 @@ class ResolutionCoordinatorService:
                 ) from exc
             return decision, ResolutionOutcome.CANONICAL
         except RepositoryConnectionError as exc:
-            raise ResolutionTimeoutError(
+            raise ServiceUnavailableError(
                 f"Cannot persist provisional decision: {exc}"
             ) from None
 

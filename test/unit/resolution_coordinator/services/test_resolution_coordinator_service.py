@@ -16,9 +16,13 @@ from erspec.models.core import (
 )
 
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+from ers.commons.services.exceptions import ServiceUnavailableError
 from ers.ere_contract_client.domain.errors import (
     ChannelUnavailableError,
     RedisConnectionError,
+)
+from ers.request_registry.domain.errors import (
+    RepositoryConnectionError as RegistryConnectionError,
 )
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.rdf_mention_parser.domain.exceptions import MalformedRDFError
@@ -211,30 +215,24 @@ class TestResolveSingleTimeout:
 # ---------------------------------------------------------------------------
 
 class TestResolveSinglePublishFailure:
-    async def test_redis_down_issues_provisional(
+    async def test_redis_connection_error_raises_service_unavailable(
         self, coordinator, publish_svc, decision_svc, waiter
     ):
         decision_svc.get_decision_by_triad.return_value = None
         publish_svc.publish_request.side_effect = RedisConnectionError("conn refused")
-        provisional = make_decision(cluster_id="prov-redis")
-        decision_svc.store_decision.return_value = provisional
 
-        decision, outcome = await coordinator.resolve_single(make_entity_mention())
-        assert decision.current_placement.cluster_id == "prov-redis"
-        assert outcome == ResolutionOutcome.PROVISIONAL
-        decision_svc.store_decision.assert_called_once()
+        with pytest.raises(ServiceUnavailableError):
+            await coordinator.resolve_single(make_entity_mention())
+        decision_svc.store_decision.assert_not_called()
 
-    async def test_channel_unavailable_issues_provisional(
+    async def test_channel_unavailable_raises_service_unavailable(
         self, coordinator, publish_svc, decision_svc, waiter
     ):
         decision_svc.get_decision_by_triad.return_value = None
         publish_svc.publish_request.side_effect = ChannelUnavailableError("no subscribers")
-        provisional = make_decision(cluster_id="prov-channel")
-        decision_svc.store_decision.return_value = provisional
 
-        decision, outcome = await coordinator.resolve_single(make_entity_mention())
-        assert decision.current_placement.cluster_id == "prov-channel"
-        assert outcome == ResolutionOutcome.PROVISIONAL
+        with pytest.raises(ServiceUnavailableError):
+            await coordinator.resolve_single(make_entity_mention())
 
 
 # ---------------------------------------------------------------------------
@@ -319,16 +317,23 @@ class TestResolveSingleParseFailure:
 # ---------------------------------------------------------------------------
 
 class TestResolveSingleDecisionStoreDown:
-    async def test_repo_connection_error_raises_timeout(
-        self, coordinator, publish_svc, decision_svc, waiter
+    async def test_repo_connection_error_raises_service_unavailable(
+        self, monkeypatch, registry_svc, publish_svc, decision_svc
     ):
-        decision_svc.get_decision_by_triad.return_value = None
-        publish_svc.publish_request.side_effect = RedisConnectionError("down")
-        decision_svc.store_decision.side_effect = RepositoryConnectionError(
-            "MongoDB down"
+        monkeypatch.setattr(
+            "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+            type("C", (), {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0.05,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+            })(),
         )
-        with pytest.raises(ResolutionTimeoutError, match="Cannot persist"):
-            await coordinator.resolve_single(make_entity_mention())
+        real_waiter = AsyncResolutionWaiter()
+        svc = ResolutionCoordinatorService(registry_svc, publish_svc, decision_svc, real_waiter)
+        decision_svc.get_decision_by_triad.return_value = None
+        decision_svc.store_decision.side_effect = RepositoryConnectionError("MongoDB down")
+
+        with pytest.raises(ServiceUnavailableError):
+            await svc.resolve_single(make_entity_mention())
 
 
 # ---------------------------------------------------------------------------
@@ -337,18 +342,29 @@ class TestResolveSingleDecisionStoreDown:
 
 class TestResolveSingleStaleOutcome:
     async def test_stale_returns_existing_decision(
-        self, coordinator, publish_svc, decision_svc, waiter
+        self, monkeypatch, registry_svc, publish_svc, decision_svc
     ):
+        """ERE wins the race (StaleOutcomeError) after ERE timeout — returns CANONICAL."""
+        monkeypatch.setattr(
+            "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+            type("C", (), {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0.05,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+            })(),
+        )
+        real_waiter = AsyncResolutionWaiter()
+        svc = ResolutionCoordinatorService(
+            registry_svc, publish_svc, decision_svc, real_waiter
+        )
         decision_svc.get_decision_by_triad.side_effect = [
             None,  # initial check
             make_decision(cluster_id="cl-ere-winner"),  # after StaleOutcomeError
         ]
-        publish_svc.publish_request.side_effect = RedisConnectionError("down")
         decision_svc.store_decision.side_effect = StaleOutcomeError(
             "SRC", "req-001", "Organization", "2026-01-01", "2025-12-31"
         )
 
-        decision, outcome = await coordinator.resolve_single(make_entity_mention())
+        decision, outcome = await svc.resolve_single(make_entity_mention())
         assert decision.current_placement.cluster_id == "cl-ere-winner"
         assert outcome == ResolutionOutcome.CANONICAL
 
@@ -466,9 +482,9 @@ class TestWaiterLifecycle:
     ):
         decision_svc.get_decision_by_triad.return_value = None
         publish_svc.publish_request.side_effect = RedisConnectionError("down")
-        decision_svc.store_decision.return_value = make_decision("prov")
 
-        await coordinator.resolve_single(make_entity_mention())
+        with pytest.raises(ServiceUnavailableError):
+            await coordinator.resolve_single(make_entity_mention())
         waiter.release.assert_called_once()
 
     async def test_no_waiter_on_instant_decision(
@@ -610,3 +626,94 @@ class TestZeroBulkBudget:
         assert len(results) == 3
         assert all(outcome == ResolutionOutcome.PROVISIONAL for _, outcome in results)
         publish_svc.publish_request.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# TC-SU: ServiceUnavailableError on MongoDB / Redis connection failures
+# ---------------------------------------------------------------------------
+
+class TestResolveSingleServiceUnavailable:
+    async def test_mongo_down_at_registration_raises_service_unavailable(
+        self, coordinator, registry_svc
+    ):
+        registry_svc.register_resolution_request.side_effect = RegistryConnectionError(
+            "timeout"
+        )
+
+        with pytest.raises(ServiceUnavailableError):
+            await coordinator.resolve_single(make_entity_mention())
+
+    async def test_redis_connection_error_on_publish_raises_service_unavailable(
+        self, monkeypatch, registry_svc, publish_svc, decision_svc
+    ):
+        monkeypatch.setattr(
+            "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+            type("C", (), {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 30.0,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+            })(),
+        )
+        real_waiter = AsyncResolutionWaiter()
+        svc = ResolutionCoordinatorService(registry_svc, publish_svc, decision_svc, real_waiter)
+        decision_svc.get_decision_by_triad.return_value = None
+        publish_svc.publish_request.side_effect = RedisConnectionError("refused")
+
+        with pytest.raises(ServiceUnavailableError):
+            await svc.resolve_single(make_entity_mention())
+
+    async def test_channel_unavailable_on_publish_raises_service_unavailable(
+        self, monkeypatch, registry_svc, publish_svc, decision_svc
+    ):
+        monkeypatch.setattr(
+            "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+            type("C", (), {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 30.0,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+            })(),
+        )
+        real_waiter = AsyncResolutionWaiter()
+        svc = ResolutionCoordinatorService(registry_svc, publish_svc, decision_svc, real_waiter)
+        decision_svc.get_decision_by_triad.return_value = None
+        publish_svc.publish_request.side_effect = ChannelUnavailableError("channel full")
+
+        with pytest.raises(ServiceUnavailableError):
+            await svc.resolve_single(make_entity_mention())
+
+    async def test_mongo_down_at_provisional_write_raises_service_unavailable(
+        self, monkeypatch, registry_svc, publish_svc, decision_svc
+    ):
+        monkeypatch.setattr(
+            "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+            type("C", (), {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0.05,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+            })(),
+        )
+        real_waiter = AsyncResolutionWaiter()
+        svc = ResolutionCoordinatorService(registry_svc, publish_svc, decision_svc, real_waiter)
+        decision_svc.get_decision_by_triad.return_value = None
+        decision_svc.store_decision.side_effect = RepositoryConnectionError("Mongo down")
+
+        with pytest.raises(ServiceUnavailableError):
+            await svc.resolve_single(make_entity_mention())
+
+    async def test_ere_timeout_still_issues_provisional(
+        self, monkeypatch, registry_svc, publish_svc, decision_svc
+    ):
+        """ERE timeout (Redis fine, ERE silent) still falls back to provisional."""
+        monkeypatch.setattr(
+            "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+            type("C", (), {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0.05,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+            })(),
+        )
+        real_waiter = AsyncResolutionWaiter()
+        svc = ResolutionCoordinatorService(registry_svc, publish_svc, decision_svc, real_waiter)
+        decision_svc.get_decision_by_triad.return_value = None
+        provisional = make_decision("prov-cl")
+        decision_svc.store_decision.return_value = provisional
+
+        _, outcome = await svc.resolve_single(make_entity_mention())
+
+        assert outcome == ResolutionOutcome.PROVISIONAL
