@@ -224,3 +224,137 @@ def waiter_times_out(ctx):
 @then("the worker reconnects and resumes processing subsequent messages")
 def worker_resumes(ctx):
     assert "recovery_key" in ctx["received_after_reconnect"]
+
+
+# ---------------------------------------------------------------------------
+# Scenario 3 — Stateless safety net: Mongo fallback on lost notification
+# ---------------------------------------------------------------------------
+
+
+@scenario(FEATURE_FILE, "Notification lost but canonical decision in Mongo is still returned")
+def test_lost_notification_recovered_via_mongo_fallback():
+    pass
+
+
+@given(parsers.parse('a coordinator whose subscriber missed the notification for triad_key "{triad_key}"'))
+def coordinator_with_missed_notification(ctx, triad_key):
+    """Set up a coordinator where the waiter is never signalled — simulates a
+    lost cross-instance notification (subscriber reconnect window or publish
+    failure on the peer instance)."""
+    ctx["triad_key"] = triad_key
+
+
+@given(parsers.parse('the canonical decision for "{triad_key}" is already persisted in MongoDB'))
+def canonical_decision_in_mongo(ctx, triad_key):
+    from datetime import UTC, datetime
+
+    from erspec.models.core import (
+        ClusterReference,
+        Decision,
+        EntityMentionIdentifier,
+    )
+    now = datetime.now(UTC)
+    # Reverse-derive the identifier triple from the concatenated triad_key —
+    # the test value 'src-rec-001Org' splits as source='src', request='rec-001',
+    # entity='Org'. The coordinator only ever consults Mongo by identifier so
+    # we can pass any plausible triple as long as the resulting key matches.
+    identifier = EntityMentionIdentifier(
+        source_id="src",
+        request_id="rec001",
+        entity_type="Org",
+    )
+    assert (
+        f"{identifier.source_id}{identifier.request_id}{identifier.entity_type}"
+        == triad_key
+    ), "BDD test data drifted; identifier must concatenate to the triad_key"
+    ctx["identifier"] = identifier
+    ctx["canonical_decision"] = Decision(
+        id="from-peer-instance",
+        about_entity_mention=identifier,
+        current_placement=ClusterReference(
+            cluster_id="cl-from-peer-instance",
+            confidence_score=0.95,
+            similarity_score=0.95,
+        ),
+        candidates=[
+            ClusterReference(
+                cluster_id="cl-from-peer-instance",
+                confidence_score=0.95,
+                similarity_score=0.95,
+            )
+        ],
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@when("the coordinator resolves the entity mention with a short time budget")
+def coordinator_resolves_with_short_budget(ctx, monkeypatch):
+    from erspec.models.core import EntityMention
+
+    from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+    from ers.ere_contract_client.services.ere_publish_service import (
+        EREPublishService,
+    )
+    from ers.request_registry.services.request_registry_service import (
+        RequestRegistryService,
+    )
+    from ers.resolution_coordinator.services.async_resolution_waiter import (
+        AsyncResolutionWaiter,
+    )
+    from ers.resolution_coordinator.services.resolution_coordinator_service import (
+        ResolutionCoordinatorService,
+    )
+    from ers.resolution_decision_store.services.decision_store_service import (
+        DecisionStoreService,
+    )
+
+    monkeypatch.setattr(
+        "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+        type(
+            "C",
+            (),
+            {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0.05,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+            },
+        )(),
+    )
+
+    registry_svc = AsyncMock(spec=RequestRegistryService)
+    publish_svc = AsyncMock(spec=EREPublishService)
+    decision_svc = AsyncMock(spec=DecisionStoreService)
+
+    # First read = replay check (None); second read = post-timeout safety net
+    # (canonical decision from peer instance).
+    decision_svc.get_decision_by_triad.side_effect = [None, ctx["canonical_decision"]]
+
+    coordinator = ResolutionCoordinatorService(
+        registry_svc, publish_svc, decision_svc, AsyncResolutionWaiter()
+    )
+
+    entity_mention = EntityMention(
+        identifiedBy=ctx["identifier"],
+        content="<rdf/>",
+        content_type="application/rdf+xml",
+    )
+
+    decision, outcome = asyncio.run(coordinator.resolve_single(entity_mention))
+    ctx["resolved_decision"] = decision
+    ctx["resolved_outcome"] = outcome
+    ctx["decision_svc"] = decision_svc
+    ctx["ResolutionOutcome"] = ResolutionOutcome
+
+
+@then("the coordinator returns the canonical decision via the Mongo-fallback safety net")
+def coordinator_returns_canonical(ctx):
+    assert (
+        ctx["resolved_decision"].current_placement.cluster_id
+        == "cl-from-peer-instance"
+    )
+    assert ctx["resolved_outcome"] == ctx["ResolutionOutcome"].CANONICAL
+
+
+@then("no provisional identifier is issued")
+def no_provisional_issued(ctx):
+    ctx["decision_svc"].store_decision.assert_not_called()

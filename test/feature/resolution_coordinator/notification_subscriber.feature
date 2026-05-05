@@ -16,3 +16,10 @@ Feature: Cross-instance ERE outcome notification
     When the Redis connection drops before the notification is published
     Then the waiter times out without receiving a signal
     And the worker reconnects and resumes processing subsequent messages
+
+  Scenario: Notification lost but canonical decision in Mongo is still returned
+    Given a coordinator whose subscriber missed the notification for triad_key "srcrec001Org"
+    And the canonical decision for "srcrec001Org" is already persisted in MongoDB
+    When the coordinator resolves the entity mention with a short time budget
+    Then the coordinator returns the canonical decision via the Mongo-fallback safety net
+    And no provisional identifier is issued

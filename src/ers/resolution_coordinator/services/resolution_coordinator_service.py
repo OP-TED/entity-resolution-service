@@ -182,14 +182,19 @@ class ResolutionCoordinatorService:
                     asyncio.shield(event.wait()),
                     timeout=config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET,
                 )
-                decision = await self._decision_store_service.get_decision_by_triad(
-                    identifier
-                )
-                if decision is not None:
-                    return decision, ResolutionOutcome.CANONICAL
             except (TimeoutError, RedisConnectionError, ChannelUnavailableError):
+                # Doorbell never rang. The notification may have been lost
+                # during a subscriber-reconnect window or a peer's publish
+                # failure. Mongo is the single source of truth and is
+                # written before the doorbell, so one final read closes
+                # that statelessness gap.
                 pass
 
+            decision = await self._decision_store_service.get_decision_by_triad(
+                identifier
+            )
+            if decision is not None:
+                return decision, ResolutionOutcome.CANONICAL
             return await self._issue_provisional(identifier)
         finally:
             with contextlib.suppress(asyncio.CancelledError, Exception):

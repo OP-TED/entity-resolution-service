@@ -1,7 +1,8 @@
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
@@ -23,6 +24,39 @@ from ers.ers_rest_api.entrypoints.api.health import router as health_router
 from ers.ers_rest_api.entrypoints.api.v1.router import v1_router
 
 _log = logging.getLogger(__name__)
+
+
+class _ReadinessSignal(Protocol):
+    """Minimal structural type satisfied by NotificationSubscriberWorker."""
+
+    @property
+    def subscribed(self) -> asyncio.Event: ...
+
+
+async def _await_subscriber_ready(worker: _ReadinessSignal, timeout: float) -> None:
+    """Block until the notification subscriber has subscribed, or timeout.
+
+    Closes the startup statelessness gap: peer ERS instances may publish
+    cross-instance outcomes the moment this pod becomes routable, so we
+    must wait for SUBSCRIBE before yielding to the HTTP server.
+
+    Args:
+        worker: Anything exposing a ``subscribed`` ``asyncio.Event``.
+        timeout: Seconds to wait. ``0`` (or any non-positive value) skips
+            the wait entirely — operator opt-out for single-instance
+            deployments where the gate has no effect.
+    """
+    if timeout <= 0:
+        return
+    try:
+        await asyncio.wait_for(worker.subscribed.wait(), timeout=timeout)
+    except asyncio.TimeoutError:
+        _log.warning(
+            "Notification subscriber not ready after %.1fs; cross-instance "
+            "notifications may be lost during this window. The pod will "
+            "continue starting in degraded mode.",
+            timeout,
+        )
 
 
 def make_outcome_stored_callback(
@@ -166,6 +200,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     subscriber_worker.start()
     _log.info("NotificationSubscriberWorker started in lifespan")
+
+    # Gate the HTTP-traffic-yielding moment on a successful SUBSCRIBE handshake
+    # so peer instances cannot publish into a not-yet-subscribed pod.
+    await _await_subscriber_ready(
+        subscriber_worker, timeout=config.ERS_SUBSCRIBER_READY_TIMEOUT
+    )
 
     if config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET == 0:
         _log.info(

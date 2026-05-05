@@ -206,6 +206,42 @@ class TestResolveSingleTimeout:
         decision_svc.store_decision.assert_called_once()
 
 
+class TestResolveSingleStatelessFallback:
+    """Statelessness safety net: if the doorbell never rings (notification
+    lost during a subscriber reconnect window or a publish failure on the
+    peer ERS instance) the canonical decision may already be in MongoDB.
+    The coordinator must do one final read on the timeout path before
+    falling through to provisional.
+    """
+
+    async def test_timeout_returns_canonical_when_decision_already_in_mongo(
+        self, monkeypatch, registry_svc, publish_svc, decision_svc
+    ):
+        monkeypatch.setattr(
+            "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+            type("C", (), {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0.05,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+            })(),
+        )
+        real_waiter = AsyncResolutionWaiter()
+        svc = ResolutionCoordinatorService(
+            registry_svc, publish_svc, decision_svc, real_waiter
+        )
+
+        canonical = make_decision(cluster_id="cl-from-peer-instance")
+        # First call: replay check (line 152) — no decision yet.
+        # Second call: post-timeout safety net — peer instance has persisted
+        # the canonical decision but the notification was lost.
+        decision_svc.get_decision_by_triad.side_effect = [None, canonical]
+
+        decision, outcome = await svc.resolve_single(make_entity_mention())
+
+        assert decision.current_placement.cluster_id == "cl-from-peer-instance"
+        assert outcome == ResolutionOutcome.CANONICAL
+        decision_svc.store_decision.assert_not_called()  # no provisional written
+
+
 # ---------------------------------------------------------------------------
 # TC-004 / TC-004b: Redis / Channel down → provisional
 # ---------------------------------------------------------------------------
