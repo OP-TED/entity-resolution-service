@@ -30,10 +30,7 @@ from ers.ere_contract_client.services.ere_publish_service import EREPublishServi
 from ers.rdf_mention_parser.domain.exceptions import MalformedRDFError
 from ers.request_registry.services.exceptions import IdempotencyConflictError
 from ers.request_registry.services.request_registry_service import RequestRegistryService
-from ers.resolution_coordinator.domain.exceptions import (
-    ParsingFailedError,
-    ResolutionTimeoutError,
-)
+from ers.resolution_coordinator.domain.exceptions import ParsingFailedError
 from ers.resolution_coordinator.services.async_resolution_waiter import AsyncResolutionWaiter
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
     ResolutionCoordinatorService,

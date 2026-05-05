@@ -34,7 +34,9 @@ from ers.rdf_mention_parser.domain.exceptions import (
 )
 from ers.request_registry.domain.errors import (
     DuplicateTriadError,
-    RepositoryConnectionError as _RegistryConnectionError,
+)
+from ers.request_registry.domain.errors import (
+    RepositoryConnectionError as RegistryConnectionError,
 )
 from ers.request_registry.services.request_registry_service import (
     RequestRegistryService,
@@ -67,7 +69,7 @@ _PARSING_ERRORS = (
 )
 
 _MONGO_CONNECTION_ERRORS = (
-    _RegistryConnectionError,
+    RegistryConnectionError,    # ers.request_registry.domain.errors
     RepositoryConnectionError,  # ers.resolution_decision_store.domain.errors
 )
 
@@ -143,8 +145,8 @@ class ResolutionCoordinatorService:
         Raises:
             ParsingFailedError: If registration fails due to invalid content.
             IdempotencyConflictError: If the triad exists with different content.
-            ResolutionTimeoutError: If the Decision Store is unreachable
-                during provisional write.
+            ServiceUnavailableError: If a MongoDB or Redis/channel connection
+                failure is detected during registration, publish, or provisional write.
         """
         # 1. Register (embeds RDF parsing)
         try:
@@ -264,7 +266,7 @@ class ResolutionCoordinatorService:
             ERE has already written a decision (StaleOutcomeError race).
 
         Raises:
-            ResolutionTimeoutError: If the Decision Store is unreachable.
+            ServiceUnavailableError: If the Decision Store is unreachable.
         """
         provisional_id = derive_provisional_cluster_id(identifier)
         cluster_ref = ClusterReference(
@@ -292,7 +294,7 @@ class ResolutionCoordinatorService:
         except RepositoryConnectionError as exc:
             raise ServiceUnavailableError(
                 f"Cannot persist provisional decision: {exc}"
-            ) from None
+            ) from exc
 
 
 @trace_function(span_name="resolution_coordinator.lookup_by_triad")

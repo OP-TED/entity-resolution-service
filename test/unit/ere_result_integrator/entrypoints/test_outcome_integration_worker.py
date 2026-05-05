@@ -254,5 +254,9 @@ class TestOutcomeIntegrationWorker:
             worker = OutcomeIntegrationWorker(listener=listener, service=service)
             await worker.run()
 
-        # Both sleeps should be 1.0 - backoff reset between failures
+        # Both sleeps must be 1.0: the second failure sleeps 1.0 (not 2.0),
+        # confirming the backoff was reset after the successful message in call #2.
+        # Note: the mid-iteration raise in call #2 is intentional — a clean exhaust
+        # would trigger `break` and exit the loop before reaching the third call.
         assert sleep_calls == [1.0, 1.0]
+        assert service.integrate_outcome.call_count == 2  # confirms two successful receives
