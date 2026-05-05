@@ -99,13 +99,17 @@ class NotificationSubscriberWorker:
                 pubsub = redis_client.pubsub()
                 try:
                     await pubsub.subscribe(self._channel)
+                    # A successful (re)connect proves the previous backoff was
+                    # sufficient — reset here, not per-frame, so an idle channel
+                    # that loses connections repeatedly does not grow the
+                    # backoff unboundedly.
+                    backoff = _BACKOFF_INITIAL
                     self._subscribed.set()
                     _log.info(
                         "NotificationSubscriberWorker connected, subscribed to '%s'",
                         self._channel,
                     )
                     async for message in pubsub.listen():
-                        backoff = _BACKOFF_INITIAL  # reset only once messages flow
                         if message["type"] != "message":
                             continue
                         try:

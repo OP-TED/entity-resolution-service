@@ -251,27 +251,68 @@ class TestReconnect:
         assert any(r.levelno >= logging.WARNING for r in caplog.records)
 
     async def test_backoff_doubles_up_to_cap(self):
+        """When reconnect itself keeps failing (subscribe fails), the backoff
+        grows exponentially up to the cap. A successful subscribe followed by
+        a listen failure does NOT grow the backoff — that is covered by
+        test_backoff_resets_after_subscribe_success."""
         worker = make_worker()
         sleep_calls = []
-        call_count = 0
 
-        async def always_fails():
-            nonlocal call_count
-            call_count += 1
-            if call_count > 8:
-                if False:
-                    yield
-                return
-            raise RedisConnectionError("down")
+        mock_pubsub = MagicMock()
+        # Subscribe fails 8 times then succeeds with empty listen → exit.
+        subscribe_calls = 0
+
+        async def flaky_subscribe(_channel):
+            nonlocal subscribe_calls
+            subscribe_calls += 1
+            if subscribe_calls <= 8:
+                raise RedisConnectionError("down")
+
+        mock_pubsub.subscribe = flaky_subscribe
+        mock_pubsub.unsubscribe = AsyncMock()
+        mock_pubsub.listen = lambda: empty_generator()
+
+        mock_redis = MagicMock()
+        mock_redis.pubsub.return_value = mock_pubsub
+        mock_redis.aclose = AsyncMock()
 
         async def capture_sleep(delay):
             sleep_calls.append(delay)
 
-        with mock_redis_with_listen(always_fails), patch("asyncio.sleep", side_effect=capture_sleep):
+        with patch(_PATCH_TARGET, return_value=mock_redis), patch("asyncio.sleep", side_effect=capture_sleep):
             await worker.run()
 
         assert sleep_calls[:4] == [1, 2, 4, 8]
         assert all(s <= 30 for s in sleep_calls)
+
+    async def test_backoff_resets_after_subscribe_success(self):
+        """A successful subscribe() must reset the backoff regardless of
+        whether any payload frames have been observed yet.
+
+        Pre-fix: backoff was reset only on each pubsub.listen() frame, so
+        an idle channel that lost connections repeatedly grew its backoff
+        unboundedly (up to the cap) even though every reconnect succeeded.
+        """
+        worker = make_worker()
+        sleep_calls = []
+        attempt = 0
+
+        async def fail_then_empty():
+            nonlocal attempt
+            attempt += 1
+            if attempt < 4:
+                raise RedisConnectionError("idle drop")
+            if False:
+                yield  # exhaust normally so the worker exits
+
+        async def capture_sleep(delay):
+            sleep_calls.append(delay)
+
+        with mock_redis_with_listen(fail_then_empty), patch("asyncio.sleep", side_effect=capture_sleep):
+            await worker.run()
+
+        # 3 reconnects each preceded by a fresh _BACKOFF_INITIAL sleep
+        assert sleep_calls == [1, 1, 1]
 
     async def test_cancelled_error_reraises(self):
         worker = make_worker()
