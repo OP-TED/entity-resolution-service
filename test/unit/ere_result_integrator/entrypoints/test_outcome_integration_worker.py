@@ -186,7 +186,10 @@ class TestOutcomeIntegrationWorker:
         assert any("infrastructure" in r.message.lower() for r in caplog.records)
 
     async def test_run_uses_exponential_backoff_on_consecutive_connection_errors(self):
-        """Consecutive ConnectionErrors double the sleep duration (1s -> 2s)."""
+        """Consecutive ConnectionErrors double the BASE sleep duration (1s base
+        -> 2s base) with ±50% jitter applied. Tests assert bounds, not exact
+        values, so jitter changes don't lock out the design.
+        """
         call_count = 0
 
         async def fails_twice_then_yields():
@@ -210,7 +213,13 @@ class TestOutcomeIntegrationWorker:
             worker = OutcomeIntegrationWorker(listener=listener, service=service)
             await worker.run()
 
-        assert sleep_calls == [1.0, 2.0]
+        assert len(sleep_calls) == 2
+        # First failure: base 1.0 ± 50% jitter
+        assert 0.5 <= sleep_calls[0] <= 1.5
+        # Second failure: base 2.0 ± 50% jitter
+        assert 1.0 <= sleep_calls[1] <= 3.0
+        # Backoff actually escalated (not just two equal samples)
+        assert sleep_calls[1] > sleep_calls[0] / 2
 
     async def test_run_resets_backoff_after_successful_message(self):
         """Backoff resets to 1s once a message is received successfully.
@@ -254,9 +263,63 @@ class TestOutcomeIntegrationWorker:
             worker = OutcomeIntegrationWorker(listener=listener, service=service)
             await worker.run()
 
-        # Both sleeps must be 1.0: the second failure sleeps 1.0 (not 2.0),
-        # confirming the backoff was reset after the successful message in call #2.
-        # Note: the mid-iteration raise in call #2 is intentional — a clean exhaust
-        # would trigger `break` and exit the loop before reaching the third call.
-        assert sleep_calls == [1.0, 1.0]
+        # Both sleeps share the BASE 1.0 (after reset) but each is jittered
+        # within ±50%. Asserting bounds, not exact values, so jitter doesn't
+        # lock out the design. The mid-iteration raise in call #2 is
+        # intentional — a clean exhaust would trigger ``break`` and exit the
+        # loop before reaching the third call.
+        assert len(sleep_calls) == 2
+        for sleep in sleep_calls:
+            assert 0.5 <= sleep <= 1.5
         assert service.integrate_outcome.call_count == 2  # confirms two successful receives
+
+    async def test_run_applies_jitter_to_backoff(self):
+        """H3: backoff sleeps must be jittered, not deterministic.
+
+        A horizontally-scaled deployment (multiple ERS instances behind the
+        same Redis) needs jitter so reconnect attempts do not synchronize
+        and prolong outages. Without jitter, every instance reconnects at
+        exactly 1s, 2s, 4s, ... — the textbook thundering-herd pattern.
+
+        Runs the worker N times against the same fake listener (10
+        ConnectionErrors → exhaust). With jitter applied, the first-failure
+        sleep should vary across runs; without jitter every run produces
+        an identical sleep schedule.
+        """
+        call_count = 0
+
+        async def fail_then_exhaust():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ConnectionError("redis down")
+            return
+            yield  # make it an async generator
+
+        async def run_one_and_record_first_sleep() -> float:
+            listener = MagicMock(spec=AsyncOutcomeListener)
+            listener.consume.side_effect = fail_then_exhaust
+            service = create_autospec(OutcomeIntegrationService, instance=True)
+            service.integrate_outcome = AsyncMock(return_value=None)
+            sleeps: list[float] = []
+
+            async def record_sleep(duration):
+                sleeps.append(duration)
+
+            with patch("asyncio.sleep", new=record_sleep):
+                worker = OutcomeIntegrationWorker(listener=listener, service=service)
+                await worker.run()
+            return sleeps[0]
+
+        observed: set[float] = set()
+        for _ in range(20):
+            call_count = 0
+            observed.add(await run_one_and_record_first_sleep())
+
+        # 20 independent runs should produce more than one distinct sleep
+        # value. Probability of all 20 being identical under real jitter is
+        # vanishingly small; if this assertion ever fires, the implementation
+        # has reverted to deterministic backoff.
+        assert len(observed) > 1, (
+            f"Expected jittered backoff to vary across runs; got constant {observed}"
+        )

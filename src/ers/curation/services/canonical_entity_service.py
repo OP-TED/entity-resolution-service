@@ -9,6 +9,7 @@ from ers.curation.domain.data_transfer_objects import (
     CanonicalEntityPreview,
     EntityMentionPreview,
 )
+from ers.curation.services._pymongo_translation import translate_mongo_errors
 from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 
 
@@ -25,6 +26,7 @@ class CanonicalEntityService:
         self._decision_repository = decision_repository
         self._entity_mention_repository = entity_mention_repository
 
+    @translate_mongo_errors
     async def get_proposed_canonical_entity(
         self,
         decision_id: str,
@@ -44,6 +46,7 @@ class CanonicalEntityService:
             similarity_score=decision.current_placement.similarity_score,
         )
 
+    @translate_mongo_errors
     async def get_alternative_canonical_entities(
         self,
         decision_id: str,

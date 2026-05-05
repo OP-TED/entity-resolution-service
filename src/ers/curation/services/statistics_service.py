@@ -2,6 +2,7 @@ import asyncio
 
 from ers.curation.adapters.statistics_repository import StatisticsRepository
 from ers.curation.domain.data_transfer_objects import Statistics, StatisticsFilters
+from ers.curation.services._pymongo_translation import translate_mongo_errors
 
 
 class StatisticsService:
@@ -13,6 +14,7 @@ class StatisticsService:
     ) -> None:
         self._statistics_repository = statistics_repository
 
+    @translate_mongo_errors
     async def get_statistics(
         self,
         filters: StatisticsFilters,

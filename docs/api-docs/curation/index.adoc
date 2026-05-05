@@ -375,6 +375,11 @@ Get alternative canonical entities for a given decision.
 | Not Found
 | <<CurationErrorResponse,CurationErrorResponse>>
 
+
+| 503
+| MongoDB unavailable
+| <<CurationErrorResponse,CurationErrorResponse>>
+
 |===
 
 
@@ -784,6 +789,11 @@ Get the proposed canonical entity for a given decision.
 | Not Found
 | <<CurationErrorResponse,CurationErrorResponse>>
 
+
+| 503
+| MongoDB unavailable
+| <<CurationErrorResponse,CurationErrorResponse>>
+
 |===
 
 
@@ -1016,6 +1026,11 @@ Retrieve registry statistics and curation statistics with optional filtering.
 
 | 400
 | Bad Request
+| <<CurationErrorResponse,CurationErrorResponse>>
+
+
+| 503
+| MongoDB unavailable
 | <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
@@ -1273,6 +1288,11 @@ List cursor-paginated user actions with optional filtering.
 
 | 403
 | Forbidden
+| <<CurationErrorResponse,CurationErrorResponse>>
+
+
+| 503
+| MongoDB unavailable
 | <<CurationErrorResponse,CurationErrorResponse>>
 
 |===

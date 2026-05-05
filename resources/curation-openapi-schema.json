@@ -469,6 +469,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "503": {
+            "description": "MongoDB unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurationErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -556,6 +566,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "503": {
+            "description": "MongoDB unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurationErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -975,6 +995,16 @@
               }
             },
             "description": "Bad Request"
+          },
+          "503": {
+            "description": "MongoDB unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurationErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -1148,6 +1178,16 @@
               }
             },
             "description": "Forbidden"
+          },
+          "503": {
+            "description": "MongoDB unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurationErrorResponse"
+                }
+              }
+            }
           }
         }
       }

@@ -9,6 +9,7 @@ and the Resolution Coordinator (EPIC-06). This is a single-process MVP design.
 """
 import asyncio
 import logging
+import random
 
 from ers.ere_result_integrator.adapters.outcome_listener import AsyncOutcomeListener
 from ers.ere_result_integrator.domain.errors import (
@@ -24,6 +25,17 @@ _log = logging.getLogger(__name__)
 
 _BACKOFF_INITIAL = 1.0
 _BACKOFF_CAP = 30.0
+# Each reconnect sleep is multiplied by a uniform random factor in
+# ``[1 - _BACKOFF_JITTER, 1 + _BACKOFF_JITTER]`` to prevent multiple ERS
+# instances behind the same Redis from synchronizing their reconnect
+# attempts (thundering-herd) when Redis recovers.
+_BACKOFF_JITTER = 0.5
+
+
+def _jittered(base: float) -> float:
+    """Return ``base`` multiplied by a uniform jitter factor in ±50%."""
+    factor = 1.0 + random.uniform(-_BACKOFF_JITTER, _BACKOFF_JITTER)
+    return base * factor
 
 
 class OutcomeIntegrationWorker:
@@ -122,10 +134,11 @@ class OutcomeIntegrationWorker:
                             )
                     break  # listener exhausted normally (test or graceful shutdown)
                 except ConnectionError as exc:
+                    sleep_for = _jittered(backoff)
                     _log.error(
-                        "Redis disconnected - retrying in %.0fs", backoff, exc_info=exc
+                        "Redis disconnected - retrying in %.1fs", sleep_for, exc_info=exc
                     )
-                    await asyncio.sleep(backoff)
+                    await asyncio.sleep(sleep_for)
                     backoff = min(backoff * 2, _BACKOFF_CAP)
                     _log.info("Attempting to reconnect to Redis outcome listener")
         except asyncio.CancelledError:

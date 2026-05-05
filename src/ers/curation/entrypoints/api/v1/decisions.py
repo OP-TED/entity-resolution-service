@@ -53,7 +53,11 @@ async def list_decisions(
 
 @router.get(
     "/{decision_id}/proposed-canonical-entity",
-    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        503: {"model": ErrorResponse, "description": "MongoDB unavailable"},
+    },
     response_description="The proposed canonical entity cluster for the given decision.",
 )
 async def get_proposed_canonical_entity(
@@ -67,7 +71,11 @@ async def get_proposed_canonical_entity(
 
 @router.get(
     "/{decision_id}/alternative-canonical-entities",
-    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        503: {"model": ErrorResponse, "description": "MongoDB unavailable"},
+    },
     response_description="Paginated list of alternative canonical entity clusters for the given decision.",
 )
 async def get_alternative_canonical_entities(
