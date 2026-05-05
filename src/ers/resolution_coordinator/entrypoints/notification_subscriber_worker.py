@@ -81,6 +81,7 @@ class NotificationSubscriberWorker:
         if self._task is not None:
             self._task.cancel()
             await asyncio.gather(self._task, return_exceptions=True)
+        self._subscribed.clear()
 
     async def run(self) -> None:
         """Pub/Sub listen loop with exponential backoff reconnect.

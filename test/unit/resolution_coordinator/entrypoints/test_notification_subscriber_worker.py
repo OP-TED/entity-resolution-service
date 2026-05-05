@@ -98,6 +98,24 @@ class TestLifecycle:
             assert isinstance(task, asyncio.Task)
             await worker.stop()
 
+    async def test_stop_clears_subscribed_event(self):
+        """After stop() the subscribed event must be False so that health
+        probes do not report a dead worker as ready."""
+        worker = make_worker()
+
+        async def infinite_listen():
+            while True:
+                await asyncio.sleep(10)
+                yield
+
+        with mock_redis_with_listen(infinite_listen):
+            worker.start()
+            # Force the subscribed flag (subscribe is awaited inside run() before listen())
+            worker.subscribed.set()
+            await worker.stop()
+
+        assert not worker.subscribed.is_set()
+
     async def test_stop_cancels_task_cleanly(self):
         worker = make_worker()
 
