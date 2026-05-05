@@ -1,5 +1,5 @@
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -9,6 +9,9 @@ from fastapi.openapi.utils import get_openapi
 from ers import config
 from ers.commons.adapters.mongo_client import MongoClientManager
 from ers.commons.adapters.redis_client import RedisConnectionConfig, RedisEREClient
+from ers.resolution_coordinator.services.async_resolution_waiter import (
+    AsyncResolutionWaiter,
+)
 from ers.commons.adapters.tracing import (
     configure_auto_instrumentation,
     configure_fastapi_telemetry,
@@ -22,19 +25,45 @@ from ers.ers_rest_api.entrypoints.api.v1.router import v1_router
 _log = logging.getLogger(__name__)
 
 
-def make_outcome_stored_callback(waiter, ere_client, channel):
+def make_outcome_stored_callback(
+    waiter: AsyncResolutionWaiter,
+    ere_client: RedisEREClient,
+    channel: str,
+) -> Callable[[str], Awaitable[None]]:
     """Return an async callback that notifies locally first, then via Pub/Sub.
 
     Only publishes to ``channel`` when the local waiter has no event for the
     triad key — i.e. the ERE response was pulled by a different ERS instance.
     Single-instance deployments never touch Redis Pub/Sub on this path.
+
+    Args:
+        waiter: The process-local resolution waiter.
+        ere_client: A Redis client able to publish on Pub/Sub channels.
+        channel: The Pub/Sub channel name on which peers listen for outcomes.
+
+    Returns:
+        An async callable taking the triad key, suitable as
+        ``OutcomeIntegrationService(on_outcome_stored=...)``.
     """
     async def _on_outcome_stored(key: str) -> None:
         if await waiter.notify(key):
-            _log.debug("ERE outcome for triad '%s': resolved on this instance, no cross-instance notification needed", key)
-        else:
-            _log.debug("ERE outcome for triad '%s': no local waiter, publishing to '%s'", key, channel)
+            _log.debug(
+                "ERE outcome for triad '%s': resolved on this instance, "
+                "no cross-instance notification needed", key,
+            )
+            return
+        _log.debug(
+            "ERE outcome for triad '%s': no local waiter, publishing to '%s'", key, channel,
+        )
+        try:
             await ere_client.publish_notification(channel, key)
+        except ConnectionError:
+            _log.warning(
+                "Cross-instance notification publish failed for triad '%s' on "
+                "channel '%s'; remote waiter may time out to provisional",
+                key, channel,
+            )
+            raise
     return _on_outcome_stored
 
 
@@ -62,10 +91,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.rdf_config = RDFConfigReader.from_file(config.RDF_MENTION_CONFIG_FILE)
 
     # --- AsyncResolutionWaiter (process-scoped singleton) ---
-    from ers.resolution_coordinator.services.async_resolution_waiter import (
-        AsyncResolutionWaiter,
-    )
-
     waiter = AsyncResolutionWaiter()
     app.state.waiter = waiter
 
