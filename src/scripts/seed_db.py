@@ -17,6 +17,15 @@ from typing import Any
 from erspec.models.core import UserActionType
 from pymongo import AsyncMongoClient
 
+# only used for seeding/testing
+from test.unit.factories import (
+    ClusterReferenceFactory,
+    DecisionFactory,
+    EntityMentionIdentifierFactory,
+    ResolutionRequestRecordFactory,
+    UserActionFactory,
+)
+
 from ers import config
 from ers.curation.adapters.user_action_repository import (
     MongoUserActionCurationRepository,
@@ -27,15 +36,6 @@ from ers.request_registry.adapters.records_repository import (
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 from ers.users.adapters.user_repository import MongoUserRepository
 from ers.users.domain.users import User
-
-# only used for seeding/testing
-from test.unit.factories import (
-    ClusterReferenceFactory,
-    DecisionFactory,
-    EntityMentionIdentifierFactory,
-    ResolutionRequestRecordFactory,
-    UserActionFactory,
-)
 
 ENTITY_TYPES = ["ORGANISATION", "PROCEDURE"]
 ACTION_TYPES = list(UserActionType)
