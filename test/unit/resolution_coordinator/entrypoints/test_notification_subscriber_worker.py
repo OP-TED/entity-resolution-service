@@ -150,6 +150,42 @@ class TestMessageHandling:
 
         waiter.notify.assert_awaited_once_with("SRCIDreqidORGANISATION")
 
+    async def test_malformed_payload_logged_and_skipped(self, caplog):
+        """A non-utf-8 payload must not kill the worker."""
+        waiter = AsyncMock()
+        worker = make_worker(waiter=waiter)
+
+        bad = {"type": "message", "data": b"\xff\xfe\xfd"}
+        good = make_message("validkey")
+
+        async def two_messages():
+            yield bad
+            yield good
+
+        with mock_redis_with_listen(two_messages), caplog.at_level(logging.WARNING):
+            await worker.run()
+
+        waiter.notify.assert_awaited_once_with("validkey")
+        assert any("invalid payload" in r.message.lower() for r in caplog.records)
+
+    async def test_payload_without_data_skipped(self):
+        """A frame missing the bytes 'data' attribute must not kill the worker."""
+        waiter = AsyncMock()
+        worker = make_worker(waiter=waiter)
+
+        # 'data' is an int — has no .decode(); current code crashes with AttributeError.
+        bad = {"type": "message", "data": 12345}
+        good = make_message("k2")
+
+        async def two_messages():
+            yield bad
+            yield good
+
+        with mock_redis_with_listen(two_messages):
+            await worker.run()
+
+        waiter.notify.assert_awaited_once_with("k2")
+
     async def test_subscribe_confirmation_ignored(self):
         waiter = AsyncMock()
         worker = make_worker(waiter=waiter)

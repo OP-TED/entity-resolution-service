@@ -107,7 +107,14 @@ class NotificationSubscriberWorker:
                         backoff = _BACKOFF_INITIAL  # reset only once messages flow
                         if message["type"] != "message":
                             continue
-                        triad_key = message["data"].decode()
+                        try:
+                            triad_key = message["data"].decode("utf-8")
+                        except (UnicodeDecodeError, AttributeError):
+                            _log.warning(
+                                "NotificationSubscriberWorker: invalid payload, skipping: %r",
+                                message.get("data"),
+                            )
+                            continue
                         _log.debug("Cross-instance notification received for triad '%s'", triad_key)
                         owned = await self._waiter.notify(triad_key)
                         if owned:
