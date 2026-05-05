@@ -162,9 +162,12 @@ class ResolutionCoordinatorService:
 
         # 2. Check existing decision — instant return for replays (always CANONICAL)
         identifier = entity_mention.identifiedBy
-        existing = await self._decision_store_service.get_decision_by_triad(
-            identifier
-        )
+        try:
+            existing = await self._decision_store_service.get_decision_by_triad(
+                identifier
+            )
+        except RepositoryConnectionError as exc:
+            raise ServiceUnavailableError(str(exc)) from exc
         if existing is not None:
             return existing, ResolutionOutcome.CANONICAL
 
@@ -200,7 +203,11 @@ class ResolutionCoordinatorService:
                 )
                 if decision is not None:
                     return decision, ResolutionOutcome.CANONICAL
-            except (RedisConnectionError, ChannelUnavailableError) as exc:
+            except (
+                RedisConnectionError,
+                ChannelUnavailableError,
+                RepositoryConnectionError,
+            ) as exc:
                 raise ServiceUnavailableError(str(exc)) from exc
             except TimeoutError:
                 pass
@@ -283,9 +290,12 @@ class ResolutionCoordinatorService:
             )
             return decision, ResolutionOutcome.PROVISIONAL
         except StaleOutcomeError as exc:
-            decision = await self._decision_store_service.get_decision_by_triad(
-                identifier
-            )
+            try:
+                decision = await self._decision_store_service.get_decision_by_triad(
+                    identifier
+                )
+            except RepositoryConnectionError as conn_exc:
+                raise ServiceUnavailableError(str(conn_exc)) from conn_exc
             if decision is None:  # pragma: no cover — ERE wrote it moments ago
                 raise ResolutionTimeoutError(
                     "Decision vanished after StaleOutcomeError"

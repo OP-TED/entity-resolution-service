@@ -190,6 +190,34 @@ class TestListDecisions:
             mention_identifiers=None,
         )
 
+    async def test_list_decisions_translates_mongo_outage_to_service_unavailable(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+    ) -> None:
+        """C4: a PyMongo ``ConnectionFailure`` raised by the underlying decision
+        repository must surface as ``ServiceUnavailableError`` so the curation
+        API's 503 handler can map it to HTTP 503.
+
+        Without this translation the curation 503 handler is dead code and a
+        Mongo outage during ``GET /decisions`` returns 500 with no useful
+        signal to operators. Per the (a) decision (2026-05-05), all
+        infrastructure outages must be visible as 503.
+        """
+        from pymongo.errors import ConnectionFailure
+
+        from ers.commons.services.exceptions import ServiceUnavailableError
+
+        decision_repository.find_with_filters.side_effect = ConnectionFailure(
+            "Mongo unreachable"
+        )
+
+        with pytest.raises(ServiceUnavailableError):
+            await service.list_decisions(
+                filters=DecisionFilters(),
+                cursor_params=CursorParams(),
+            )
+
 
 class TestGetDecision:
     async def test_get_decision_returns_decision(

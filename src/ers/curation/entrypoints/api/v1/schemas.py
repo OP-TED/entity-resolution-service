@@ -15,11 +15,15 @@ from ers.curation.domain.data_transfer_objects import (
     StatisticsFilters,
 )
 from ers.curation.domain.errors import CurationErrorResponse
-
-ErrorResponse = CurationErrorResponse
 from ers.curation.domain.exceptions import InvalidEntityTypeError
 from ers.curation.entrypoints.api.dependencies import get_rdf_config
 from ers.rdf_mention_parser.domain.rdf_mapping_config import RDFMappingConfig
+
+# Backward-compatible alias for the FastAPI ``responses=`` schema name. New
+# code should reference ``CurationErrorResponse`` directly; this alias keeps
+# existing route decorators (decisions.py, users.py, auth.py, etc.) compiling
+# unchanged while the rename is being completed.
+ErrorResponse = CurationErrorResponse
 
 
 # Query parameter dependencies

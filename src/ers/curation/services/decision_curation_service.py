@@ -5,9 +5,10 @@ from typing import Any
 
 from erspec.models.core import Decision, EntityMention
 from erspec.models.ere import EntityMentionResolutionRequest
+from pymongo.errors import ConnectionFailure
 
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
-from ers.commons.services.exceptions import NotFoundError
+from ers.commons.services.exceptions import NotFoundError, ServiceUnavailableError
 from ers.curation.adapters.entity_mention_repository import (
     EntityMentionCurationRepository,
 )
@@ -95,25 +96,36 @@ class DecisionCurationService:
         filters: DecisionFilters,
         cursor_params: CursorParams,
     ) -> CursorPage[DecisionSummary]:
-        """List decisions with filtering, cursor pagination, and embedded entity data."""
-        mention_identifiers = None
-        if filters.search is not None:
-            mention_identifiers = await self._entity_mention_repository.search_identifiers(
-                filters.search,
+        """List decisions with filtering, cursor pagination, and embedded entity data.
+
+        Raises:
+            ServiceUnavailableError: If MongoDB is unreachable for any of the
+                three repository reads (entity-mention search, decision
+                pagination, entity-mention batch fetch). The curation API
+                exception handler maps this to HTTP 503.
+        """
+        try:
+            mention_identifiers = None
+            if filters.search is not None:
+                mention_identifiers = await self._entity_mention_repository.search_identifiers(
+                    filters.search,
+                )
+                if not mention_identifiers:
+                    return CursorPage(results=[])
+
+            page = await self._decision_repository.find_with_filters(
+                filters=filters,
+                cursor_params=cursor_params,
+                mention_identifiers=mention_identifiers,
             )
-            if not mention_identifiers:
-                return CursorPage(results=[])
 
-        page = await self._decision_repository.find_with_filters(
-            filters=filters,
-            cursor_params=cursor_params,
-            mention_identifiers=mention_identifiers,
-        )
+            identifiers = [d.about_entity_mention for d in page.results]
+            entity_mentions = await self._entity_mention_repository.find_by_identifiers(
+                identifiers,
+            )
+        except ConnectionFailure as exc:
+            raise ServiceUnavailableError(str(exc)) from exc
 
-        identifiers = [d.about_entity_mention for d in page.results]
-        entity_mentions = await self._entity_mention_repository.find_by_identifiers(
-            identifiers,
-        )
         mention_map = self._index_by_identifier(entity_mentions)
 
         decision_summaries = [

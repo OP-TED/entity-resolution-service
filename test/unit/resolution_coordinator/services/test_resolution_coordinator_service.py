@@ -717,3 +717,97 @@ class TestResolveSingleServiceUnavailable:
         _, outcome = await svc.resolve_single(make_entity_mention())
 
         assert outcome == ResolutionOutcome.PROVISIONAL
+
+    async def test_mongo_down_at_idempotency_read_raises_service_unavailable(
+        self, coordinator, registry_svc, decision_svc, publish_svc
+    ):
+        """C1 (i): Mongo outage during the idempotency-check read before publish.
+
+        Per the (a) decision (2026-05-05), all infrastructure outages on the
+        resolve path must surface as ``ServiceUnavailableError`` (HTTP 503),
+        never as a raw ``RepositoryConnectionError`` or ``ConnectionFailure``.
+        """
+        registry_svc.register_resolution_request.return_value = None
+        decision_svc.get_decision_by_triad.side_effect = RepositoryConnectionError(
+            "Mongo down on idempotency read"
+        )
+
+        with pytest.raises(ServiceUnavailableError):
+            await coordinator.resolve_single(make_entity_mention())
+
+        publish_svc.publish_request.assert_not_called()
+
+    async def test_mongo_down_at_post_waiter_read_raises_service_unavailable(
+        self, monkeypatch, registry_svc, publish_svc, decision_svc
+    ):
+        """C1 (ii): Mongo outage on the post-waiter read inside the publish/wait block.
+
+        After the waiter fires (or times out and falls through to provisional),
+        the coordinator reads the authoritative decision from the store. If that
+        read raises ``RepositoryConnectionError``, it must be translated to
+        ``ServiceUnavailableError``.
+        """
+        monkeypatch.setattr(
+            "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+            type("C", (), {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0.5,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+            })(),
+        )
+        real_waiter = AsyncResolutionWaiter()
+        svc = ResolutionCoordinatorService(
+            registry_svc, publish_svc, decision_svc, real_waiter
+        )
+
+        # First read (idempotency check) returns None — proceed to publish/wait.
+        # Second read (post-waiter) raises connection error — must be translated.
+        decision_svc.get_decision_by_triad.side_effect = [
+            None,
+            RepositoryConnectionError("Mongo down on post-waiter read"),
+        ]
+
+        async def _signal_then_yield(*args, **kwargs):
+            entity_mention = args[0]
+            triad = entity_mention.entity_mention.identifiedBy
+            triad_key = (
+                f"{triad.source_id}{triad.request_id}{triad.entity_type}"
+            )
+            await real_waiter.notify(triad_key)
+
+        publish_svc.publish_request.side_effect = _signal_then_yield
+
+        with pytest.raises(ServiceUnavailableError):
+            await svc.resolve_single(make_entity_mention())
+
+    async def test_mongo_down_on_stale_recovery_read_raises_service_unavailable(
+        self, monkeypatch, registry_svc, publish_svc, decision_svc
+    ):
+        """C1 (iii): Mongo outage on the recovery read inside ``_issue_provisional``.
+
+        When ``store_decision`` raises ``StaleOutcomeError``, the coordinator
+        reads the existing (newer) decision the integrator wrote. If THAT read
+        fails with a connection error, the failure must surface as
+        ``ServiceUnavailableError``, not as a raw ``RepositoryConnectionError``.
+        """
+        monkeypatch.setattr(
+            "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+            type("C", (), {
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0.05,
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+            })(),
+        )
+        real_waiter = AsyncResolutionWaiter()
+        svc = ResolutionCoordinatorService(
+            registry_svc, publish_svc, decision_svc, real_waiter
+        )
+        # Idempotency read returns None; provisional store raises Stale; recovery read fails.
+        decision_svc.get_decision_by_triad.side_effect = [
+            None,
+            RepositoryConnectionError("Mongo down on stale-recovery read"),
+        ]
+        decision_svc.store_decision.side_effect = StaleOutcomeError(
+            "SRC", "req-001", "Organization", "stored-ts", "attempted-ts"
+        )
+
+        with pytest.raises(ServiceUnavailableError):
+            await svc.resolve_single(make_entity_mention())

@@ -3,6 +3,7 @@
 from erspec.models.core import Decision, EntityMentionIdentifier
 
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+from ers.commons.services.exceptions import ServiceUnavailableError
 from ers.ers_rest_api.domain.errors import ErrorCode, ErrorResponse
 from ers.ers_rest_api.domain.resolution import (
     BulkResolveRequest,
@@ -26,14 +27,26 @@ def _map_decision(
     )
 
 
+def _error_code_for(exc: BaseException) -> ErrorCode:
+    if isinstance(exc, ServiceUnavailableError):
+        return ErrorCode.SERVICE_UNAVAILABLE
+    return ErrorCode.SERVICE_ERROR
+
+
 def _map_error(
     identifier: EntityMentionIdentifier, exc: BaseException
 ) -> EntityMentionResolutionResult:
-    """Map a failed resolution to an error result DTO."""
+    """Map a failed resolution to an error result DTO.
+
+    Infrastructure outages (``ServiceUnavailableError``) surface as
+    ``SERVICE_UNAVAILABLE`` so bulk clients can distinguish a backend outage
+    from an arbitrary per-item failure. All other exception types collapse to
+    the generic ``SERVICE_ERROR`` code.
+    """
     return EntityMentionResolutionResult(
         identified_by=identifier,
         error=ErrorResponse(
-            error_code=ErrorCode.SERVICE_ERROR,
+            error_code=_error_code_for(exc),
             message=(
                 f"Failed to resolve mention ({identifier.source_id}, "
                 f"{identifier.request_id}, {identifier.entity_type}): {exc}"
