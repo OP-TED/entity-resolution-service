@@ -62,9 +62,15 @@ DocumentDB does not support `$text` or text indexes at all. The legacy `resoluti
 
 Trade-off: `$regex` has no linguistic stemming or scoring. For the curation UI use case (human-in-the-loop, small result sets) this is acceptable. If full-text relevance is needed in the future, DocumentDB would require Atlas Search (Mongo only) or an external service like OpenSearch.
 
-### Known minor item (not addressed here)
+### Cursor pagination — `$gt: None` over `$ne: None`
 
-`commons/adapters/decision_repository.py::_build_cursor_condition` uses `{sort_field: {$ne: None}}` in the rare branch that handles "advance past the null tier when ascending and last seen value was null". This is a shared cursor utility used by curation and the decision store. The `$ne` operator works correctly on DocumentDB but does not use indexes well. The branch only runs when paginating ascending over a sortable field whose first tier is null-valued — uncommon in our queries (the partial index keeps null-valued rows out of the delta scan entirely). Left untouched to avoid disturbing shared infrastructure.
+`commons/adapters/decision_repository.py::_build_cursor_condition` previously used `{sort_field: {$ne: None}}` in the branch that advances pagination past the null tier when ascending. The operator was correct but did not use indexes on DocumentDB.
+
+It has been replaced with `{sort_field: {$gt: None}}`. In BSON sort order null is the smallest type, so `$gt: null` matches every document whose field is non-null and present — identical semantic to `$ne: null` but `$gt` is a range predicate that uses field indexes on MongoDB, FerretDB, and DocumentDB.
+
+### Known minor items (left untouched)
+
+- `users/adapters/user_repository.py::find_paginated` uses `{$regex: <input>, $options: "i"}` for case-insensitive email search. Works correctly on all engines but does not use indexes (the same on MongoDB and DocumentDB). Acceptable for the small admin/users collection. A proper performance fix would normalize emails to a lowercase indexed field — out of scope for ERS1-214.
 
 ## Out of Scope
 
