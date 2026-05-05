@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 import redis.asyncio as aioredis
 from erspec.models.ere import ERERequest, EREResponse
 from redis.exceptions import ConnectionError as _RedisLibConnectionError
+from redis.exceptions import TimeoutError as _RedisLibTimeoutError
 
 from ers.commons.adapters.redis_messages import get_response_from_message
 
@@ -225,11 +226,13 @@ class RedisEREClient(AbstractClient):
             triad_key: Notification payload — concatenated source_id + request_id + entity_type.
 
         Raises:
-            ConnectionError: If the Redis connection is unavailable.
+            ConnectionError: If the Redis connection is unavailable or the
+                command times out (covers both the disconnected and the
+                slow-failover scenarios).
         """
         try:
             await self._redis_client.publish(channel, triad_key)
-        except _RedisLibConnectionError as exc:
+        except (_RedisLibConnectionError, _RedisLibTimeoutError) as exc:
             raise ConnectionError(str(exc)) from exc
 
     async def ping(self) -> bool:
