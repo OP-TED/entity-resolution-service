@@ -27,13 +27,14 @@ class MongoClientManager:
         return self._client[self._database_name]
 
     async def ensure_indexes(self) -> None:
-        """Create required indexes on the database collections."""
-        db = self.get_database()
+        """Create required indexes on the database collections.
 
-        await db["resolution_requests"].create_index(
-            [("content", "text"), ("parsed_representation", "text")],
-            name="resolution_requests_text",
-        )
+        Note: no MongoDB ``text`` index is created here. Curation's substring
+        search uses ``$regex`` (see ``MongoEntityMentionCurationRepository``)
+        for cross-engine portability — text indexes are not supported on
+        Amazon DocumentDB.
+        """
+        db = self.get_database()
 
         await db["decisions"].create_index(
             "about_entity_mention",

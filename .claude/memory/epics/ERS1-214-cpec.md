@@ -20,6 +20,52 @@ This ticket covers two coupled changes that together implement the desired contr
 
 No data migration is required — no production data exists yet.
 
+## DocumentDB Cross-Engine Compatibility
+
+The Decision Store changes target three Mongo-compatible engines: MongoDB, FerretDB (used in dev), and Amazon DocumentDB. DocumentDB has the strictest operator subset of the three. The ERS1-214 changes are written to work cleanly on all three:
+
+### R2 stale filter
+
+The stale filter is a flat two-branch `$or` with no nested `$and`/`$or` and no `$exists: false`:
+
+```python
+"$or": [
+    {"updated_at": {"$lt": updated_at}},                              # already moved
+    {"updated_at": None, "created_at": {"$lt": updated_at}},          # never moved
+]
+```
+
+Relies on the MongoDB-family rule that `{field: None}` matches both null AND missing fields — supported identically on all three engines.
+
+### R3 cold-start delta filter
+
+The cold-start filter on `updated_at` is `{$exists: True}` only — no `$ne`:
+
+```python
+query[_FIELD_UPDATED_AT] = {"$exists": True}
+```
+
+This is sufficient because the insert path (R1) **omits** `updated_at` entirely; nothing in the codebase ever stores `{updated_at: null}` explicitly. The query then aligns exactly with the partial index `partialFilterExpression: {updated_at: {$exists: true}}`, so DocumentDB's planner reliably picks the index. Avoids `$ne` (DocumentDB does not use indexes well for `$ne`).
+
+### Curation text search
+
+`MongoEntityMentionCurationRepository.search_identifiers` was rewritten to use `$regex` over `$or` of two fields rather than MongoDB's `$text` operator:
+
+```python
+{"$or": [
+    {"content": {"$regex": pattern, "$options": "i"}},
+    {"parsed_representation": {"$regex": pattern, "$options": "i"}},
+]}
+```
+
+DocumentDB does not support `$text` or text indexes at all. The legacy `resolution_requests_text` text index has been dropped from `MongoClientManager.ensure_indexes` (and the integration test fixture). Search returns documents whose `content` or `parsed_representation` contains the literal substring. The pattern is `re.escape`d to prevent metacharacter injection.
+
+Trade-off: `$regex` has no linguistic stemming or scoring. For the curation UI use case (human-in-the-loop, small result sets) this is acceptable. If full-text relevance is needed in the future, DocumentDB would require Atlas Search (Mongo only) or an external service like OpenSearch.
+
+### Known minor item (not addressed here)
+
+`commons/adapters/decision_repository.py::_build_cursor_condition` uses `{sort_field: {$ne: None}}` in the rare branch that handles "advance past the null tier when ascending and last seen value was null". This is a shared cursor utility used by curation and the decision store. The `$ne` operator works correctly on DocumentDB but does not use indexes well. The branch only runs when paginating ascending over a sortable field whose first tier is null-valued — uncommon in our queries (the partial index keeps null-valued rows out of the delta scan entirely). Left untouched to avoid disturbing shared infrastructure.
+
 ## Out of Scope
 
 - Curator-override write paths (do not exist yet; the rule below applies to them once introduced).

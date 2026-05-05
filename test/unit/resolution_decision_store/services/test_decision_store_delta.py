@@ -164,8 +164,15 @@ def _make_cursor_mock(docs):
 
 
 @pytest.mark.asyncio
-async def test_cold_start_filter_uses_ne_null(mock_repo):
-    """U-07: cold-start (updated_since=None) filters updated_at to $ne: None, $exists: True."""
+async def test_cold_start_filter_uses_exists_true(mock_repo):
+    """U-07: cold-start (updated_since=None) filters updated_at to $exists: True only.
+
+    DocumentDB compatibility — ``$exists: True`` alone is sufficient because
+    the insert path omits ``updated_at`` entirely (R1). The query then aligns
+    exactly with the partial index ``partialFilterExpression`` so any planner
+    can use the index, and we avoid the ``$ne`` operator (DocumentDB does not
+    use indexes well for ``$ne``).
+    """
     from unittest.mock import MagicMock
 
     from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
@@ -180,13 +187,9 @@ async def test_cold_start_filter_uses_ne_null(mock_repo):
 
     call_args = mock_collection.find.call_args
     query = call_args.args[0] if call_args.args else call_args.kwargs.get("filter", {})
-    # The updated_at filter must exclude None and require the field to exist
     updated_at_filter = query.get("updated_at", {})
-    assert updated_at_filter.get("$ne") is None, (
-        "Cold-start filter must have $ne: None on updated_at"
-    )
-    assert updated_at_filter.get("$exists") is True, (
-        "Cold-start filter must have $exists: True on updated_at"
+    assert updated_at_filter == {"$exists": True}, (
+        "Cold-start filter must be exactly {$exists: True} (no $ne, no nesting)"
     )
 
 

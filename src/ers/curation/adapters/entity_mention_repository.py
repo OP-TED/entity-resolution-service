@@ -1,3 +1,4 @@
+import re
 from abc import abstractmethod
 
 from erspec.models.core import EntityMention, EntityMentionIdentifier
@@ -11,7 +12,7 @@ from ers.request_registry.adapters.records_repository import (
 class EntityMentionCurationRepository(ResolutionRequestRepository):
     """Repository for entity mention retrieval in curation.
 
-    Extends ``ResolutionRequestRepository`` with batch-fetch and full-text
+    Extends ``ResolutionRequestRepository`` with batch-fetch and substring
     search capabilities needed by curation services.
     """
 
@@ -28,7 +29,7 @@ class EntityMentionCurationRepository(ResolutionRequestRepository):
         self,
         text: str,
     ) -> list[EntityMentionIdentifier]:
-        """Full-text search entity mentions and return matching identifiers."""
+        """Substring-search entity mentions and return matching identifiers."""
 
 
 class MongoEntityMentionCurationRepository(
@@ -49,8 +50,28 @@ class MongoEntityMentionCurationRepository(
         self,
         text: str,
     ) -> list[EntityMentionIdentifier]:
+        """Case-insensitive substring search across content + parsed_representation.
+
+        Uses ``$regex`` with ``$or`` rather than MongoDB's ``$text`` operator so
+        the same query runs unchanged on MongoDB, FerretDB, and Amazon
+        DocumentDB. DocumentDB does not support text indexes or the ``$text``
+        operator at all; ``$regex`` is the cross-engine portable choice.
+
+        Trade-off: ``$regex`` does not provide linguistic stemming, scoring, or
+        result ranking — it returns documents whose ``content`` or
+        ``parsed_representation`` contains the literal substring (escaped
+        before regex compilation to avoid metacharacter injection).
+        """
+        if not text:
+            return []
+        pattern = re.escape(text)
         cursor = self._collection.find(
-            {"$text": {"$search": text}},
+            {
+                "$or": [
+                    {"content": {"$regex": pattern, "$options": "i"}},
+                    {"parsed_representation": {"$regex": pattern, "$options": "i"}},
+                ]
+            },
             projection={"identifiedBy": 1, "_id": 0},
         )
         return [EntityMentionIdentifier.model_validate(doc["identifiedBy"]) async for doc in cursor]

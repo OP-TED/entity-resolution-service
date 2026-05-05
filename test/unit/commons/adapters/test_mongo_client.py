@@ -61,11 +61,13 @@ class TestEnsureIndexes:
 
         await manager.ensure_indexes()
 
-        assert mock_collection.create_index.await_count == 4
+        # No MongoDB text index — DocumentDB does not support text indexes;
+        # curation substring search uses $regex instead.
+        assert mock_collection.create_index.await_count == 3
 
         index_calls = mock_collection.create_index.call_args_list
         index_names = {call.kwargs["name"] for call in index_calls}
-        assert "resolution_requests_text" in index_names
+        assert "resolution_requests_text" not in index_names
         assert "decisions_about_entity_mention" in index_names
         assert "users_email_unique" in index_names
         assert "resolution_requests_source_received_at" in index_names

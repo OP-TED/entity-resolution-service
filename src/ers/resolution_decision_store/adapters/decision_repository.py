@@ -206,22 +206,21 @@ class MongoDecisionRepository(
         This protects against out-of-order ERE deliveries where a newer outcome
         arrives first and a later, older-timestamped outcome must not overwrite
         it.
+
+        DocumentDB compatibility: the filter is a flat two-branch disjunction
+        with no nested ``$and``/``$or`` and no ``$exists: false``. We rely on
+        the MongoDB-family query semantics that ``{field: None}`` matches both
+        explicitly null fields AND missing fields, so ``{"updated_at": None}``
+        on the second branch covers the never-updated insert state.
         """
         stale_filter = {
             "_id": triad_hash,
             "$or": [
-                # Already-updated record: stale iff incoming <= stored updated_at
+                # Already-updated record: stale iff incoming <= stored updated_at.
                 {"updated_at": {"$lt": updated_at}},
-                # Never-updated record (insert path output): fall back to created_at
-                {
-                    "$and": [
-                        {"$or": [
-                            {"updated_at": {"$exists": False}},
-                            {"updated_at": None},
-                        ]},
-                        {"created_at": {"$lt": updated_at}},
-                    ]
-                },
+                # Never-updated record (insert path leaves updated_at absent):
+                # fall back to comparing against created_at.
+                {"updated_at": None, "created_at": {"$lt": updated_at}},
             ],
         }
         try:
@@ -463,7 +462,11 @@ class MongoDecisionRepository(
             query[_FIELD_UPDATED_AT] = {"$gt": updated_since}
         else:
             # Cold-start: only return decisions that have moved at least once.
-            query[_FIELD_UPDATED_AT] = {"$ne": None, "$exists": True}
+            # The insert path omits ``updated_at`` entirely (R1), so ``$exists: true``
+            # alone is sufficient — it matches exactly the decisions in the
+            # ``idx_decision_store_delta`` partial index, letting any reasonable
+            # planner (MongoDB / FerretDB / DocumentDB) use that index.
+            query[_FIELD_UPDATED_AT] = {"$exists": True}
 
         sort_field = _FIELD_UPDATED_AT
         sort = [(_FIELD_UPDATED_AT, 1), ("_id", 1)]
