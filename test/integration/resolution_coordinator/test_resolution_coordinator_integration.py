@@ -373,29 +373,30 @@ async def test_it007_bulk_refresh_delta(registry_service, decision_service, bulk
     )
     await repo.store(rec)
 
-    snapshot_time = datetime.now(UTC)
     decision_repo = MongoDecisionRepository(mongo_db)
 
-    # Store 2 decisions before snapshot (old).
-    for i in range(2):
-        ident = make_identifier(source=source_id, req=f"req-old-{i}")
+    # Step 1: Insert 5 decisions (all first-time → updated_at=None per R1).
+    for i in range(5):
+        ident = make_identifier(source=source_id, req=f"req-{i}")
         cluster = ClusterReference(
-            cluster_id=f"cl-old-{i}", confidence_score=0.9, similarity_score=0.85
+            cluster_id=f"cl-initial-{i}", confidence_score=0.9, similarity_score=0.85
         )
         await decision_repo.upsert_decision(
-            ident, cluster, [cluster], snapshot_time - timedelta(minutes=5)
+            ident, cluster, [cluster], datetime.now(UTC) - timedelta(minutes=10)
         )
 
-    await asyncio.sleep(0.01)  # Ensure updated_at is strictly after snapshot_time.
+    # Snapshot taken after initial inserts (all have updated_at=None, not in warm delta).
+    snapshot_time = datetime.now(UTC)
+    await asyncio.sleep(0.01)  # Ensure subsequent updates are strictly after snapshot.
 
-    # Store 3 decisions after snapshot (new).
+    # Step 2: Update 3 of the 5 decisions with a new placement (sets updated_at > snapshot_time).
     for i in range(3):
-        ident = make_identifier(source=source_id, req=f"req-new-{i}")
-        cluster = ClusterReference(
+        ident = make_identifier(source=source_id, req=f"req-{i}")
+        new_cluster = ClusterReference(
             cluster_id=f"cl-new-{i}", confidence_score=0.9, similarity_score=0.85
         )
         await decision_repo.upsert_decision(
-            ident, cluster, [cluster], snapshot_time + timedelta(seconds=1)
+            ident, new_cluster, [new_cluster], datetime.now(UTC)
         )
 
     # Set lookup state to snapshot_time.
@@ -408,6 +409,7 @@ async def test_it007_bulk_refresh_delta(registry_service, decision_service, bulk
 
     page = await bulk_refresh.refresh_bulk(source_id)
 
+    # Warm delta: only decisions updated after snapshot_time are returned (3 out of 5)
     assert len(page.results) == 3
     cluster_ids = {r.current_placement.cluster_id for r in page.results}
     assert cluster_ids == {"cl-new-0", "cl-new-1", "cl-new-2"}
@@ -438,7 +440,7 @@ async def test_it008_bulk_refresh_first_lookup(
     )
     await repo.store(rec)
 
-    # Store 4 decisions.
+    # Store 4 decisions (first-time inserts → updated_at=None per R1).
     decision_repo = MongoDecisionRepository(mongo_db)
     for i in range(4):
         ident = make_identifier(source=source_id, req=f"req-{i}")
@@ -449,7 +451,10 @@ async def test_it008_bulk_refresh_first_lookup(
 
     page = await bulk_refresh.refresh_bulk(source_id)
 
-    assert len(page.results) == 4
+    # AC4: cold-start returns empty when all decisions have updated_at=None
+    # (no placement changes have occurred yet)
+    assert len(page.results) == 0
+    assert page.next_cursor is None
 
 
 # ---------------------------------------------------------------------------

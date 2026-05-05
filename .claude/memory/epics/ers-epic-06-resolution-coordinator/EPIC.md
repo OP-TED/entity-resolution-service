@@ -325,7 +325,7 @@ Both ERS and ERE implement the same derivation rule (ADR-A1N).
 | IT-005 | Concurrent identical requests | MongoDB + Redis | Submit 5 identical requests concurrently → all 5 return same decision; exactly 1 ERE publish | Drop test collections; flush Redis |
 | IT-006 | Bulk decomposition | MongoDB + Redis | Submit 3 mentions → 3 independent decisions returned | Drop test collections; flush Redis |
 | IT-007 | Bulk refresh — delta (Spine C) | MongoDB; pre-seed 5 decisions, 3 updated after snapshot | `refresh_bulk` → delta returns only the 3 updated decisions; snapshot advanced | Drop test collections |
-| IT-008 | Bulk refresh — first lookup (Spine C) | MongoDB; no prior snapshot | `refresh_bulk` with `cursor=None` → all decisions for source returned | Drop test collections |
+| IT-008 | Bulk refresh — first lookup (Spine C) | MongoDB; no prior snapshot | `refresh_bulk` with `cursor=None` → only decisions whose `updated_at` is non-null returned (cold-start filter, ERS1-214). Decisions still on their initial placement (`updated_at=None`) are NOT included. | Drop test collections |
 | IT-009 | Bulk refresh — unknown source (Spine C) | MongoDB; no requests for source | `refresh_bulk` → `SourceNotFoundException` raised | Drop test collections |
 
 ---
@@ -410,7 +410,7 @@ File: `tests/feature/resolution_coordinator/test_bulk_lookup.feature`
 
 | Scenario | Description |
 |----------|-------------|
-| First-time lookup returns all decisions | No prior snapshot → all decisions for source returned |
+| First-time lookup returns only changed decisions | No prior snapshot → only decisions whose `updated_at` is non-null are returned (ERS1-214 cold-start filter); never-changed placements are excluded |
 | Delta lookup returns only changed decisions | Prior snapshot exists → only decisions updated after snapshot returned |
 | Empty delta still advances snapshot | No decisions updated since snapshot → empty page, snapshot advanced |
 | Unknown source raises error | Source has no requests in registry → `SourceNotFoundException` raised |
