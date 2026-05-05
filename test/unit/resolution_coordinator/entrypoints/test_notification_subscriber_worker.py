@@ -1,5 +1,6 @@
 """Unit tests for NotificationSubscriberWorker."""
 import asyncio
+import contextlib
 import logging
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -232,3 +233,44 @@ class TestReconnect:
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
+
+
+class TestCleanup:
+    async def test_aclose_runs_even_when_unsubscribe_raises_cancelled(self):
+        """A CancelledError raised by unsubscribe must not skip aclose.
+
+        Pre-fix: contextlib.suppress(Exception) does not catch CancelledError on
+        Python 3.11+, so a cancel mid-unsubscribe leaks the Redis connection.
+        """
+        worker = make_worker()
+        mock_pubsub = MagicMock()
+        mock_pubsub.subscribe = AsyncMock()
+        mock_pubsub.unsubscribe = AsyncMock(side_effect=asyncio.CancelledError())
+        mock_pubsub.listen = lambda: one_message_generator(make_message("k"))
+
+        mock_redis = MagicMock()
+        mock_redis.pubsub.return_value = mock_pubsub
+        mock_redis.aclose = AsyncMock()
+
+        with patch(_PATCH_TARGET, return_value=mock_redis):
+            with contextlib.suppress(asyncio.CancelledError):
+                await worker.run()
+
+        mock_redis.aclose.assert_awaited()
+
+    async def test_aclose_runs_even_when_unsubscribe_raises_exception(self):
+        """An ordinary Exception during unsubscribe must not skip aclose."""
+        worker = make_worker()
+        mock_pubsub = MagicMock()
+        mock_pubsub.subscribe = AsyncMock()
+        mock_pubsub.unsubscribe = AsyncMock(side_effect=RuntimeError("boom"))
+        mock_pubsub.listen = lambda: one_message_generator(make_message("k"))
+
+        mock_redis = MagicMock()
+        mock_redis.pubsub.return_value = mock_pubsub
+        mock_redis.aclose = AsyncMock()
+
+        with patch(_PATCH_TARGET, return_value=mock_redis):
+            await worker.run()
+
+        mock_redis.aclose.assert_awaited()
