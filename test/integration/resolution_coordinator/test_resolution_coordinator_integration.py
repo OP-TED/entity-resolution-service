@@ -19,6 +19,7 @@ from ers.commons.adapters.hasher import SHA256ContentHasher
 from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.commons.adapters.redis_client import RedisEREClient
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+from ers.commons.services.exceptions import ServiceUnavailableError
 from ers.ere_contract_client.domain.errors import RedisConnectionError
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.request_registry.adapters.records_repository import (
@@ -188,15 +189,15 @@ async def test_it002_timeout_issues_provisional(coordinator, decision_service):
 
 
 # ---------------------------------------------------------------------------
-# IT-003: Redis down → provisional returned and persisted
+# IT-003: Redis down → ServiceUnavailableError raised
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
-async def test_it003_redis_down_issues_provisional(
+async def test_it003_redis_down_raises_service_unavailable(
     registry_service, decision_service, waiter
 ):
-    """IT-003: Redis unavailable → provisional returned and persisted in MongoDB."""
+    """IT-003: Redis unavailable → ServiceUnavailableError raised (no provisional written)."""
     failing_publish = AsyncMock(spec=EREPublishService)
     failing_publish.publish_request = AsyncMock(
         side_effect=RedisConnectionError("connection refused")
@@ -208,14 +209,8 @@ async def test_it003_redis_down_issues_provisional(
             decision_store_service=decision_service,
             waiter=waiter,
         )
-        decision, outcome = await svc.resolve_single(make_mention(req="req-it-003"))
-
-    expected_prov_id = derive_provisional_cluster_id(make_identifier(req="req-it-003"))
-    assert outcome == ResolutionOutcome.PROVISIONAL
-    assert decision.current_placement.cluster_id == expected_prov_id
-
-    stored = await decision_service.get_decision_by_triad(make_identifier(req="req-it-003"))
-    assert stored is not None
+        with pytest.raises(ServiceUnavailableError):
+            await svc.resolve_single(make_mention(req="req-it-003"))
 
 
 # ---------------------------------------------------------------------------
