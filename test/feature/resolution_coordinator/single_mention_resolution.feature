@@ -17,7 +17,7 @@ Feature: Resolve a Single Entity Mention (Spine A Intake)
       | source_id | request_id | ere_condition                                       | outcome                                        |
       | SYSTEM_A  | req-001    | the ERE responds within the execution window        | the canonical cluster identifier is returned   |
       | SYSTEM_A  | req-002    | the ERE does not respond within the execution window | a provisional singleton identifier is returned |
-      | SYSTEM_A  | req-003    | the messaging channel is unavailable                | a provisional singleton identifier is returned |
+      | SYSTEM_A  | req-003    | the messaging channel is unavailable                | a service unavailable error is raised          |
 
   Scenario: Return the existing ERE decision when a provisional write races with an ERE outcome
     Given a valid entity mention with correlation triad ("SYSTEM_B", "req-004", "Organization")
@@ -55,7 +55,7 @@ Feature: Resolve a Single Entity Mention (Spine A Intake)
     Given a valid entity mention with correlation triad ("SYSTEM_F", "req-040", "Organization")
     And the Decision Store is unavailable
     When the resolution request is submitted
-    Then a resolution timeout error is raised
+    Then a service unavailable error is raised
 
   Scenario: Issue provisional immediately when time budget is zero
     Given a valid entity mention with correlation triad ("SYSTEM_Z", "req-100", "Organization")

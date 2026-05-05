@@ -81,12 +81,17 @@ Authenticate and receive access + refresh tokens.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 401
 | Unauthorized
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
+
+
+| 403
+| User account is deactivated
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -147,12 +152,12 @@ Exchange a refresh token for a new token pair.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 401
 | Unauthorized
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -213,12 +218,12 @@ Register a new user account.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 409
 | Conflict
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -283,7 +288,7 @@ Accept multiple decisions in a single request.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -363,12 +368,17 @@ Get alternative canonical entities for a given decision.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 404
 | Not Found
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
+
+
+| 503
+| MongoDB unavailable
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -430,17 +440,17 @@ Accept the proposed canonical entity match.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 404
 | Not Found
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 409
 | Conflict
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -515,17 +525,17 @@ Assign the subject entity mention to a specific cluster.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 404
 | Not Found
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 409
 | Conflict
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -587,17 +597,17 @@ Reject the proposed canonical entity match.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 404
 | Not Found
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 409
 | Conflict
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -706,7 +716,12 @@ Retrieve cursor-paginated list of decisions with optional filtering.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
+
+
+| 503
+| MongoDB unavailable
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -767,12 +782,17 @@ Get the proposed canonical entity for a given decision.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 404
 | Not Found
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
+
+
+| 503
+| MongoDB unavailable
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -833,7 +853,55 @@ Reject multiple decisions in a single request.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
+
+|===
+
+
+
+[.EntityTypes]
+=== EntityTypes
+
+
+[.entityTypesApiV1CurationEntityTypesGet]
+==== GET /api/v1/curation/entity-types
+
+List Entity Types
+
+===== Description
+
+Return the list of configured entity types.
+
+
+===== Parameters
+
+
+
+
+
+
+
+===== Return Type
+
+
+`List`
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Successful Response
+| List[`string`]
 
 |===
 
@@ -958,7 +1026,12 @@ Retrieve registry statistics and curation statistics with optional filtering.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
+
+
+| 503
+| MongoDB unavailable
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -1042,12 +1115,12 @@ Get paginated candidate cluster previews with top entity mentions.
 
 | 403
 | Forbidden
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 404
 | Not Found
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -1108,12 +1181,12 @@ Get the selected cluster preview with top entity mentions.
 
 | 403
 | Forbidden
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 404
 | Not Found
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -1210,12 +1283,17 @@ List cursor-paginated user actions with optional filtering.
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 403
 | Forbidden
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
+
+
+| 503
+| MongoDB unavailable
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -1267,7 +1345,7 @@ Get current authenticated user.
 
 | 401
 | Unauthorized
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -1328,17 +1406,17 @@ Create a new user (admin only).
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 403
 | Forbidden
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 409
 | Conflict
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -1412,22 +1490,22 @@ Update user flags (admin only).
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 403
 | Forbidden
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 404
 | Not Found
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 409
 | Conflict
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -1500,12 +1578,12 @@ List all users (verified users).
 
 | 400
 | Bad Request
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 
 | 403
 | Forbidden
-| <<ErrorResponse,ErrorResponse>>
+| <<CurationErrorResponse,CurationErrorResponse>>
 
 |===
 
@@ -1658,7 +1736,7 @@ Result of a single decision within a bulk action.
 | 
 | X
 |  `String`
-| Human-readable explanation when the status is not success.
+| 
 |     
 
 |===
@@ -1821,6 +1899,73 @@ Admin request to create a user.
 
 
 
+[#CurationErrorCode]
+=== CurationErrorCode
+
+Machine-readable error codes returned in Curation API error responses.
+
+
+
+
+[.fields-CurationErrorCode]
+[cols="1"]
+|===
+| Enum Values
+
+| VALIDATION_ERROR
+| NOT_FOUND
+| AUTHENTICATION_ERROR
+| AUTHORIZATION_ERROR
+| CONFLICT
+| APPLICATION_ERROR
+| SERVICE_UNAVAILABLE
+| SERVICE_ERROR
+
+|===
+
+
+[#CurationErrorResponse]
+=== CurationErrorResponse
+
+Standard error response body returned by all Curation API endpoints.
+
+The &#x60;&#x60;request_id&#x60;&#x60; field carries the ERS business UUID set by the request
+middleware (&#x60;&#x60;set_request_id&#x60;&#x60; in &#x60;&#x60;ers.commons.adapters.tracing&#x60;&#x60;). It is
+populated only by handlers that have access to that context — primarily the
+&#x60;&#x60;Exception&#x60;&#x60; (HTTP 500) handler — and is &#x60;&#x60;None&#x60;&#x60; on responses produced
+before the middleware ran or by handlers that do not need correlation.
+
+
+[.fields-CurationErrorResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| error_code
+| X
+| 
+| <<CurationErrorCode,CurationErrorCode>>
+| 
+|    VALIDATION_ERROR, NOT_FOUND, AUTHENTICATION_ERROR, AUTHORIZATION_ERROR, CONFLICT, APPLICATION_ERROR, SERVICE_UNAVAILABLE, SERVICE_ERROR,  
+
+| message
+| X
+| 
+|  `String`
+| Human-readable explanation of the error.
+|     
+
+| request_id
+| 
+| X
+|  `String`
+| 
+|     
+
+|===
+
+
+
 [#CurationStatistics]
 === CurationStatistics
 
@@ -1893,7 +2038,7 @@ Statistics about the curation process based on UserAction counts.
 | 
 | X
 |  `String`
-| Opaque cursor to fetch the next page, or null if there are no more pages.
+| 
 |     
 
 |===
@@ -1929,7 +2074,7 @@ Statistics about the curation process based on UserAction counts.
 | 
 | X
 |  `String`
-| Opaque cursor to fetch the next page, or null if there are no more pages.
+| 
 |     
 
 |===
@@ -2002,7 +2147,7 @@ Decision summary for list display.
 | 
 | X
 |  `Date`
-| Timestamp of the last update to this decision.
+| 
 | date-time    
 
 |===
@@ -2073,29 +2218,7 @@ Lightweight entity mention projection for display.
 | 
 | X
 |  `Map` of `AnyType`
-| Parsed key-value representation of the entity mention.
-|     
-
-|===
-
-
-
-[#ErrorResponse]
-=== ErrorResponse
-
-Standard error response body for OpenAPI documentation.
-
-
-[.fields-ErrorResponse]
-[cols="2,1,1,2,4,1"]
-|===
-| Field Name| Required| Nullable | Type| Description | Format
-
-| detail
-| X
 | 
-|  `String`
-| Human-readable description of the error.
 |     
 
 |===
@@ -2190,14 +2313,14 @@ Request body for user login.
 | 
 | X
 |  `Integer`
-| Previous page number, or null if on the first page.
+| 
 |     
 
 | next
 | 
 | X
 |  `Integer`
-| Next page number, or null if on the last page.
+| 
 |     
 
 | results
@@ -2233,14 +2356,14 @@ Request body for user login.
 | 
 | X
 |  `Integer`
-| Previous page number, or null if on the first page.
+| 
 |     
 
 | next
 | 
 | X
 |  `Integer`
-| Next page number, or null if on the last page.
+| 
 |     
 
 | results
@@ -2557,7 +2680,7 @@ Authenticated user context carried through the request lifecycle.
 [#UserPatchRequest]
 === UserPatchRequest
 
-Admin request to update user flags.
+Admin request to update user attributes.
 
 
 [.fields-UserPatchRequest]
@@ -2569,21 +2692,28 @@ Admin request to update user flags.
 | 
 | X
 |  `Boolean`
-| Set to true to enable the account or false to disable it.
+| 
 |     
 
 | is_superuser
 | 
 | X
 |  `Boolean`
-| Set to true to grant or false to revoke superuser privileges.
+| 
 |     
 
 | is_verified
 | 
 | X
 |  `Boolean`
-| Set to true to mark the email as verified or false to unverify.
+| 
+|     
+
+| password
+| 
+| X
+|  `String`
+| 
 |     
 
 |===
@@ -2647,7 +2777,7 @@ Public user representation (no password).
 | 
 | X
 |  `Date`
-| Timestamp of the last update to the user account.
+| 
 | date-time    
 
 |===

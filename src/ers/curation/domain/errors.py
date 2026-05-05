@@ -1,4 +1,4 @@
-"""Error envelope and error codes for the ERS REST API."""
+"""Error envelope and error codes for the Curation API."""
 
 from enum import StrEnum
 
@@ -7,22 +7,21 @@ from pydantic import Field
 from ers.commons.domain.data_transfer_objects import FrozenDTO
 
 
-class ErrorCode(StrEnum):
-    """Machine-readable error codes returned in error responses."""
+class CurationErrorCode(StrEnum):
+    """Machine-readable error codes returned in Curation API error responses."""
 
     VALIDATION_ERROR = "VALIDATION_ERROR"
-    IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
-    PARSING_FAILED = "PARSING_FAILED"
-    MENTION_NOT_FOUND = "MENTION_NOT_FOUND"
-    SOURCE_NOT_FOUND = "SOURCE_NOT_FOUND"
-    SERVICE_ERROR = "SERVICE_ERROR"
-    SERVICE_TIMEOUT = "SERVICE_TIMEOUT"
+    NOT_FOUND = "NOT_FOUND"
+    AUTHENTICATION_ERROR = "AUTHENTICATION_ERROR"
+    AUTHORIZATION_ERROR = "AUTHORIZATION_ERROR"
+    CONFLICT = "CONFLICT"
     APPLICATION_ERROR = "APPLICATION_ERROR"
     SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
+    SERVICE_ERROR = "SERVICE_ERROR"
 
 
-class ErrorResponse(FrozenDTO):
-    """Standard error response body returned by all ERS REST API endpoints.
+class CurationErrorResponse(FrozenDTO):
+    """Standard error response body returned by all Curation API endpoints.
 
     The ``request_id`` field carries the ERS business UUID set by the request
     middleware (``set_request_id`` in ``ers.commons.adapters.tracing``). It is
@@ -31,7 +30,7 @@ class ErrorResponse(FrozenDTO):
     before the middleware ran or by handlers that do not need correlation.
     """
 
-    error_code: ErrorCode
+    error_code: CurationErrorCode
     message: str = Field(description="Human-readable explanation of the error.")
     request_id: str | None = Field(
         default=None,

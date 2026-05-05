@@ -5,7 +5,13 @@
 - **Component:** #6 — Resolution Coordinator
 - **Phase:** Task files written, ready for implementation
 - **Spines:** A (Resolution Intake), B (Async Engine Interaction), C (Bulk Cluster Refresh)
-- **Last updated:** 2026-03-31
+- **Last updated:** 2026-05-05
+
+### Decision history
+
+| Date | Change | PR / Source |
+|------|--------|-------------|
+| 2026-05-05 | **Infrastructure-failure contract clarified to (a):** Redis, channel, and MongoDB unavailability all raise `ServiceUnavailableError` → HTTP 503. The previous "Redis down → graceful provisional degradation" rule is removed. PROVISIONAL outcomes are issued only on **ERE timeout** (the engine was reachable but did not respond within the budget). Treats infrastructure outage as an operational alarm, not a graceful degrade. | PR #97 (`feature/ERS1-213`) — NFR gap remediation |
 - **Dependencies:** EPIC-01 (Request Registry — parse+register bundled), EPIC-03 (ERE Contract Client), EPIC-04 (Resolution Decision Store), EPIC-05 (ERE Result Integrator — `AsyncResolutionWaiter.notify` wired via EPIC-07 lifespan)
 - **Note:** EPIC-02 (RDF Mention Parser) is NOT a direct dependency — `RequestRegistryService.register_resolution_request` embeds RDF parsing internally.
 - **Clarity Gate:** Score: 9.85/10
@@ -60,10 +66,11 @@ The Coordinator does NOT:
 - Separate time budgets: `SINGLE_REQUEST_TIME_BUDGET` (also ERE wait window) and `BULK_REQUEST_TIME_BUDGET`
 - Provisional singleton ID reuse: `derive_provisional_cluster_id` already exists at `ers.resolution_decision_store.adapters.provisional_id` — import, do not redefine
 - Bulk decomposition via `asyncio.gather(..., return_exceptions=True)`
-- Idempotent replay, idempotency conflict detection, graceful Redis degradation
+- Idempotent replay, idempotency conflict detection
+- Infrastructure outages (Redis, channel, MongoDB) translated to `ServiceUnavailableError` (HTTP 503) — see Decision history (2026-05-05)
 - `DecisionStoreService.query_decisions_delta` extension (source + snapshot filter)
 - `RequestRegistryService.source_has_requests` extension (Spine C unknown-source guard)
-- Exception hierarchy: `CoordinatorException` base → `ResolutionTimeoutException`, `ParsingFailedException`, `EnginePublishFailedException`, `SourceNotFoundException`
+- Exception hierarchy: `CoordinatorException` base → `ResolutionTimeoutException`, `ParsingFailedException`, `SourceNotFoundException`. Infrastructure-outage signalling reuses `ServiceUnavailableError` from `ers.commons.services.exceptions` (shared with the curation API).
 - Config via `ERSConfigResolver` (`ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET`, `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET`)
 - OpenTelemetry instrumentation at module-level public functions (not class methods)
 
@@ -73,7 +80,7 @@ The Coordinator does NOT:
 - REST API / HTTP entrypoints (EPIC-07 — wired in T6.7 but not defined here)
 - RDF parsing logic — parsing is embedded in `RequestRegistryService.register_resolution_request`; Coordinator never calls a parser service directly
 - Request Registry, Decision Store, ERE Contract Client internals (EPIC-01, -03, -04)
-- Retry policies for ERE publishing (on failure, issue provisional)
+- Retry policies for ERE publishing (on infrastructure failure, raise `ServiceUnavailableError`; no retries, no provisional fallback)
 - User-initiated curation flows (EPIC-09, Spine D)
 - Authentication / authorisation
 
@@ -120,12 +127,12 @@ Read via `from ers import config` — not injected as a constructor parameter.
 
 | Exception | Raised When |
 |-----------|------------|
-| `ResolutionTimeoutException` | MongoDB unavailable during provisional write (single-mention), OR bulk request time budget expired. Fatal — propagated to caller (EPIC-07 maps to 504). **Not** raised on ERE timeout — that path issues a provisional instead. |
+| `ResolutionTimeoutException` | Bulk request time budget expired. Fatal — propagated to caller (EPIC-07 maps to 504). **Not** raised on ERE timeout (that path issues a provisional) and **not** raised on MongoDB outage (that path raises `ServiceUnavailableError`). |
+| `ServiceUnavailableError` | Any of: MongoDB unreachable on registration / read / decision write, Redis connection failure during publish, ERE messaging channel unavailable. Fatal — propagated to caller (EPIC-07 maps to 503). Defined in `ers.commons.services.exceptions`. |
 | `ParsingFailedException` | `RequestRegistryService.register_resolution_request` raises any parsing error internally. Fatal — request rejected, NOT registered in Request Registry. |
-| `EnginePublishFailedException` | ERE Contract Client (EPIC-03) raises `RedisConnectionError`. Non-fatal — Coordinator issues provisional ID as graceful degradation. |
 | `SourceNotFoundException` | Requested source has no resolution requests in the Request Registry (Spine C only). Fatal — no delta to return. |
 
-All exceptions inherit from a base `CoordinatorException`. Existing exceptions from dependencies (`IdempotencyConflictError` from EPIC-01, `StaleOutcomeError` from EPIC-04) are propagated, not wrapped.
+Coordinator-local exceptions (`ResolutionTimeoutException`, `ParsingFailedException`, `SourceNotFoundException`) inherit from a base `CoordinatorException`. `ServiceUnavailableError` lives in `commons` because it is shared with the curation API and the ERS REST API. Existing exceptions from dependencies (`IdempotencyConflictError` from EPIC-01, `StaleOutcomeError` from EPIC-04) are propagated, not wrapped.
 
 ## 5. Behavioural Specification
 
@@ -140,15 +147,16 @@ flowchart TD
     D -- Yes --> E[Return existing Decision]
     D -- No --> F[Get wait handle from AsyncResolutionWaiter]
     B -- New record --> G[Publish to ERE via Contract Client - EPIC-03]
-    G -- RedisConnectionError --> H[derive_provisional_cluster_id - already in EPIC-04 adapters]
+    G -- RedisConnectionError or ChannelUnavailableError --> Z4[Raise ServiceUnavailableError - 503 fatal]
     G -- Success --> I[Await AsyncResolutionWaiter with SINGLE_REQUEST_TIME_BUDGET timeout]
     I -- ERE responds in time --> J[Read decision from Decision Store]
     J --> K[Return Decision]
-    I -- Timeout --> H
+    I -- Timeout --> H[derive_provisional_cluster_id - already in EPIC-04 adapters]
     H --> L[Store provisional decision in Decision Store - EPIC-04]
-    L -- RepositoryConnectionError --> Z3[Raise ResolutionTimeoutException - fatal]
+    L -- RepositoryConnectionError --> Z3[Raise ServiceUnavailableError - 503 fatal]
     L -- StaleOutcomeError --> J
     L -- Success --> M[Return Decision with provisional ID]
+    B -- RegistryConnectionError or RepositoryConnectionError --> Z4
 ```
 
 **Step-by-step algorithm:**
@@ -163,18 +171,19 @@ flowchart TD
    - If **new record** or **idempotent replay** (same triad, same content, no decision yet): proceed to step 3.
 
 3. **Publish to ERE.** Construct `EntityMentionResolutionRequest` with triad + entity mention. Call `EREPublishService.publish_request(request)`.
-   - If `RedisConnectionError` (Redis down): skip to step 5 (graceful degradation — issue provisional).
+   - If `RedisConnectionError` or `ChannelUnavailableError` (messaging boundary down): raise `ServiceUnavailableError` (503 — fatal). **Do not** issue a provisional. Per the (a) decision (2026-05-05), infrastructure outages are operational alarms, not graceful degrades.
    - If success: proceed to step 4.
 
 4. **Await ERE response.** Call `AsyncResolutionWaiter.get_or_create(triad_key)` → returns an `asyncio.Event`. `await asyncio.wait_for(asyncio.shield(event.wait()), timeout=SINGLE_REQUEST_TIME_BUDGET)`.
    - If **event fires** (EPIC-05 signalled): proceed to step 6.
    - If **timeout** (`asyncio.TimeoutError`): proceed to step 5.
 
-5. **Issue provisional singleton.**
+5. **Issue provisional singleton (ERE-timeout path only).**
+   - Reached **only** when `asyncio.wait_for` raised `TimeoutError` in step 4 — i.e. ERE was reachable but did not respond within the budget. Infrastructure outages do NOT enter this path; they are translated to `ServiceUnavailableError` at the publish boundary in step 3.
    - Call `derive_provisional_cluster_id(identifier)` — already implemented at `ers.resolution_decision_store.adapters.provisional_id`. Do NOT reimplement.
-   - Construct `ClusterReference(cluster_id=provisional_id, confidence_score=1.0, similarity_score=1.0)`.
+   - Construct `ClusterReference(cluster_id=provisional_id, confidence_score=0.0, similarity_score=0.0)`.
    - Call `DecisionStoreService.store_decision(identifier, current=provisional_ref, candidates=[provisional_ref], updated_at=now_utc)`.
-     - If `RepositoryConnectionError` (MongoDB down): raise `ResolutionTimeoutException` (fatal).
+     - If `RepositoryConnectionError` (MongoDB down): raise `ServiceUnavailableError` (503 — fatal).
      - If `StaleOutcomeError` (ERE already wrote a newer decision): catch, fall through to step 6 to read and return the existing decision.
    - Return the `Decision`.
 
@@ -247,10 +256,10 @@ Both ERS and ERE implement the same derivation rule (ADR-A1N).
 |------------|-----------|----------|----------|---------------|
 | RDF parsing failure (embedded in EPIC-01 registration) | `register_resolution_request` raises parsing error | Raise `ParsingFailedException` wrapping original | None — request NOT registered | ERROR |
 | Idempotency conflict | EPIC-01 raises `IdempotencyConflictError` | Propagate to caller (EPIC-07 maps to 422) | None | WARN |
-| Redis connection failure | EPIC-03 raises `RedisConnectionError` | Issue provisional singleton ID | Persist provisional in Decision Store | WARN |
-| ERE single-mention timeout (`SINGLE_REQUEST_TIME_BUDGET`) | `asyncio.wait_for` raises `asyncio.TimeoutError` | Issue provisional singleton ID — **non-fatal** | Persist provisional in Decision Store | INFO |
+| Redis or channel connection failure (publish path) | EPIC-03 raises `RedisConnectionError` or `ChannelUnavailableError` | Raise `ServiceUnavailableError` — **fatal** | None — propagated to caller (EPIC-07 maps to 503) | ERROR |
+| MongoDB unavailable on registration / read / decision write | `RegistryConnectionError`, `RepositoryConnectionError`, or PyMongo `ConnectionFailure` from any decision-store read on the resolve path | Raise `ServiceUnavailableError` — **fatal** | None — propagated to caller (EPIC-07 maps to 503) | ERROR |
+| ERE single-mention timeout (`SINGLE_REQUEST_TIME_BUDGET`) | `asyncio.wait_for` raises `asyncio.TimeoutError` | Issue provisional singleton ID — **non-fatal** (the only surviving provisional path) | Persist provisional in Decision Store | INFO |
 | Bulk request time budget exceeded (`BULK_REQUEST_TIME_BUDGET`) | `asyncio.wait_for` on `asyncio.gather` raises `asyncio.TimeoutError` | Raise `ResolutionTimeoutException` — **fatal** | None — propagated to caller (EPIC-07 maps to 504) | ERROR |
-| Decision Store unavailable during provisional write (MongoDB down) | EPIC-04 raises `RepositoryConnectionError` | Raise `ResolutionTimeoutException` (fatal — cannot persist) | None | ERROR |
 | Stale outcome on provisional write | EPIC-04 raises `StaleOutcomeError` | Ignore — means ERE already wrote a newer decision | Read and return the existing decision | DEBUG |
 | Bulk: individual mention failure | Any error in single-mention flow | Capture as error in results list | Other mentions unaffected | Per error type |
 | Unknown source (Spine C) | `RequestRegistryService.source_has_requests` returns False | Raise `SourceNotFoundException` — fatal | None — propagated to caller (EPIC-07 maps to 404) | WARN |
@@ -262,7 +271,7 @@ Both ERS and ERE implement the same derivation rule (ADR-A1N).
 | Don't | Do Instead | Why |
 |-------|-----------|-----|
 | Override or reinterpret ERE clustering decisions in the Coordinator | Accept ERE outcomes as-is; store exactly what ERE returns | ERE is the canonical authority for clustering. ERS must never override. |
-| Implement retry logic for ERE publishing inside the Coordinator | On publish failure, issue provisional singleton and persist in Decision Store | Retries add complexity and latency. Graceful degradation is simpler and meets the user's requirement. |
+| Implement retry logic for ERE publishing inside the Coordinator | On infrastructure failure (Redis/channel/Mongo unreachable), raise `ServiceUnavailableError` (HTTP 503). On ERE timeout (engine reachable but slow), issue a provisional singleton. | Retries add complexity and latency. Treating infrastructure outage as an operational alarm (and ERE timeout as graceful degrade) gives the caller honest signals — see Decision history (2026-05-05). |
 | Call a parser service directly from the Coordinator | Call `RequestRegistryService.register_resolution_request` — it embeds RDF parsing internally. Map any parsing error to `ParsingFailedException`. | Parsing is an EPIC-01/EPIC-02 concern. The Coordinator never imports or injects a parser directly. |
 | Put parsing, registration, or publishing logic inside the `AsyncResolutionWaiter` | Keep the waiter as a pure coordination primitive (Events only). All business logic stays in `ResolutionCoordinatorService`. | SRP: waiter coordinates; service orchestrates. |
 | Use polling loops to check the Decision Store for ERE responses | Use `asyncio.Event` signalled by EPIC-05's callback | Polling wastes CPU and adds latency. Event-driven is simpler and faster. |
@@ -294,8 +303,12 @@ Both ERS and ERE implement the same derivation rule (ADR-A1N).
 | TC-012 | Service: resolve_single (idempotent replay, no decision yet) | Same triad + same content, no decision yet | Shares async wait with original request | Both waiters unblocked when EPIC-05 signals |
 | TC-013 | Service: resolve_single (idempotency conflict) | Same triad, different content | `IdempotencyConflictError` propagated | Decision Store not touched |
 | TC-014 | Service: resolve_single (parse failure) | `register_resolution_request` raises parsing error | `ParsingFailedException` raised | Request NOT registered in Request Registry |
-| TC-015 | Service: resolve_single (Redis down) | Valid mention, `publish_request` raises `RedisConnectionError` | Provisional singleton issued and persisted | ERE never published |
-| TC-016 | Service: resolve_single (MongoDB down during provisional write) | `store_decision` raises `RepositoryConnectionError` | `ResolutionTimeoutException` raised (fatal) | N/A |
+| TC-015 | Service: resolve_single (Redis down) | Valid mention, `publish_request` raises `RedisConnectionError` | `ServiceUnavailableError` raised (fatal — 503) | ERE never published; no provisional written |
+| TC-015a | Service: resolve_single (channel down) | Valid mention, `publish_request` raises `ChannelUnavailableError` | `ServiceUnavailableError` raised (fatal — 503) | ERE never published; no provisional written |
+| TC-015b | Service: resolve_single (Mongo down at idempotency read) | `find_by_triad` raises PyMongo `ConnectionFailure` before publish | `ServiceUnavailableError` raised (fatal — 503) | Request not published; no provisional written |
+| TC-015c | Service: resolve_single (Mongo down on post-waiter read) | `get_decision_by_triad` after waiter fires raises `RepositoryConnectionError` | `ServiceUnavailableError` raised (fatal — 503) | N/A |
+| TC-015d | Service: resolve_single (Mongo down on stale-recovery read) | `get_decision_by_triad` after `StaleOutcomeError` raises `RepositoryConnectionError` | `ServiceUnavailableError` raised (fatal — 503) | N/A |
+| TC-016 | Service: resolve_single (MongoDB down during provisional write) | `store_decision` raises `RepositoryConnectionError` | `ServiceUnavailableError` raised (fatal — 503) | N/A |
 | TC-017 | Service: resolve_single (stale outcome on provisional write) | ERE wrote decision before provisional | Reads and returns existing (newer) decision | `StaleOutcomeError` caught, not propagated |
 | TC-018 | Service: resolve_bulk | 3 mentions, 2 succeed, 1 parse failure | List of 2 decisions + 1 error | Order preserved; failures don't abort batch |
 | TC-019 | Service: resolve_bulk (bulk timeout) | Bulk budget exceeded | `ResolutionTimeoutException` raised | N/A |
@@ -307,7 +320,7 @@ Both ERS and ERE implement the same derivation rule (ADR-A1N).
 |---------|------|-------|--------------|----------|
 | IT-001 | Full happy path | MongoDB + Redis running; all dependency services wired | Submit mention → ERE response simulated → decision returned with ERE cluster ID | Drop test collections; flush Redis |
 | IT-002 | Timeout → provisional | MongoDB + Redis; ERE does NOT respond | Submit mention → provisional singleton returned; Decision Store contains provisional | Drop test collections; flush Redis |
-| IT-003 | Redis down → provisional | MongoDB running; Redis NOT running | Submit mention → provisional returned; Decision Store contains provisional | Drop test collections |
+| IT-003 | Redis down → 503 | MongoDB running; Redis NOT running | Submit mention → `ServiceUnavailableError` raised; no provisional persisted | Drop test collections |
 | IT-004 | Idempotent replay | MongoDB + Redis; pre-existing decision | Submit same triad+content → same decision returned without new ERE publish | Drop test collections |
 | IT-005 | Concurrent identical requests | MongoDB + Redis | Submit 5 identical requests concurrently → all 5 return same decision; exactly 1 ERE publish | Drop test collections; flush Redis |
 | IT-006 | Bulk decomposition | MongoDB + Redis | Submit 3 mentions → 3 independent decisions returned | Drop test collections; flush Redis |
@@ -370,8 +383,8 @@ At `tests/features/resolution_coordinator/`:
 | Idempotent replay with pending resolution | Same triad + same content; first request still waiting for ERE; second request shares the wait |
 | Idempotency conflict | Same triad, different content → error raised, Decision Store untouched |
 | Parse failure | Malformed RDF → error raised, request NOT registered |
-| Redis down — graceful degradation | Redis unavailable → provisional singleton issued and persisted in Decision Store |
-| MongoDB down — fatal error | Decision Store unavailable → fatal error raised |
+| Redis or channel down — service unavailable | Messaging boundary unreachable on publish → `ServiceUnavailableError` raised; no ERE call, no provisional persisted; HTTP 503 returned |
+| MongoDB down — service unavailable | Any decision-store read or write on the resolve path fails with `ConnectionFailure`/`RepositoryConnectionError` → `ServiceUnavailableError` raised; HTTP 503 returned |
 | Stale outcome on provisional write | ERE already wrote decision before provisional → existing decision returned |
 
 ### Feature: Resolve Bulk Entity Mentions

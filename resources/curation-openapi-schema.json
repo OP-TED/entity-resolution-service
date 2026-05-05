@@ -66,7 +66,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             }
@@ -76,7 +76,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             }
@@ -118,7 +118,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             }
@@ -128,7 +128,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             }
@@ -138,7 +138,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             }
@@ -180,7 +180,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             }
@@ -190,7 +190,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             }
@@ -394,11 +394,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
             "description": "Bad Request"
+          },
+          "503": {
+            "description": "MongoDB unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurationErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -444,7 +454,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -454,11 +464,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
             "description": "Not Found"
+          },
+          "503": {
+            "description": "MongoDB unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurationErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -531,7 +551,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -541,11 +561,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
             "description": "Not Found"
+          },
+          "503": {
+            "description": "MongoDB unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurationErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -584,7 +614,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -594,7 +624,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -604,7 +634,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -647,7 +677,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -657,7 +687,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -667,7 +697,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -720,7 +750,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -730,7 +760,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -740,7 +770,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -783,7 +813,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             }
@@ -830,7 +860,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             }
@@ -960,11 +990,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
             "description": "Bad Request"
+          },
+          "503": {
+            "description": "MongoDB unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurationErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -1123,7 +1163,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1133,11 +1173,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
             "description": "Forbidden"
+          },
+          "503": {
+            "description": "MongoDB unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurationErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -1191,7 +1241,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1201,7 +1251,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1278,7 +1328,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1288,7 +1338,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1335,7 +1385,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1345,7 +1395,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1355,7 +1405,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1437,7 +1487,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1447,7 +1497,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1507,7 +1557,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1517,7 +1567,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1527,7 +1577,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1537,7 +1587,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             },
@@ -1570,7 +1620,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/CurationErrorResponse"
                 }
               }
             }
@@ -1837,6 +1887,52 @@
         "title": "CreateUserRequest",
         "description": "Admin request to create a user."
       },
+      "CurationErrorCode": {
+        "type": "string",
+        "enum": [
+          "VALIDATION_ERROR",
+          "NOT_FOUND",
+          "AUTHENTICATION_ERROR",
+          "AUTHORIZATION_ERROR",
+          "CONFLICT",
+          "APPLICATION_ERROR",
+          "SERVICE_UNAVAILABLE",
+          "SERVICE_ERROR"
+        ],
+        "title": "CurationErrorCode",
+        "description": "Machine-readable error codes returned in Curation API error responses."
+      },
+      "CurationErrorResponse": {
+        "properties": {
+          "error_code": {
+            "$ref": "#/components/schemas/CurationErrorCode"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable explanation of the error."
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id",
+            "description": "ERS business request UUID for log/trace correlation. Populated by handlers that run after the request-id middleware."
+          }
+        },
+        "type": "object",
+        "required": [
+          "error_code",
+          "message"
+        ],
+        "title": "CurationErrorResponse",
+        "description": "Standard error response body returned by all Curation API endpoints.\n\nThe ``request_id`` field carries the ERS business UUID set by the request\nmiddleware (``set_request_id`` in ``ers.commons.adapters.tracing``). It is\npopulated only by handlers that have access to that context \u2014 primarily the\n``Exception`` (HTTP 500) handler \u2014 and is ``None`` on responses produced\nbefore the middleware ran or by handlers that do not need correlation."
+      },
       "CurationStatistics": {
         "properties": {
           "total_decisions": {
@@ -2065,21 +2161,6 @@
         ],
         "title": "EntityMentionPreview",
         "description": "Lightweight entity mention projection for display."
-      },
-      "ErrorResponse": {
-        "properties": {
-          "detail": {
-            "type": "string",
-            "title": "Detail",
-            "description": "Human-readable description of the error."
-          }
-        },
-        "type": "object",
-        "required": [
-          "detail"
-        ],
-        "title": "ErrorResponse",
-        "description": "Standard error response body for OpenAPI documentation."
       },
       "HTTPValidationError": {
         "properties": {

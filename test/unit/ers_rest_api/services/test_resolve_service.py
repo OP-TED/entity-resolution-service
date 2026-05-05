@@ -199,3 +199,29 @@ class TestBulkResolveService:
 
         coordinator.resolve_bulk.assert_awaited_once()
         coordinator.resolve_single.assert_not_called()
+
+    async def test_service_unavailable_maps_to_service_unavailable_code(
+        self, service: ResolveService, coordinator: AsyncMock
+    ) -> None:
+        """C2: ServiceUnavailableError on a bulk item must surface as
+        ``SERVICE_UNAVAILABLE``, not the generic ``SERVICE_ERROR``.
+
+        Per the (a) decision (2026-05-05), infrastructure outages on the
+        resolve path are visible to the caller as 503 — and for bulk
+        endpoints, the per-item error code must reflect that contract so
+        clients can distinguish a backend outage from an arbitrary failure.
+        """
+        from ers.commons.services.exceptions import ServiceUnavailableError
+
+        coordinator.resolve_bulk.return_value = [
+            (_make_decision(IDENT_A, "cluster-A"), ResolutionOutcome.CANONICAL),
+            ServiceUnavailableError("redis", "Redis down"),
+        ]
+
+        result = await service.handle_bulk_resolve(BULK_REQUEST)
+
+        assert len(result.results) == 2
+        assert result.results[0].error is None
+        assert result.results[1].error is not None
+        assert result.results[1].error.error_code == ErrorCode.SERVICE_UNAVAILABLE
+        assert result.results[1].canonical_entity_id is None

@@ -115,7 +115,10 @@ class TestRedisConfig:
 
 
 class TestAppConfigResolverSingleton:
-    def test_config_singleton_has_all_keys(self):
+    def test_config_singleton_has_all_keys(self, monkeypatch):
+        monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key")
+        monkeypatch.setenv("ADMIN_EMAIL", "admin@test.com")
+        monkeypatch.setenv("ADMIN_PASSWORD", "test-password")
         assert isinstance(config.APP_NAME, str)
         assert isinstance(config.DEBUG, bool)
         assert isinstance(config.CORS_ORIGINS, list)

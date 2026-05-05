@@ -4,6 +4,7 @@ from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters.entity_mention_repository import (
     EntityMentionCurationRepository,
 )
+from ers.curation.services._pymongo_translation import translate_mongo_errors
 
 
 class EntityService:
@@ -15,6 +16,7 @@ class EntityService:
     ) -> None:
         self._entity_mention_repository = entity_mention_repository
 
+    @translate_mongo_errors
     async def get_entity_mention(
         self,
         identifier: EntityMentionIdentifier,

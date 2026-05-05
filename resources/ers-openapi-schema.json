@@ -69,6 +69,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Backend service unavailable (MongoDB, Redis, or messaging channel)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -110,6 +120,16 @@
           },
           "400": {
             "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Backend service unavailable (MongoDB, Redis, or messaging channel)",
             "content": {
               "application/json": {
                 "schema": {
@@ -752,7 +772,9 @@
           "MENTION_NOT_FOUND",
           "SOURCE_NOT_FOUND",
           "SERVICE_ERROR",
-          "SERVICE_TIMEOUT"
+          "SERVICE_TIMEOUT",
+          "APPLICATION_ERROR",
+          "SERVICE_UNAVAILABLE"
         ],
         "title": "ErrorCode",
         "description": "Machine-readable error codes returned in error responses."
@@ -762,19 +784,31 @@
           "error_code": {
             "$ref": "#/components/schemas/ErrorCode"
           },
-          "detail": {
+          "message": {
             "type": "string",
-            "title": "Detail",
+            "title": "Message",
             "description": "Human-readable explanation of the error."
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id",
+            "description": "ERS business request UUID for log/trace correlation. Populated by handlers that run after the request-id middleware."
           }
         },
         "type": "object",
         "required": [
           "error_code",
-          "detail"
+          "message"
         ],
         "title": "ErrorResponse",
-        "description": "Standard error response body returned by all ERS REST API endpoints."
+        "description": "Standard error response body returned by all ERS REST API endpoints.\n\nThe ``request_id`` field carries the ERS business UUID set by the request\nmiddleware (``set_request_id`` in ``ers.commons.adapters.tracing``). It is\npopulated only by handlers that have access to that context \u2014 primarily the\n``Exception`` (HTTP 500) handler \u2014 and is ``None`` on responses produced\nbefore the middleware ran or by handlers that do not need correlation."
       },
       "HTTPValidationError": {
         "properties": {

@@ -261,7 +261,8 @@ def create_app() -> FastAPI:
     _ers_log = logging.getLogger("ers")
     _ers_log.setLevel(logging.DEBUG if config.DEBUG else logging.INFO)
     for _h in logging.getLogger("uvicorn").handlers:
-        _ers_log.addHandler(_h)
+        if _h not in _ers_log.handlers:
+            _ers_log.addHandler(_h)
 
     # Bootstrap OTel tracing (no-op when TRACING_ENABLED=False).
     configure_tracing(config)
