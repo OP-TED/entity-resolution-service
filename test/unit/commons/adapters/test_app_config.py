@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from ers import (
@@ -95,7 +97,14 @@ class TestObservabilityConfig:
         assert ObservabilityConfig().TRACING_ENABLED is True
 
 
+_REQUIRED_ENV_VARS = ["JWT_SECRET_KEY", "ADMIN_EMAIL", "ADMIN_PASSWORD"]
+
+
 class TestAppConfigResolverSingleton:
+    @pytest.mark.skipif(
+        not all(os.environ.get(v) for v in _REQUIRED_ENV_VARS),
+        reason=f"Required env vars not set: {', '.join(_REQUIRED_ENV_VARS)}",
+    )
     def test_config_singleton_has_all_keys(self):
         assert isinstance(config.APP_NAME, str)
         assert isinstance(config.DEBUG, bool)
