@@ -178,3 +178,47 @@ class TestRefreshBulk:
         await svc.refresh_bulk("SRC_A")
 
         registry_svc.advance_snapshot.assert_not_awaited()
+
+
+# ── Module-level async tests (running under asyncio_mode=auto) ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_cold_start_passes_updated_since_none():
+    """U-09: Cold-start (no prior snapshot) passes updated_since=None to query_decisions_delta."""
+    registry_svc = create_autospec(RequestRegistryService, instance=True)
+    registry_svc.source_has_requests.return_value = True
+    registry_svc.get_lookup_state.return_value = None
+    registry_svc.advance_snapshot.return_value = None
+
+    decision_svc = create_autospec(DecisionStoreService, instance=True)
+    # Cold-start with all decisions having updated_at=None → repository returns empty page
+    decision_svc.query_decisions_delta.return_value = CursorPage(results=[], next_cursor=None)
+
+    svc = BulkRefreshCoordinatorService(registry_svc, decision_svc)
+    result = await svc.refresh_bulk("SRC_A")
+
+    call_kwargs = decision_svc.query_decisions_delta.call_args.kwargs
+    assert call_kwargs["updated_since"] is None
+    # Cold-start returns empty when no decisions have changed placement
+    assert result.results == []
+    registry_svc.advance_snapshot.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_warm_path_passes_snapshot_timestamp():
+    """U-09: Warm path passes the stored snapshot timestamp as updated_since."""
+    t0 = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
+    registry_svc = create_autospec(RequestRegistryService, instance=True)
+    registry_svc.source_has_requests.return_value = True
+    registry_svc.get_lookup_state.return_value = _lookup_state(t0)
+    registry_svc.advance_snapshot.return_value = None
+
+    decision_svc = create_autospec(DecisionStoreService, instance=True)
+    decision_svc.query_decisions_delta.return_value = CursorPage(results=[], next_cursor=None)
+
+    svc = BulkRefreshCoordinatorService(registry_svc, decision_svc)
+    await svc.refresh_bulk("SRC_A")
+
+    call_kwargs = decision_svc.query_decisions_delta.call_args.kwargs
+    assert call_kwargs["updated_since"] == t0

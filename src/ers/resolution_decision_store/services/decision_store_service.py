@@ -6,7 +6,7 @@ from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifi
 
 from ers import config
 from ers.commons.adapters.tracing import trace_function
-from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams, DecisionFilters
+from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 
 _log = logging.getLogger(__name__)
@@ -25,7 +25,11 @@ class DecisionStoreService:
             candidates: list[ClusterReference],
             updated_at: datetime,
     ) -> Decision:
-        """Store or atomically replace a decision, truncating excess candidates.
+        """Store or atomically replace a decision, short-circuiting on unchanged placement.
+
+        If the stored ``current_placement.cluster_id`` already matches ``current.cluster_id``,
+        the write is skipped and the existing Decision is returned unchanged (R1).
+        ``updated_at`` is bumped only when the placement actually changes.
 
         Args:
             identifier: Entity mention triad for this decision.
@@ -34,13 +38,21 @@ class DecisionStoreService:
             updated_at: Must be strictly greater than stored updated_at.
 
         Returns:
-            The persisted Decision.
+            The persisted Decision (existing one on no-op, newly stored on change).
 
         Raises:
             StaleOutcomeError: If stored updated_at >= incoming updated_at.
             RepositoryConnectionError: On MongoDB connection failure.
             RepositoryOperationError: On unexpected MongoDB error.
         """
+        existing = await self._repository.find_by_triad(identifier)
+        if existing is not None and existing.current_placement.cluster_id == current.cluster_id:
+            _log.debug(
+                "Placement unchanged — short-circuiting write",
+                extra={"cluster_id": current.cluster_id},
+            )
+            return existing
+
         max_candidates = config.DECISION_STORE_MAX_CANDIDATES
         if len(candidates) > max_candidates:
             _log.warning(
@@ -126,9 +138,9 @@ class DecisionStoreService:
             page_size if page_size is not None else config.DECISION_STORE_DEFAULT_PAGE_SIZE,
             config.DECISION_STORE_MAX_PAGE_SIZE,
         )
-        filters = DecisionFilters(source_id=source_id, updated_since=updated_since)
-        return await self._repository.find_with_filters(
-            filters=filters,
+        return await self._repository.find_delta_for_source(
+            source_id=source_id,
+            updated_since=updated_since,
             cursor_params=CursorParams(cursor=cursor, limit=effective_size),
         )
 

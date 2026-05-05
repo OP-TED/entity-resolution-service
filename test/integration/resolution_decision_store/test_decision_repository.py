@@ -38,7 +38,10 @@ async def repo(mongo_db):
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_it001_store_and_retrieve(repo):
-    """IT-001: Store a decision and retrieve it by triad."""
+    """IT-001: Store a decision and retrieve it by triad.
+
+    On first insert, updated_at must be None (R1: never-updated placement).
+    """
     now = datetime.now(UTC)
     stored = await repo.upsert_decision(
         make_identifier(), make_cluster(), [], now
@@ -47,30 +50,51 @@ async def test_it001_store_and_retrieve(repo):
     assert found is not None
     assert found.id == stored.id
     assert found.current_placement.cluster_id == "c1"
+    # First insert: updated_at is not set (stays None per R1)
+    assert found.updated_at is None
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_it002_staleness_rejection(repo):
-    """IT-002: Storing with an older timestamp raises StaleOutcomeError."""
-    now = datetime.now(UTC)
-    await repo.upsert_decision(make_identifier(), make_cluster(), [], now)
+    """IT-002: Storing with an older timestamp raises StaleOutcomeError.
+
+    Stale-rejection only applies once ``updated_at`` is set (i.e. after a real
+    placement change). Per R2, a write against a record with ``updated_at=None``
+    is never stale — so we first do an insert, then an update (which sets
+    ``updated_at``), then attempt a stale write.
+    """
+    t1 = datetime.now(UTC)
+    t2 = t1 + timedelta(seconds=5)
+    # 1. Insert (updated_at remains None).
+    await repo.upsert_decision(make_identifier(), make_cluster("c1"), [], t1)
+    # 2. Update (different cluster) — updated_at becomes t2.
+    await repo.upsert_decision(make_identifier(), make_cluster("c2"), [], t2)
+    # 3. Stale write — incoming timestamp older than stored updated_at.
     with pytest.raises(StaleOutcomeError):
         await repo.upsert_decision(
             make_identifier(),
-            make_cluster("c2"),
+            make_cluster("c3"),
             [],
-            now - timedelta(seconds=1),
+            t1,
         )
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_it003_created_at_preserved_on_replacement(repo):
-    """IT-003: Replacing a decision preserves created_at; advances updated_at."""
+    """IT-003: Replacing a decision preserves created_at; sets updated_at on update.
+
+    First insert has updated_at=None. Replacement (different cluster) sets updated_at=t2.
+    """
     t1 = datetime.now(UTC).replace(microsecond=0)
     t2 = t1 + timedelta(seconds=5)
-    await repo.upsert_decision(make_identifier(), make_cluster("c1"), [], t1)
+    first = await repo.upsert_decision(make_identifier(), make_cluster("c1"), [], t1)
+    # First insert: created_at=t1, updated_at=None
+    assert first.created_at == t1
+    assert first.updated_at is None
+
+    # Update path (different cluster): created_at preserved, updated_at=t2
     updated = await repo.upsert_decision(
         make_identifier(), make_cluster("c2"), [], t2
     )
@@ -82,12 +106,21 @@ async def test_it003_created_at_preserved_on_replacement(repo):
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_it004_cursor_pagination(repo):
-    """IT-004: Cursor pagination traverses all decisions in correct order."""
-    base = datetime.now(UTC)
+    """IT-004: Cursor pagination traverses all decisions in correct order.
+
+    Each decision is inserted then updated (different cluster) so that
+    ``updated_at`` is set — pagination orders by ``updated_at`` ASC and a
+    just-inserted record (``updated_at=None``) cannot participate in that
+    ordering.
+    """
+    base = datetime.now(UTC).replace(microsecond=0)
     for i in range(5):
         ident = make_identifier(source_id=f"s{i}")
+        # Insert (updated_at=None), then update with a different cluster so
+        # updated_at is set to a unique, monotonically increasing timestamp.
+        await repo.upsert_decision(ident, make_cluster("c-init"), [], base)
         await repo.upsert_decision(
-            ident, make_cluster(), [], base + timedelta(seconds=i)
+            ident, make_cluster(f"c-{i}"), [], base + timedelta(seconds=i + 1)
         )
 
     page1 = await repo.find_with_filters(

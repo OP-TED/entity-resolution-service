@@ -111,7 +111,17 @@ def step_identifier_with_many_candidates(ctx):
 @when("I store the decision")
 def step_store_decision(ctx, service, mock_repo):
     now = ctx["updated_at"]
-    mock_repo.upsert_decision = AsyncMock(return_value=make_decision(now))
+    # First insert: no existing decision for this triad (R1: updated_at stays None)
+    mock_repo.find_by_triad = AsyncMock(return_value=None)
+    inserted = Decision(
+        id="hash123",
+        about_entity_mention=ctx["identifier"],
+        current_placement=ctx["cluster"],
+        candidates=[],
+        created_at=now,
+        updated_at=None,  # On first insert, updated_at is not set
+    )
+    mock_repo.upsert_decision = AsyncMock(return_value=inserted)
     try:
         ctx["result"] = asyncio.run(
             store_decision(
@@ -128,6 +138,9 @@ def step_store_decision(ctx, service, mock_repo):
 def step_store_newer_timestamp(ctx, service, mock_repo):
     newer_ts = ctx["now"] + timedelta(seconds=5)
     newer_decision = make_decision(newer_ts, cluster_id="c2")
+    # Existing decision has cluster_id="c1"; incoming has "c2" → different placement → upsert
+    existing = make_decision(ctx["now"], cluster_id="c1")
+    mock_repo.find_by_triad = AsyncMock(return_value=existing)
     mock_repo.upsert_decision = AsyncMock(return_value=newer_decision)
     try:
         ctx["result"] = asyncio.run(
