@@ -23,9 +23,7 @@ from ers.ere_contract_client.domain.errors import (
 )
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.rdf_mention_parser.domain.exceptions import MalformedRDFError
-from ers.request_registry.domain.errors import (
-    RepositoryConnectionError as RegistryConnectionError,
-)
+from ers.request_registry.domain.errors import RegistryConnectionError
 from ers.request_registry.services.exceptions import IdempotencyConflictError
 from ers.request_registry.services.request_registry_service import (
     RequestRegistryService,

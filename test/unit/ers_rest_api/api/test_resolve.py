@@ -227,7 +227,7 @@ class TestResolveEndpoint:
         resolve_service: AsyncMock,
     ) -> None:
         resolve_service.handle_resolve.side_effect = ServiceUnavailableError(
-            "MongoDB is down"
+            "mongodb", "MongoDB is down"
         )
 
         response = await client.post("/api/v1/resolve", json=VALID_RESOLVE_PAYLOAD)

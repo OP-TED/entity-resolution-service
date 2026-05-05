@@ -2,7 +2,7 @@
 
 from ers.request_registry.domain.errors import (
     DuplicateTriadError,
-    RepositoryConnectionError,
+    RegistryConnectionError,
     RepositoryOperationError,
 )
 from ers.request_registry.services.exceptions import (
@@ -13,7 +13,7 @@ from ers.request_registry.services.exceptions import (
 __all__ = [
     "DuplicateTriadError",
     "IdempotencyConflictError",
-    "RepositoryConnectionError",
+    "RegistryConnectionError",
     "RepositoryOperationError",
     "SnapshotRegressionError",
 ]

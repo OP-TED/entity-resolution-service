@@ -16,7 +16,7 @@ from ers.request_registry.adapters.records_repository import (
 )
 from ers.request_registry.domain.errors import (
     DuplicateTriadError,
-    RepositoryConnectionError,
+    RegistryConnectionError,
     RepositoryOperationError,
 )
 from ers.request_registry.domain.records import (
@@ -168,7 +168,7 @@ class TestStore:
     ) -> None:
         async_collection.insert_one.side_effect = ConnectionFailure("timeout")
 
-        with pytest.raises(RepositoryConnectionError):
+        with pytest.raises(RegistryConnectionError):
             await repo.store(_record())
 
     async def test_pymongo_error_raises_repository_operation_error(

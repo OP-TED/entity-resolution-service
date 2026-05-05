@@ -55,7 +55,7 @@ class TestServiceUnavailableHandler:
         decision_curation_service,
     ) -> None:
         decision_curation_service.list_decisions.side_effect = ServiceUnavailableError(
-            "MongoDB is down"
+            "mongodb", "MongoDB is down"
         )
 
         async with AsyncClient(

@@ -124,7 +124,7 @@ class DecisionCurationService:
                 identifiers,
             )
         except ConnectionFailure as exc:
-            raise ServiceUnavailableError(str(exc)) from exc
+            raise ServiceUnavailableError("mongodb", str(exc)) from exc
 
         mention_map = self._index_by_identifier(entity_mentions)
 

@@ -215,7 +215,7 @@ class TestBulkResolveService:
 
         coordinator.resolve_bulk.return_value = [
             (_make_decision(IDENT_A, "cluster-A"), ResolutionOutcome.CANONICAL),
-            ServiceUnavailableError("Redis down"),
+            ServiceUnavailableError("redis", "Redis down"),
         ]
 
         result = await service.handle_bulk_resolve(BULK_REQUEST)
