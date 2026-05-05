@@ -74,4 +74,4 @@ class TestGetStatistics:
         response = await client.get(BASE_URL, params={"entity_type": "INVALID_TYPE"})
 
         assert response.status_code == 400
-        assert "INVALID_TYPE" in response.json()["detail"]
+        assert "INVALID_TYPE" in response.json()["message"]

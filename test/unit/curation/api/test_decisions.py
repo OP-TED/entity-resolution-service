@@ -121,9 +121,9 @@ class TestListDecisions:
         response = await client.get(BASE_URL, params={"entity_type": "INVALID_TYPE"})
 
         assert response.status_code == 400
-        assert "INVALID_TYPE" in response.json()["detail"]
-        assert "ORGANISATION" in response.json()["detail"]
-        assert "PROCEDURE" in response.json()["detail"]
+        assert "INVALID_TYPE" in response.json()["message"]
+        assert "ORGANISATION" in response.json()["message"]
+        assert "PROCEDURE" in response.json()["message"]
 
     async def test_accepts_valid_entity_type(
         self,

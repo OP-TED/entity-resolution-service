@@ -520,7 +520,7 @@ def filter_by_invalid_entity_type(client: TestClient, entity_type: str) -> Any:
 @then("the request is rejected with a validation error mentioning valid entity types")
 def invalid_entity_type_rejected(response: Any) -> None:
     assert response.status_code == 400
-    detail = response.json()["detail"]
+    detail = response.json()["message"]
     assert "BANANA" in detail
     assert "ORGANISATION" in detail
     assert "PROCEDURE" in detail
