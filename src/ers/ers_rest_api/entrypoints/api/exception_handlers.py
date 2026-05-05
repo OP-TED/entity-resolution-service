@@ -127,13 +127,13 @@ async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResp
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register exception handlers for the ERS REST API."""
-    app.add_exception_handler(RequestValidationError, _validation_error_handler)
-    app.add_exception_handler(ParsingFailedError, _parsing_failed_handler)
-    app.add_exception_handler(IdempotencyConflictError, _idempotency_conflict_handler)
-    app.add_exception_handler(MentionNotFoundError, _mention_not_found_handler)
-    app.add_exception_handler(SourceNotFoundError, _source_not_found_handler)
-    app.add_exception_handler(ResolutionTimeoutError, _resolution_timeout_handler)
-    app.add_exception_handler(ServiceUnavailableError, _service_unavailable_handler)
-    app.add_exception_handler(ApplicationError, _application_error_handler)
-    app.add_exception_handler(DomainError, _domain_error_handler)
-    app.add_exception_handler(Exception, _unhandled_error_handler)
+    app.exception_handler(RequestValidationError)(_validation_error_handler)
+    app.exception_handler(ParsingFailedError)(_parsing_failed_handler)
+    app.exception_handler(IdempotencyConflictError)(_idempotency_conflict_handler)
+    app.exception_handler(MentionNotFoundError)(_mention_not_found_handler)
+    app.exception_handler(SourceNotFoundError)(_source_not_found_handler)
+    app.exception_handler(ResolutionTimeoutError)(_resolution_timeout_handler)
+    app.exception_handler(ServiceUnavailableError)(_service_unavailable_handler)
+    app.exception_handler(ApplicationError)(_application_error_handler)
+    app.exception_handler(DomainError)(_domain_error_handler)
+    app.exception_handler(Exception)(_unhandled_error_handler)

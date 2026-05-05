@@ -14,7 +14,9 @@ from ers.curation.domain.data_transfer_objects import (
     DecisionOrdering,
     StatisticsFilters,
 )
-from ers.curation.domain.errors import CurationErrorResponse as ErrorResponse  # noqa: F401
+from ers.curation.domain.errors import CurationErrorResponse
+
+ErrorResponse = CurationErrorResponse
 from ers.curation.domain.exceptions import InvalidEntityTypeError
 from ers.curation.entrypoints.api.dependencies import get_rdf_config
 from ers.rdf_mention_parser.domain.rdf_mapping_config import RDFMappingConfig
