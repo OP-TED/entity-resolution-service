@@ -47,7 +47,9 @@ from ers.rdf_mention_parser.domain.rdf_mapping_config import (
     EntityTypeConfig,
     RDFMappingConfig,
 )
-from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
+from ers.resolution_decision_store.adapters.decision_repository import (
+    DecisionRepository,
+)
 from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.data_transfer_objects import UserContext
 from ers.users.services import AuthService, UserManagementService
@@ -243,10 +245,12 @@ def rdf_config() -> RDFMappingConfig:
         entity_types={
             "ORGANISATION": EntityTypeConfig(
                 rdf_type="org:Organization",
+                display_name_field="legal_name",
                 fields={"legal_name": "epo:hasLegalName"},
             ),
             "PROCEDURE": EntityTypeConfig(
                 rdf_type="epo:Procedure",
+                display_name_field="title",
                 fields={"title": "epo:hasTitle"},
             ),
         },
@@ -274,10 +278,16 @@ def app(
         canonical_entity_service
     )
     application.dependency_overrides[get_entity_service] = lambda: entity_service
-    application.dependency_overrides[get_statistics_service] = lambda: statistics_service
+    application.dependency_overrides[get_statistics_service] = lambda: (
+        statistics_service
+    )
     application.dependency_overrides[get_auth_service] = lambda: auth_service
-    application.dependency_overrides[get_user_action_service] = lambda: user_action_service
-    application.dependency_overrides[get_user_management_service] = lambda: user_management_service
+    application.dependency_overrides[get_user_action_service] = lambda: (
+        user_action_service
+    )
+    application.dependency_overrides[get_user_management_service] = lambda: (
+        user_management_service
+    )
     application.dependency_overrides[get_current_user] = lambda: ADMIN_USER
     return application
 

@@ -10,7 +10,9 @@ import pytest
 from erspec.models.core import EntityMention, EntityMentionIdentifier
 from rdflib import Graph
 
-from ers import config as ers_config  # aliased: 'config' fixture name conflicts in this module
+from ers import (
+    config as ers_config,
+)  # aliased: 'config' fixture name conflicts in this module
 from ers.rdf_mention_parser.domain.exceptions import (
     ContentTooLargeError,
     EmptyExtractionError,
@@ -20,7 +22,10 @@ from ers.rdf_mention_parser.domain.exceptions import (
     UnsupportedContentTypeError,
     UnsupportedEntityTypeError,
 )
-from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
+from ers.rdf_mention_parser.domain.rdf_mapping_config import (
+    EntityTypeConfig,
+    RDFMappingConfig,
+)
 from ers.rdf_mention_parser.services.mention_parser_service import (
     MentionParserService,
     build_sparql_query,
@@ -51,7 +56,9 @@ _ORG_FIELDS = {
 _ORG_KEY = "ORGANISATION"
 
 
-def _make_entity_mention(content: str, content_type: str = "text/turtle", entity_type: str = _ORG_KEY) -> EntityMention:
+def _make_entity_mention(
+    content: str, content_type: str = "text/turtle", entity_type: str = _ORG_KEY
+) -> EntityMention:
     return EntityMention(
         identifiedBy=EntityMentionIdentifier(
             source_id="test-source",
@@ -68,7 +75,11 @@ def config() -> RDFMappingConfig:
     return RDFMappingConfig(
         namespaces=_NAMESPACES,
         entity_types={
-            "ORGANISATION": {"rdf_type": "org:Organization", "fields": dict(_ORG_FIELDS)}
+            "ORGANISATION": {
+                "rdf_type": "org:Organization",
+                "display_name_field": "legal_name",
+                "fields": dict(_ORG_FIELDS),
+            }
         },
     )
 
@@ -132,7 +143,9 @@ class TestBuildSparqlQuery:
 
     def test_single_field_config_builds_valid_query(self, config):
         single_config = EntityTypeConfig(
-            rdf_type="org:Organization", fields={"legal_name": "epo:hasLegalName"}
+            rdf_type="org:Organization",
+            display_name_field="legal_name",
+            fields={"legal_name": "epo:hasLegalName"},
         )
         query = build_sparql_query(config, single_config)
         assert "?legal_name" in query
@@ -157,7 +170,9 @@ class TestMentionParserServiceParse:
         service.parse(_make_entity_mention("my content"))
         adapter_mock.parse_to_graph.assert_called_once_with("my content", "text/turtle")
 
-    def test_partial_result_returned_when_some_fields_none(self, service, adapter_mock, config):
+    def test_partial_result_returned_when_some_fields_none(
+        self, service, adapter_mock, config
+    ):
         adapter_mock.execute_sparql.return_value = [
             {
                 "entity": "http://example.org/org/1",
@@ -200,7 +215,9 @@ class TestContentTooLarge:
 
 
 class TestEntityTypeMismatch:
-    def test_raises_when_graph_has_no_entity_of_declared_type(self, service, adapter_mock):
+    def test_raises_when_graph_has_no_entity_of_declared_type(
+        self, service, adapter_mock
+    ):
         adapter_mock.has_entity_of_type.return_value = False
 
         with pytest.raises(EntityTypeMismatchError) as exc_info:
@@ -216,12 +233,24 @@ class TestEntityTypeMismatch:
 class TestMultipleEntitiesFound:
     def test_raises_when_multiple_distinct_entities_found(self, service, adapter_mock):
         adapter_mock.execute_sparql.return_value = [
-            {"entity": "http://example.org/org/1", "legal_name": "Org A",
-             "country_code": "DEU", "nuts_code": None, "post_code": None,
-             "post_name": None, "thoroughfare": None},
-            {"entity": "http://example.org/org/2", "legal_name": "Org B",
-             "country_code": "FRA", "nuts_code": None, "post_code": None,
-             "post_name": None, "thoroughfare": None},
+            {
+                "entity": "http://example.org/org/1",
+                "legal_name": "Org A",
+                "country_code": "DEU",
+                "nuts_code": None,
+                "post_code": None,
+                "post_name": None,
+                "thoroughfare": None,
+            },
+            {
+                "entity": "http://example.org/org/2",
+                "legal_name": "Org B",
+                "country_code": "FRA",
+                "nuts_code": None,
+                "post_code": None,
+                "post_name": None,
+                "thoroughfare": None,
+            },
         ]
 
         with pytest.raises(MultipleEntitiesFoundError) as exc_info:
@@ -234,12 +263,24 @@ class TestMultipleEntitiesFound:
         The service should merge them (first non-None wins) instead of raising.
         """
         adapter_mock.execute_sparql.return_value = [
-            {"entity": "http://example.org/org/1", "legal_name": "Test Org",
-             "country_code": "DEU", "nuts_code": None, "post_code": "10115",
-             "post_name": None, "thoroughfare": None},
-            {"entity": "http://example.org/org/1", "legal_name": "Test Org",
-             "country_code": None, "nuts_code": "DE1", "post_code": None,
-             "post_name": "Berlin", "thoroughfare": None},
+            {
+                "entity": "http://example.org/org/1",
+                "legal_name": "Test Org",
+                "country_code": "DEU",
+                "nuts_code": None,
+                "post_code": "10115",
+                "post_name": None,
+                "thoroughfare": None,
+            },
+            {
+                "entity": "http://example.org/org/1",
+                "legal_name": "Test Org",
+                "country_code": None,
+                "nuts_code": "DE1",
+                "post_code": None,
+                "post_name": "Berlin",
+                "thoroughfare": None,
+            },
         ]
 
         result = service.parse(_make_entity_mention("turtle content"))
@@ -299,7 +340,9 @@ class TestMalformedRDF:
 
 class TestErrorPropagation:
     def test_propagates_unsupported_content_type(self, service, adapter_mock):
-        adapter_mock.parse_to_graph.side_effect = UnsupportedContentTypeError("application/json")
+        adapter_mock.parse_to_graph.side_effect = UnsupportedContentTypeError(
+            "application/json"
+        )
 
         with pytest.raises(UnsupportedContentTypeError):
             service.parse(_make_entity_mention("{}", content_type="application/json"))
@@ -327,10 +370,13 @@ class TestLoadConfig:
         assert result is config
 
     def test_propagates_file_not_found(self):
-        with patch(
-            f"{_SERVICE_MODULE}.RDFConfigReader.from_file",
-            side_effect=FileNotFoundError("missing"),
-        ), pytest.raises(FileNotFoundError):
+        with (
+            patch(
+                f"{_SERVICE_MODULE}.RDFConfigReader.from_file",
+                side_effect=FileNotFoundError("missing"),
+            ),
+            pytest.raises(FileNotFoundError),
+        ):
             load_config()
 
 
@@ -357,7 +403,9 @@ class TestParseEntityMention:
             patch(f"{_SERVICE_MODULE}.RDFParserAdapter"),
             patch(f"{_SERVICE_MODULE}.MentionParserService") as mock_service_cls,
         ):
-            mock_service_cls.return_value.parse.side_effect = EntityTypeMismatchError(_ORG_KEY)
+            mock_service_cls.return_value.parse.side_effect = EntityTypeMismatchError(
+                _ORG_KEY
+            )
 
             with pytest.raises(EntityTypeMismatchError):
                 parse_entity_mention(entity_mention, config)
