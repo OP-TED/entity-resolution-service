@@ -14,7 +14,7 @@ from ers.commons.adapters.repository import (
 )
 from ers.request_registry.domain.errors import (
     DuplicateTriadError,
-    RepositoryConnectionError,
+    RegistryConnectionError,
     RepositoryOperationError,
 )
 from ers.request_registry.domain.records import (
@@ -102,7 +102,7 @@ class MongoResolutionRequestRepository(
         except DuplicateKeyError as exc:
             raise DuplicateTriadError(record.identifiedBy) from exc
         except ConnectionFailure as exc:
-            raise RepositoryConnectionError(str(exc)) from exc
+            raise RegistryConnectionError(str(exc)) from exc
         except PyMongoError as exc:
             raise RepositoryOperationError(str(exc)) from exc
         return record

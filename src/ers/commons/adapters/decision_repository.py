@@ -50,10 +50,19 @@ class BaseMongoDecisionRepository(
 
         if sort_value is None:
             if ascending:
+                # Two branches: continue the current null tier past last_id, OR
+                # advance into the populated tier. Use ``$gt: None`` rather than
+                # ``$ne: None`` for the second branch — they are semantically
+                # equivalent (in BSON sort order, null is the smallest type, so
+                # ``$gt: null`` matches every document whose field is non-null
+                # and present), but ``$gt`` is a range predicate that uses
+                # indexes on all three target engines (MongoDB, FerretDB,
+                # DocumentDB), whereas ``$ne`` does not use indexes well on
+                # DocumentDB.
                 return {
                     "$or": [
                         {sort_field: None, "_id": {id_op: last_id}},
-                        {sort_field: {"$ne": None}},
+                        {sort_field: {"$gt": None}},
                     ]
                 }
             return {sort_field: None, "_id": {id_op: last_id}}

@@ -13,7 +13,10 @@ router = APIRouter(prefix="/curation/stats", tags=["Statistics"])
 
 @router.get(
     "",
-    responses={400: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        503: {"model": ErrorResponse, "description": "MongoDB unavailable"},
+    },
 )
 async def get_statistics(
     filters: StatisticsFiltersDep,

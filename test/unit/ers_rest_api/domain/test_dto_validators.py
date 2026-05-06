@@ -21,7 +21,29 @@ CLUSTER = ClusterReference(
     confidence_score=0.9,
     similarity_score=0.8,
 )
-ERROR = ErrorResponse(error_code=ErrorCode.MENTION_NOT_FOUND, detail="not found")
+ERROR = ErrorResponse(error_code=ErrorCode.MENTION_NOT_FOUND, message="not found")
+
+
+class TestErrorResponseSchema:
+    """H1: ``ErrorResponse`` must declare a ``request_id`` field so the OpenAPI
+    schema matches the runtime payload emitted by the unhandled-error handler.
+    """
+
+    def test_request_id_defaults_to_none(self) -> None:
+        err = ErrorResponse(error_code=ErrorCode.SERVICE_ERROR, message="boom")
+        assert err.request_id is None
+
+    def test_request_id_is_assignable(self) -> None:
+        err = ErrorResponse(
+            error_code=ErrorCode.SERVICE_ERROR,
+            message="boom",
+            request_id="req-abc-123",
+        )
+        assert err.request_id == "req-abc-123"
+
+    def test_request_id_appears_in_json_schema(self) -> None:
+        schema = ErrorResponse.model_json_schema()
+        assert "request_id" in schema["properties"]
 
 
 class TestEntityMentionResolutionResultValidator:

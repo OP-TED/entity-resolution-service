@@ -20,6 +20,7 @@ from ers.curation.domain.data_transfer_objects import (
     EntityMentionPreview,
 )
 from ers.curation.domain.exceptions import AlreadyCuratedError
+from ers.curation.services._pymongo_translation import translate_mongo_errors
 from ers.curation.services.user_action_service import UserActionService
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
@@ -90,12 +91,20 @@ class DecisionCurationService:
         except Exception:
             log.exception("Failed to publish ERE re-evaluation for decision %s", decision.id)
 
+    @translate_mongo_errors
     async def list_decisions(
         self,
         filters: DecisionFilters,
         cursor_params: CursorParams,
     ) -> CursorPage[DecisionSummary]:
-        """List decisions with filtering, cursor pagination, and embedded entity data."""
+        """List decisions with filtering, cursor pagination, and embedded entity data.
+
+        Raises:
+            ServiceUnavailableError: If MongoDB is unreachable for any of the
+                three repository reads (entity-mention search, decision
+                pagination, entity-mention batch fetch). The curation API
+                exception handler maps this to HTTP 503.
+        """
         mention_identifiers = None
         if filters.search is not None:
             mention_identifiers = await self._entity_mention_repository.search_identifiers(
@@ -114,6 +123,7 @@ class DecisionCurationService:
         entity_mentions = await self._entity_mention_repository.find_by_identifiers(
             identifiers,
         )
+
         mention_map = self._index_by_identifier(entity_mentions)
 
         decision_summaries = [
@@ -126,11 +136,13 @@ class DecisionCurationService:
             next_cursor=page.next_cursor,
         )
 
+    @translate_mongo_errors
     async def get_decision(self, decision_id: str) -> Decision:
         """Retrieve a single decision by ID.
 
         Raises:
             NotFoundError: If the decision does not exist.
+            ServiceUnavailableError: If MongoDB is unreachable.
         """
         return await self._get_decision_or_raise(decision_id)
 

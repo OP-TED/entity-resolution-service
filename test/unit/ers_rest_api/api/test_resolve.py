@@ -4,6 +4,7 @@ from erspec.models.core import EntityMentionIdentifier
 from httpx import AsyncClient
 
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+from ers.commons.services.exceptions import ServiceUnavailableError
 from ers.ers_rest_api.domain.errors import ErrorCode, ErrorResponse
 from ers.ers_rest_api.domain.resolution import (
     BulkResolveResponse,
@@ -97,7 +98,7 @@ class TestResolveEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "source_id" in body["detail"]
+        assert "source_id" in body["message"]
 
     async def test_missing_request_id_returns_400(self, client: AsyncClient) -> None:
         payload = {
@@ -115,7 +116,7 @@ class TestResolveEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "request_id" in body["detail"]
+        assert "request_id" in body["message"]
 
     async def test_missing_entity_type_returns_400(self, client: AsyncClient) -> None:
         payload = {
@@ -133,7 +134,7 @@ class TestResolveEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "entity_type" in body["detail"]
+        assert "entity_type" in body["message"]
 
     async def test_missing_content_returns_400(self, client: AsyncClient) -> None:
         payload = {
@@ -152,7 +153,7 @@ class TestResolveEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "content" in body["detail"]
+        assert "content" in body["message"]
 
     async def test_whitespace_only_source_id_returns_400(
         self, client: AsyncClient
@@ -174,7 +175,7 @@ class TestResolveEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "source_id" in body["detail"]
+        assert "source_id" in body["message"]
 
     async def test_whitespace_only_request_id_returns_400(
         self, client: AsyncClient
@@ -196,7 +197,7 @@ class TestResolveEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "request_id" in body["detail"]
+        assert "request_id" in body["message"]
 
     async def test_whitespace_only_entity_type_returns_400(
         self, client: AsyncClient
@@ -218,7 +219,23 @@ class TestResolveEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "entity_type" in body["detail"]
+        assert "entity_type" in body["message"]
+
+    async def test_service_unavailable_returns_503(
+        self,
+        client: AsyncClient,
+        resolve_service: AsyncMock,
+    ) -> None:
+        resolve_service.handle_resolve.side_effect = ServiceUnavailableError(
+            "mongodb", "MongoDB is down"
+        )
+
+        response = await client.post("/api/v1/resolve", json=VALID_RESOLVE_PAYLOAD)
+
+        assert response.status_code == 503
+        body = response.json()
+        assert body["error_code"] == ErrorCode.SERVICE_UNAVAILABLE
+        assert "message" in body
 
     async def test_malformed_json_returns_400(self, client: AsyncClient) -> None:
         response = await client.post(
@@ -389,7 +406,7 @@ class TestResolveBulkEndpoint:
                     ),
                     error=ErrorResponse(
                         error_code=ErrorCode.SERVICE_ERROR,
-                        detail="Failed",
+                        message="Failed",
                     ),
                 ),
             ],

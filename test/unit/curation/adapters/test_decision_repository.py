@@ -89,7 +89,9 @@ class TestBuildCursorCondition:
         assert "$or" in result
         assert len(result["$or"]) == 2
         assert result["$or"][0] == {"created_at": None, "_id": {"$gt": "last-id"}}
-        assert result["$or"][1] == {"created_at": {"$ne": None}}
+        # $gt: None matches all docs with a non-null, present value — identical
+        # semantic to $ne: None but uses a range index on DocumentDB.
+        assert result["$or"][1] == {"created_at": {"$gt": None}}
 
     def test_descending_with_none_sort_value(self):
         repo, _ = _make_repo()

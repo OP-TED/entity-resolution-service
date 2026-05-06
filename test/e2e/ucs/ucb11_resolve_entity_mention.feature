@@ -135,14 +135,14 @@ Feature: UC-B1.1 — Resolve Entity Mention via ERS API
   # Client timeout budget exceeded (ADR-A2N, ADR-C1N)
   # ---------------------------------------------------------------------------
 
-  Scenario: Return timeout error when Decision Store is unreachable during provisional write
+  Scenario: Return service unavailable when Decision Store is unreachable during provisional write
     Given an entity mention with triad "SYSTEM_G", "req-050", "ORGANISATION"
     And the mention content is "mock:org-001" with context "notice-2024-05"
     And ERE will not respond within the execution window
     And the Decision Store is unreachable for writes
     When the originator submits the resolve request
-    Then the response returns error "SERVICE_TIMEOUT"
-    And the response HTTP status is 504
+    Then the response returns error "SERVICE_UNAVAILABLE"
+    And the response HTTP status is 503
 
   # ---------------------------------------------------------------------------
   # Critical dependency failures
@@ -156,20 +156,19 @@ Feature: UC-B1.1 — Resolve Entity Mention via ERS API
     Then the response returns error "SERVICE_ERROR"
     And no decision is written to the Decision Store
 
-  Scenario: Return timeout error when the Decision Store fails during provisional write
+  Scenario: Return service unavailable when the Decision Store fails during provisional write
     Given an entity mention with triad "SYSTEM_I", "req-070", "ORGANISATION"
     And the mention content is "mock:org-001" with context "notice-2024-07"
     And ERE will not respond within the execution window
     And the Decision Store is unreachable for writes
     When the originator submits the resolve request
-    Then the response returns error "SERVICE_TIMEOUT"
-    And the response HTTP status is 504
+    Then the response returns error "SERVICE_UNAVAILABLE"
+    And the response HTTP status is 503
 
-  Scenario: Issue provisional when the ERE messaging boundary is unavailable
+  Scenario: Return service unavailable when the ERE messaging boundary is unavailable
     Given an entity mention with triad "SYSTEM_J", "req-080", "ORGANISATION"
     And the mention content is "mock:org-001" with context "notice-2024-08"
     And the ERE messaging boundary is unavailable for publishing
     When the originator submits the resolve request
-    Then the response returns a deterministic draft identifier with status "PROVISIONAL"
-    And the draft identifier equals SHA256 of "SYSTEM_J", "req-080", "ORGANISATION"
-    And the Decision Store contains a provisional singleton decision for that triad
+    Then the response returns error "SERVICE_UNAVAILABLE"
+    And the response HTTP status is 503

@@ -188,17 +188,17 @@ def response_has_error_message(ctx):
         ctx: Shared mutable step context containing ``response``.
     """
     data = ctx["response"].json()
-    assert data.get("detail")
+    assert data.get("message")
 
 
 @then(parsers.parse('the response body error detail references "{field_name}"'))
 def response_error_detail_references_field(ctx, field_name):
-    """Assert the error detail string mentions the given field name.
+    """Assert the error message string mentions the given field name.
 
     Args:
         ctx: Shared mutable step context containing ``response``.
-        field_name: Field name that must appear in the ``detail`` string.
+        field_name: Field name that must appear in the ``message`` string.
     """
     data = ctx["response"].json()
-    detail = str(data.get("detail", ""))
+    detail = str(data.get("message", ""))
     assert field_name in detail

@@ -151,6 +151,46 @@ class TestClose:
         assert not caplog.records[-1].exc_info  # exception was not re-raised
 
 
+class TestPublishNotification:
+    async def test_calls_redis_publish_with_correct_args(self):
+        mock_redis = AsyncMock(spec=aioredis.Redis)
+        mock_redis.connection_pool = MagicMock()
+        mock_redis.connection_pool.connection_kwargs = {}
+        mock_redis.publish = AsyncMock()
+        client = RedisEREClient(config_or_client=mock_redis)
+
+        await client.publish_notification("ers_notifications", "SRCIDrequestidORGANISATION")
+
+        mock_redis.publish.assert_awaited_once_with("ers_notifications", "SRCIDrequestidORGANISATION")
+
+    async def test_wraps_connection_error(self):
+        mock_redis = AsyncMock(spec=aioredis.Redis)
+        mock_redis.connection_pool = MagicMock()
+        mock_redis.connection_pool.connection_kwargs = {}
+        mock_redis.publish.side_effect = RedisConnectionError("boom")
+        client = RedisEREClient(config_or_client=mock_redis)
+
+        with pytest.raises(ConnectionError):
+            await client.publish_notification("ers_notifications", "SRCIDrequestidORGANISATION")
+
+    async def test_wraps_redis_timeout_error(self):
+        """A redis.exceptions.TimeoutError must be translated to ConnectionError.
+
+        Otherwise a network timeout during a Redis failover bubbles up as a
+        redis.exceptions.* type that no caller catches, killing the integrator
+        worker and silently losing the cross-instance signal.
+        """
+        from redis.exceptions import TimeoutError as RedisTimeoutError
+        mock_redis = AsyncMock(spec=aioredis.Redis)
+        mock_redis.connection_pool = MagicMock()
+        mock_redis.connection_pool.connection_kwargs = {}
+        mock_redis.publish.side_effect = RedisTimeoutError("timed out")
+        client = RedisEREClient(config_or_client=mock_redis)
+
+        with pytest.raises(ConnectionError):
+            await client.publish_notification("ers_notifications", "k")
+
+
 class TestContextManager:
     async def test_closes_on_normal_exit(self):
         mock_redis = AsyncMock(spec=aioredis.Redis)
