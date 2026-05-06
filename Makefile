@@ -10,10 +10,7 @@ BUILD_PATH   = $(REPO_ROOT)/dist
 PACKAGE_NAME = ers
 COMPOSE_FILE = $(SRC_PATH)/infra/compose.dev.yaml
 ENV_FILE     = $(SRC_PATH)/infra/.env
-# TODO: bump to v7.22.0 once released — v7.21.0 drops descriptions from nullable
-#       (anyOf) properties in the asciidoc generator. The fix is in the 7.22.0-SNAPSHOT
-#       but no stable release or Docker image exists yet.
-OPENAPI_GENERATOR_IMAGE = openapitools/openapi-generator-cli:v7.21.0
+OPENAPI_GENERATOR_IMAGE = openapitools/openapi-generator-cli:v7.22.0
 DOCS_API_REL ?= docs/api-docs
 DOCS_API_PATH = $(REPO_ROOT)/$(DOCS_API_REL)
 DOCS_TEMPLATE_PATH = $(REPO_ROOT)/docs/templates/asciidoc
@@ -33,7 +30,7 @@ COV_FLAGS = --cov=ers \
 #-----------------------------------------------------------------------------
 # Dev commands
 #-----------------------------------------------------------------------------
-.PHONY: help install-poetry install lock build seed-db openapi generate-api-docs
+.PHONY: help install-poetry install lock build seed-db openapi api-docs
 
 help: ## Display available targets
 	@ echo -e "$(BUILD_PRINT)Available targets:$(END_BUILD_PRINT)"

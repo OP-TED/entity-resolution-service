@@ -88,6 +88,11 @@ Authenticate and receive access + refresh tokens.
 | Unauthorized
 | <<ErrorResponse,ErrorResponse>>
 
+
+| 403
+| User account is deactivated
+| <<ErrorResponse,ErrorResponse>>
+
 |===
 
 
@@ -834,6 +839,53 @@ Reject multiple decisions in a single request.
 | 400
 | Bad Request
 | <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.EntityTypes]
+=== EntityTypes
+
+
+[.entityTypesApiV1CurationEntityTypesGet]
+==== GET /api/v1/curation/entity-types
+
+List Entity Types
+
+===== Description
+
+Return the configured entity types and their UI display-name field.
+
+
+===== Parameters
+
+
+
+
+
+
+
+===== Return Type
+
+array[<<EntityTypeDescriptor,EntityTypeDescriptor>>]
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Successful Response
+| List[<<EntityTypeDescriptor,EntityTypeDescriptor>>]
 
 |===
 
@@ -2080,6 +2132,35 @@ Lightweight entity mention projection for display.
 
 
 
+[#EntityTypeDescriptor]
+=== EntityTypeDescriptor
+
+Discoverability descriptor for a configured entity type.
+
+
+[.fields-EntityTypeDescriptor]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| name
+| X
+| 
+|  `String`
+| The entity type identifier (e.g. &#39;ORGANISATION&#39;).
+|     
+
+| display_name_field
+| X
+| 
+|  `String`
+| Key in parsed_representation that the UI should render as the entity&#39;s display title.
+|     
+
+|===
+
+
+
 [#ErrorResponse]
 === ErrorResponse
 
@@ -2557,7 +2638,7 @@ Authenticated user context carried through the request lifecycle.
 [#UserPatchRequest]
 === UserPatchRequest
 
-Admin request to update user flags.
+Admin request to update user attributes.
 
 
 [.fields-UserPatchRequest]
@@ -2584,6 +2665,13 @@ Admin request to update user flags.
 | X
 |  `Boolean`
 | Set to true to mark the email as verified or false to unverify.
+|     
+
+| password
+| 
+| X
+|  `String`
+| New plain-text password (8–128 characters); stored hashed.
 |     
 
 |===
