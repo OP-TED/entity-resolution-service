@@ -57,10 +57,12 @@ def rdf_config() -> RDFMappingConfig:
         entity_types={
             "ORGANISATION": EntityTypeConfig(
                 rdf_type="org:Organization",
+                entity_label_field="legal_name",
                 fields={"legal_name": "epo:hasLegalName"},
             ),
             "PROCEDURE": EntityTypeConfig(
                 rdf_type="epo:Procedure",
+                entity_label_field="title",
                 fields={"title": "epo:hasTitle"},
             ),
         },
@@ -121,13 +123,19 @@ def app(
     app = create_app()
     app.router.lifespan_context = _noop_lifespan
     app.dependency_overrides[get_rdf_config] = lambda: rdf_config
-    app.dependency_overrides[get_decision_curation_service] = lambda: decision_curation_service
-    app.dependency_overrides[get_canonical_entity_service] = lambda: canonical_entity_service
+    app.dependency_overrides[get_decision_curation_service] = lambda: (
+        decision_curation_service
+    )
+    app.dependency_overrides[get_canonical_entity_service] = lambda: (
+        canonical_entity_service
+    )
     app.dependency_overrides[get_entity_service] = lambda: entity_service
     app.dependency_overrides[get_statistics_service] = lambda: statistics_service
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[get_user_action_service] = lambda: user_action_service
-    app.dependency_overrides[get_user_management_service] = lambda: user_management_service
+    app.dependency_overrides[get_user_management_service] = lambda: (
+        user_management_service
+    )
     app.dependency_overrides[get_current_user] = lambda: TEST_USER_CONTEXT
     return app
 

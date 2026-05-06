@@ -16,7 +16,10 @@ from ers.ers_rest_api.entrypoints.api.dependencies import (
 from ers.ers_rest_api.services.lookup_service import LookupService
 from ers.ers_rest_api.services.refresh_bulk_service import RefreshBulkService
 from ers.ers_rest_api.services.resolve_service import ResolveService
-from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
+from ers.rdf_mention_parser.domain.rdf_mapping_config import (
+    EntityTypeConfig,
+    RDFMappingConfig,
+)
 
 STUB_RDF_CONFIG = RDFMappingConfig(
     namespaces={
@@ -26,10 +29,12 @@ STUB_RDF_CONFIG = RDFMappingConfig(
     entity_types={
         "ORGANISATION": EntityTypeConfig(
             rdf_type="org:Organization",
+            entity_label_field="legal_name",
             fields={"legal_name": "org:legalName"},
         ),
         "PROCEDURE": EntityTypeConfig(
             rdf_type="epo:Procedure",
+            entity_label_field="identifier",
             fields={"identifier": "epo:hasID"},
         ),
     },
