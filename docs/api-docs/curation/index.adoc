@@ -1710,7 +1710,7 @@ Result of a single decision within a bulk action.
 | 
 | X
 |  `String`
-| 
+| Human-readable explanation when the status is not success.
 |     
 
 |===
@@ -1945,7 +1945,7 @@ Statistics about the curation process based on UserAction counts.
 | 
 | X
 |  `String`
-| 
+| Opaque cursor to fetch the next page, or null if there are no more pages.
 |     
 
 |===
@@ -1981,7 +1981,7 @@ Statistics about the curation process based on UserAction counts.
 | 
 | X
 |  `String`
-| 
+| Opaque cursor to fetch the next page, or null if there are no more pages.
 |     
 
 |===
@@ -2054,7 +2054,7 @@ Decision summary for list display.
 | 
 | X
 |  `Date`
-| 
+| Timestamp of the last update to this decision.
 | date-time    
 
 |===
@@ -2125,7 +2125,7 @@ Lightweight entity mention projection for display.
 | 
 | X
 |  `Map` of `AnyType`
-| 
+| Parsed key-value representation of the entity mention.
 |     
 
 |===
@@ -2271,14 +2271,14 @@ Request body for user login.
 | 
 | X
 |  `Integer`
-| 
+| Previous page number, or null if on the first page.
 |     
 
 | next
 | 
 | X
 |  `Integer`
-| 
+| Next page number, or null if on the last page.
 |     
 
 | results
@@ -2314,14 +2314,14 @@ Request body for user login.
 | 
 | X
 |  `Integer`
-| 
+| Previous page number, or null if on the first page.
 |     
 
 | next
 | 
 | X
 |  `Integer`
-| 
+| Next page number, or null if on the last page.
 |     
 
 | results
@@ -2650,28 +2650,28 @@ Admin request to update user attributes.
 | 
 | X
 |  `Boolean`
-| 
+| Set to true to enable the account or false to disable it.
 |     
 
 | is_superuser
 | 
 | X
 |  `Boolean`
-| 
+| Set to true to grant or false to revoke superuser privileges.
 |     
 
 | is_verified
 | 
 | X
 |  `Boolean`
-| 
+| Set to true to mark the email as verified or false to unverify.
 |     
 
 | password
 | 
 | X
 |  `String`
-| 
+| New plain-text password (8–128 characters); stored hashed.
 |     
 
 |===
@@ -2735,7 +2735,7 @@ Public user representation (no password).
 | 
 | X
 |  `Date`
-| 
+| Timestamp of the last update to the user account.
 | date-time    
 
 |===
