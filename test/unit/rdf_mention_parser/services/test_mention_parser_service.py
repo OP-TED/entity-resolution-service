@@ -77,7 +77,7 @@ def config() -> RDFMappingConfig:
         entity_types={
             "ORGANISATION": {
                 "rdf_type": "org:Organization",
-                "display_name_field": "legal_name",
+                "entity_label_field": "legal_name",
                 "fields": dict(_ORG_FIELDS),
             }
         },
@@ -144,7 +144,7 @@ class TestBuildSparqlQuery:
     def test_single_field_config_builds_valid_query(self, config):
         single_config = EntityTypeConfig(
             rdf_type="org:Organization",
-            display_name_field="legal_name",
+            entity_label_field="legal_name",
             fields={"legal_name": "epo:hasLegalName"},
         )
         query = build_sparql_query(config, single_config)

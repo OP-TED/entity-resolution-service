@@ -29,12 +29,12 @@ STUB_RDF_CONFIG = RDFMappingConfig(
     entity_types={
         "ORGANISATION": EntityTypeConfig(
             rdf_type="org:Organization",
-            display_name_field="legal_name",
+            entity_label_field="legal_name",
             fields={"legal_name": "org:legalName"},
         ),
         "PROCEDURE": EntityTypeConfig(
             rdf_type="epo:Procedure",
-            display_name_field="identifier",
+            entity_label_field="identifier",
             fields={"identifier": "epo:hasID"},
         ),
     },

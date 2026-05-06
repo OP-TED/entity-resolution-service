@@ -245,12 +245,12 @@ def rdf_config() -> RDFMappingConfig:
         entity_types={
             "ORGANISATION": EntityTypeConfig(
                 rdf_type="org:Organization",
-                display_name_field="legal_name",
+                entity_label_field="legal_name",
                 fields={"legal_name": "epo:hasLegalName"},
             ),
             "PROCEDURE": EntityTypeConfig(
                 rdf_type="epo:Procedure",
-                display_name_field="title",
+                entity_label_field="title",
                 fields={"title": "epo:hasTitle"},
             ),
         },

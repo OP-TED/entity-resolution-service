@@ -17,6 +17,6 @@ async def list_entity_types(
 ) -> list[EntityTypeDescriptor]:
     """Return the configured entity types and their UI display-name field."""
     return [
-        EntityTypeDescriptor(name=name, display_name_field=cfg.display_name_field)
+        EntityTypeDescriptor(name=name, display_name_field=cfg.entity_label_field)
         for name, cfg in sorted(rdf_config.entity_types.items())
     ]
