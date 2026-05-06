@@ -88,7 +88,7 @@ _ORGANISATION_FIELDS_6 = {
 _SECOND_ENTITY_TYPE = {
     "PROCEDURE": {
         "rdf_type": "epo:Procedure",
-        "display_name_field": "title",
+        "entity_label_field": "title",
         "fields": {"title": "epo:hasTitle"},
     }
 }
@@ -110,7 +110,7 @@ def _base_valid_config(
     entity_types = {
         "ORGANISATION": {
             "rdf_type": "org:Organization",
-            "display_name_field": "legal_name",
+            "entity_label_field": "legal_name",
             "fields": dict(_ORGANISATION_FIELDS_6),
         }
     }
@@ -202,7 +202,7 @@ def config_with_organisation_mapped(ctx, rdf_type):
         "entity_types": {
             "ORGANISATION": {
                 "rdf_type": rdf_type,
-                "display_name_field": "legal_name",
+                "entity_label_field": "legal_name",
                 "fields": dict(_ORGANISATION_FIELDS_6),
             }
         },

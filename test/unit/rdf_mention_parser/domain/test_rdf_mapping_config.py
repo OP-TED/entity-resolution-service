@@ -37,7 +37,7 @@ def minimal_config(extra_types: dict | None = None) -> dict:
     entity_types = {
         "ORGANISATION": {
             "rdf_type": "org:Organization",
-            "display_name_field": "legal_name",
+            "entity_label_field": "legal_name",
             "fields": dict(ORGANISATION_FIELDS),
         }
     }
@@ -63,7 +63,7 @@ class TestRDFMappingConfigValid:
         extra = {
             "PROCEDURE": {
                 "rdf_type": "epo:Procedure",
-                "display_name_field": "title",
+                "entity_label_field": "title",
                 "fields": {"title": "epo:hasTitle"},
             }
         }
@@ -140,7 +140,7 @@ class TestRDFMappingConfigStructural:
             "entity_types": {
                 "ORGANISATION": {
                     "rdf_type": "org:Organization",
-                    "display_name_field": "legal_name",
+                    "entity_label_field": "legal_name",
                     "fields": ORGANISATION_FIELDS,
                 }
             }
@@ -232,7 +232,7 @@ class TestRDFMappingConfigResolveEntityType:
         extra = {
             "PROCEDURE": {
                 "rdf_type": "epo:Procedure",
-                "display_name_field": "title",
+                "entity_label_field": "title",
                 "fields": {"title": "epo:hasTitle"},
             }
         }
