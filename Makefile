@@ -33,7 +33,7 @@ COV_FLAGS = --cov=ers \
 #-----------------------------------------------------------------------------
 # Dev commands
 #-----------------------------------------------------------------------------
-.PHONY: help install-poetry install lock build seed-db openapi generate-api-docs
+.PHONY: help install-poetry install lock build seed-db openapi api-docs
 
 help: ## Display available targets
 	@ echo -e "$(BUILD_PRINT)Available targets:$(END_BUILD_PRINT)"

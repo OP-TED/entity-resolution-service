@@ -479,21 +479,28 @@ or an error (error present), never both.
 | 
 | X
 | <<ClusterReference,ClusterReference>>
-| Current canonical cluster assignment for the mention.
+| 
 |     
 
 | last_updated
 | 
 | X
 |  `Date`
-| Timestamp of the most recent assignment update.
+| 
 | date-time    
+
+| context
+| 
+| X
+|  `String`
+| 
+|     
 
 | error
 | 
 | X
 | <<ErrorResponse,ErrorResponse>>
-| Error response with a code and description.
+| 
 |     
 
 |===
@@ -602,7 +609,7 @@ It contains the entity data, along with metadata like type and format.
 | 
 | X
 |  `String`
-| Optional descriptive text for the model instance.
+| 
 |     
 
 | identifiedBy
@@ -630,14 +637,14 @@ It contains the entity data, along with metadata like type and format.
 | 
 | X
 |  `String`
-| JSON representation of the parsed entity data. 
+| 
 |     
 
 | context
 | 
 | X
 |  `String`
-| Optional context reference (e.g. notice or document ID). 
+| 
 |     
 
 |===
@@ -665,7 +672,7 @@ in this hereby ERE service schema) can be built from an entity that is initially
 | 
 | X
 |  `String`
-| Optional descriptive text for the model instance.
+| 
 |     
 
 | source_id
@@ -789,21 +796,21 @@ dedicated internal model at that point.
 | 
 | X
 |  `String`
-| Cluster identifier assigned to the mention.
+| 
 |     
 
 | status
 | 
 | X
 | <<ResolutionOutcome,ResolutionOutcome>>
-| Whether the resolution is canonical or provisional.
+| 
 |    CANONICAL, PROVISIONAL,  
 
 | error
 | 
 | X
 | <<ErrorResponse,ErrorResponse>>
-| Error response with a code a description.
+| 
 |     
 
 |===
@@ -1015,6 +1022,13 @@ each item inside RefreshBulkResponse (delta synchronisation).
 | Timestamp of the most recent assignment update.
 | date-time    
 
+| context
+| 
+| X
+|  `String`
+| 
+|     
+
 |===
 
 
@@ -1048,7 +1062,7 @@ Request body for POST /refreshBulk.
 | 
 | X
 |  `String`
-| Opaque cursor returned by a previous response for pagination.
+| 
 |     
 
 |===
@@ -1084,7 +1098,7 @@ Response body for POST /refreshBulk.
 | 
 | X
 |  `String`
-| Cursor to pass in the next request to retrieve the next page.
+| 
 |     
 
 |===
@@ -1096,8 +1110,13 @@ Response body for POST /refreshBulk.
 
 Possible outcomes of a single entity mention resolution.
 
-CANONICAL — the cluster ID was produced by the Entity Resolution Engine.
-PROVISIONAL — the cluster ID was derived deterministically (singleton).
+CANONICAL — the assignment was produced by the Entity Resolution Engine,
+    or an existing decision is being replayed (the stored answer is
+    authoritative regardless of how it was originally written).
+PROVISIONAL — the cluster ID was issued by ERS as a deterministic draft
+    identifier because ERE did not respond within the execution window.
+    This is a short-lived state; ERE will process the mention
+    asynchronously and may supersede it via the delta-sync channel.
 
 
 

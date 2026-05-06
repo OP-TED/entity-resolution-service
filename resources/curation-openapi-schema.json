@@ -849,7 +849,7 @@
           "Entity Types"
         ],
         "summary": "List Entity Types",
-        "description": "Return the list of configured entity types.",
+        "description": "Return the configured entity types and their UI display-name field.",
         "operationId": "list_entity_types_api_v1_curation_entity_types_get",
         "responses": {
           "200": {
@@ -858,7 +858,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/EntityTypeDescriptor"
                   },
                   "type": "array",
                   "title": "Response List Entity Types Api V1 Curation Entity Types Get"
@@ -2065,6 +2065,27 @@
         ],
         "title": "EntityMentionPreview",
         "description": "Lightweight entity mention projection for display."
+      },
+      "EntityTypeDescriptor": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The entity type identifier (e.g. 'ORGANISATION')."
+          },
+          "display_name_field": {
+            "type": "string",
+            "title": "Display Name Field",
+            "description": "Key in parsed_representation that the UI should render as the entity's display title."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "display_name_field"
+        ],
+        "title": "EntityTypeDescriptor",
+        "description": "Discoverability descriptor for a configured entity type."
       },
       "ErrorResponse": {
         "properties": {
