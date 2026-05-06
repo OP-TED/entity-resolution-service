@@ -503,7 +503,7 @@ or an error (error present), never both.
 | 
 | X
 |  `String`
-| 
+| Optional context originally submitted with the resolution request.
 |     
 
 | error
@@ -1051,7 +1051,7 @@ each item inside RefreshBulkResponse (delta synchronisation).
 | 
 | X
 |  `String`
-| 
+| Optional context originally submitted with the resolution request.
 |     
 
 |===
