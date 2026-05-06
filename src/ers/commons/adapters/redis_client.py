@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 import redis.asyncio as aioredis
 from erspec.models.ere import ERERequest, EREResponse
 from redis.exceptions import ConnectionError as _RedisLibConnectionError
+from redis.exceptions import TimeoutError as _RedisLibTimeoutError
 
 from ers.commons.adapters.redis_messages import get_response_from_message
 
@@ -13,11 +14,12 @@ log = logging.getLogger(__name__)
 class RedisConnectionConfig:
     """Simple data class to hold Redis connection configuration."""
 
-    def __init__(self, host: str, port: int, db: int, password: str | None = None):
+    def __init__(self, host: str, port: int, db: int, password: str | None = None, socket_connect_timeout: float | None = None):
         self.host = host
         self.port = port
         self.db = db
         self.password = password
+        self.socket_connect_timeout = socket_connect_timeout
 
     @classmethod
     def from_settings(cls, settings) -> "RedisConnectionConfig":
@@ -34,7 +36,22 @@ class RedisConnectionConfig:
             port=settings.REDIS_PORT,
             db=settings.REDIS_DB,
             password=settings.REDIS_PASSWORD,
+            socket_connect_timeout=settings.REDIS_SOCKET_CONNECT_TIMEOUT,
         )
+
+    def to_redis_kwargs(self) -> dict:
+        """Build keyword arguments for ``aioredis.Redis`` from this config.
+
+        Returns:
+            Dict suitable for unpacking into ``aioredis.Redis(**config.to_redis_kwargs())``.
+        """
+        return {
+            "host": self.host,
+            "port": self.port,
+            "db": self.db,
+            "password": self.password,
+            "socket_connect_timeout": self.socket_connect_timeout,
+        }
 
     def __str__(self) -> str:
         return (
@@ -123,12 +140,7 @@ class RedisEREClient(AbstractClient):
         if isinstance(config_or_client, RedisConnectionConfig):
             self.config = config_or_client
             log.info("Redis ERE client: connecting to %s", self.config)
-            self._redis_client = aioredis.Redis(
-                host=self.config.host,
-                port=self.config.port,
-                db=self.config.db,
-                password=self.config.password,
-            )
+            self._redis_client = aioredis.Redis(**self.config.to_redis_kwargs())
         else:
             log.info("Redis ERE client: using existing redis client #%s", id(config_or_client))
             conn_args = config_or_client.connection_pool.connection_kwargs
@@ -205,6 +217,23 @@ class RedisEREClient(AbstractClient):
         response = get_response_from_message(raw_msg, self.character_encoding)
         log.debug("Redis ERE client, received response id: %s", response.ere_request_id)
         return response
+
+    async def publish_notification(self, channel: str, triad_key: str) -> None:
+        """Publish triad_key to a Redis Pub/Sub channel.
+
+        Args:
+            channel: Redis Pub/Sub channel name (e.g. ``ers_notifications``).
+            triad_key: Notification payload — concatenated source_id + request_id + entity_type.
+
+        Raises:
+            ConnectionError: If the Redis connection is unavailable or the
+                command times out (covers both the disconnected and the
+                slow-failover scenarios).
+        """
+        try:
+            await self._redis_client.publish(channel, triad_key)
+        except (_RedisLibConnectionError, _RedisLibTimeoutError) as exc:
+            raise ConnectionError(str(exc)) from exc
 
     async def ping(self) -> bool:
         """Check if the Redis server is reachable.

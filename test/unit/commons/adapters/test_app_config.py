@@ -7,6 +7,7 @@ from ers import (
     MongoDBConfig,
     ObservabilityConfig,
     RDFMentionParserConfig,
+    RedisConfig,
     config,
 )
 
@@ -95,8 +96,29 @@ class TestObservabilityConfig:
         assert ObservabilityConfig().TRACING_ENABLED is True
 
 
+class TestRedisConfig:
+    def test_notifications_channel_default(self, monkeypatch):
+        monkeypatch.delenv("ERS_NOTIFICATIONS_CHANNEL", raising=False)
+        assert RedisConfig().ERS_NOTIFICATIONS_CHANNEL == "ers_notifications"
+
+    def test_notifications_channel_from_env(self, monkeypatch):
+        monkeypatch.setenv("ERS_NOTIFICATIONS_CHANNEL", "custom_channel")
+        assert RedisConfig().ERS_NOTIFICATIONS_CHANNEL == "custom_channel"
+
+    def test_socket_connect_timeout_default(self, monkeypatch):
+        monkeypatch.delenv("REDIS_SOCKET_CONNECT_TIMEOUT", raising=False)
+        assert RedisConfig().REDIS_SOCKET_CONNECT_TIMEOUT == 5.0
+
+    def test_socket_connect_timeout_from_env(self, monkeypatch):
+        monkeypatch.setenv("REDIS_SOCKET_CONNECT_TIMEOUT", "10")
+        assert RedisConfig().REDIS_SOCKET_CONNECT_TIMEOUT == 10.0
+
+
 class TestAppConfigResolverSingleton:
-    def test_config_singleton_has_all_keys(self):
+    def test_config_singleton_has_all_keys(self, monkeypatch):
+        monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key")
+        monkeypatch.setenv("ADMIN_EMAIL", "admin@test.com")
+        monkeypatch.setenv("ADMIN_PASSWORD", "test-password")
         assert isinstance(config.APP_NAME, str)
         assert isinstance(config.DEBUG, bool)
         assert isinstance(config.CORS_ORIGINS, list)

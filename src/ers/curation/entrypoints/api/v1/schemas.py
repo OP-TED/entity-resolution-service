@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, Query
-from pydantic import BaseModel, Field
 
 from ers.commons.domain.data_transfer_objects import (
     DEFAULT_PER_PAGE,
@@ -15,15 +14,16 @@ from ers.curation.domain.data_transfer_objects import (
     DecisionOrdering,
     StatisticsFilters,
 )
+from ers.curation.domain.errors import CurationErrorResponse
 from ers.curation.domain.exceptions import InvalidEntityTypeError
 from ers.curation.entrypoints.api.dependencies import get_rdf_config
 from ers.rdf_mention_parser.domain.rdf_mapping_config import RDFMappingConfig
 
-
-class ErrorResponse(BaseModel):
-    """Standard error response body for OpenAPI documentation."""
-
-    detail: str = Field(description="Human-readable description of the error.")
+# Backward-compatible alias for the FastAPI ``responses=`` schema name. New
+# code should reference ``CurationErrorResponse`` directly; this alias keeps
+# existing route decorators (decisions.py, users.py, auth.py, etc.) compiling
+# unchanged while the rename is being completed.
+ErrorResponse = CurationErrorResponse
 
 
 # Query parameter dependencies

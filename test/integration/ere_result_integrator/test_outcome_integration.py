@@ -113,7 +113,11 @@ async def seeded_registry(mongo_db):
 async def test_it001_solicited_outcome_persisted(
     seeded_registry, integration_service, decision_service
 ):
-    """IT-001: valid solicited outcome → Decision Store updated with cluster + timestamp."""
+    """IT-001: valid solicited outcome → Decision Store updated with cluster + timestamp.
+
+    On first persistence the row is an insert: ``created_at`` is set to the
+    response timestamp and ``updated_at`` stays ``None`` (per R1).
+    """
     identifier = make_identifier()
     response = make_response(identifier, cluster_id="cluster-org-42", n_candidates=2)
 
@@ -122,7 +126,8 @@ async def test_it001_solicited_outcome_persisted(
     stored = await decision_service.get_decision_by_triad(identifier)
     assert stored is not None
     assert stored.current_placement.cluster_id == "cluster-org-42"
-    assert stored.updated_at == truncate_ms(response.timestamp)
+    assert stored.created_at == truncate_ms(response.timestamp)
+    assert stored.updated_at is None
 
 
 # ---------------------------------------------------------------------------
@@ -156,18 +161,25 @@ async def test_it002_unsolicited_outcome_updates_decision_store(
 async def test_it003_duplicate_outcome_rejected(
     seeded_registry, integration_service, decision_service
 ):
-    """IT-003: same outcome sent twice → Decision Store unchanged after second call."""
+    """IT-003: same outcome sent twice → Decision Store unchanged after second call.
+
+    The duplicate is short-circuited at the service layer (R1) because the
+    incoming ``current_placement.cluster_id`` matches the stored one. The row
+    remains as initially inserted: ``created_at`` set, ``updated_at`` still
+    ``None``.
+    """
     identifier = make_identifier()
     ts = datetime.now(UTC)
     response = make_response(identifier, cluster_id="cluster-dup", timestamp=ts)
 
     await integration_service.integrate_outcome(response)
-    await integration_service.integrate_outcome(response)  # duplicate — rejected silently
+    await integration_service.integrate_outcome(response)  # duplicate — short-circuited
 
     stored = await decision_service.get_decision_by_triad(identifier)
     assert stored is not None
     assert stored.current_placement.cluster_id == "cluster-dup"
-    assert stored.updated_at == truncate_ms(ts)
+    assert stored.created_at == truncate_ms(ts)
+    assert stored.updated_at is None
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +190,13 @@ async def test_it003_duplicate_outcome_rejected(
 async def test_it004_late_arrival_rejected(
     seeded_registry, integration_service, decision_service
 ):
-    """IT-004: newer outcome accepted; late arrival (older timestamp) rejected."""
+    """IT-004: newer outcome accepted; late arrival (older timestamp) rejected.
+
+    The first outcome arrives and is inserted: ``created_at=t1_plus_1``,
+    ``updated_at=None``. The later, older-timestamped outcome is rejected by
+    the stale check (R2 fallback to ``created_at``), so the stored placement
+    remains the "newer" one and ``updated_at`` is still ``None``.
+    """
     identifier = make_identifier()
     t0 = datetime.now(UTC)
     t1_plus_1 = t0 + timedelta(seconds=10)
@@ -192,4 +210,5 @@ async def test_it004_late_arrival_rejected(
     stored = await decision_service.get_decision_by_triad(identifier)
     assert stored is not None
     assert stored.current_placement.cluster_id == "cluster-newer"
-    assert stored.updated_at == truncate_ms(t1_plus_1)
+    assert stored.created_at == truncate_ms(t1_plus_1)
+    assert stored.updated_at is None

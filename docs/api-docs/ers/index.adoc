@@ -331,6 +331,11 @@ Resolve an entity mention and return canonical or provisional cluster ID.
 | Validation error
 | <<ErrorResponse,ErrorResponse>>
 
+
+| 503
+| Backend service unavailable (MongoDB, Redis, or messaging channel)
+| <<ErrorResponse,ErrorResponse>>
+
 |===
 
 
@@ -400,6 +405,11 @@ Resolve multiple entity mentions in a single batch.
 
 | 400
 | Validation error
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 503
+| Backend service unavailable (MongoDB, Redis, or messaging channel)
 | <<ErrorResponse,ErrorResponse>>
 
 |===
@@ -479,14 +489,14 @@ or an error (error present), never both.
 | 
 | X
 | <<ClusterReference,ClusterReference>>
-| Current canonical cluster assignment for the mention.
+| 
 |     
 
 | last_updated
 | 
 | X
 |  `Date`
-| Timestamp of the most recent assignment update.
+| 
 | date-time    
 
 | context
@@ -500,7 +510,7 @@ or an error (error present), never both.
 | 
 | X
 | <<ErrorResponse,ErrorResponse>>
-| Error response with a code and description.
+| 
 |     
 
 |===
@@ -609,7 +619,7 @@ It contains the entity data, along with metadata like type and format.
 | 
 | X
 |  `String`
-| Optional descriptive text for the model instance.
+| 
 |     
 
 | identifiedBy
@@ -637,14 +647,14 @@ It contains the entity data, along with metadata like type and format.
 | 
 | X
 |  `String`
-| JSON representation of the parsed entity data. 
+| 
 |     
 
 | context
 | 
 | X
 |  `String`
-| Optional context reference (e.g. notice or document ID). 
+| 
 |     
 
 |===
@@ -672,7 +682,7 @@ in this hereby ERE service schema) can be built from an entity that is initially
 | 
 | X
 |  `String`
-| Optional descriptive text for the model instance.
+| 
 |     
 
 | source_id
@@ -796,21 +806,21 @@ dedicated internal model at that point.
 | 
 | X
 |  `String`
-| Cluster identifier assigned to the mention.
+| 
 |     
 
 | status
 | 
 | X
 | <<ResolutionOutcome,ResolutionOutcome>>
-| Whether the resolution is canonical or provisional.
+| 
 |    CANONICAL, PROVISIONAL,  
 
 | error
 | 
 | X
 | <<ErrorResponse,ErrorResponse>>
-| Error response with a code a description.
+| 
 |     
 
 |===
@@ -866,6 +876,8 @@ Machine-readable error codes returned in error responses.
 | SOURCE_NOT_FOUND
 | SERVICE_ERROR
 | SERVICE_TIMEOUT
+| APPLICATION_ERROR
+| SERVICE_UNAVAILABLE
 
 |===
 
@@ -874,6 +886,12 @@ Machine-readable error codes returned in error responses.
 === ErrorResponse
 
 Standard error response body returned by all ERS REST API endpoints.
+
+The &#x60;&#x60;request_id&#x60;&#x60; field carries the ERS business UUID set by the request
+middleware (&#x60;&#x60;set_request_id&#x60;&#x60; in &#x60;&#x60;ers.commons.adapters.tracing&#x60;&#x60;). It is
+populated only by handlers that have access to that context — primarily the
+&#x60;&#x60;Exception&#x60;&#x60; (HTTP 500) handler — and is &#x60;&#x60;None&#x60;&#x60; on responses produced
+before the middleware ran or by handlers that do not need correlation.
 
 
 [.fields-ErrorResponse]
@@ -886,13 +904,20 @@ Standard error response body returned by all ERS REST API endpoints.
 | 
 | <<ErrorCode,ErrorCode>>
 | 
-|    VALIDATION_ERROR, IDEMPOTENCY_CONFLICT, PARSING_FAILED, MENTION_NOT_FOUND, SOURCE_NOT_FOUND, SERVICE_ERROR, SERVICE_TIMEOUT,  
+|    VALIDATION_ERROR, IDEMPOTENCY_CONFLICT, PARSING_FAILED, MENTION_NOT_FOUND, SOURCE_NOT_FOUND, SERVICE_ERROR, SERVICE_TIMEOUT, APPLICATION_ERROR, SERVICE_UNAVAILABLE,  
 
-| detail
+| message
 | X
 | 
 |  `String`
 | Human-readable explanation of the error.
+|     
+
+| request_id
+| 
+| X
+|  `String`
+| 
 |     
 
 |===
@@ -1062,7 +1087,7 @@ Request body for POST /refreshBulk.
 | 
 | X
 |  `String`
-| Opaque cursor returned by a previous response for pagination.
+| 
 |     
 
 |===
@@ -1098,7 +1123,7 @@ Response body for POST /refreshBulk.
 | 
 | X
 |  `String`
-| Cursor to pass in the next request to retrieve the next page.
+| 
 |     
 
 |===

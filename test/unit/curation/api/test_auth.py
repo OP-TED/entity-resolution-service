@@ -120,7 +120,7 @@ class TestLoginEndpoint:
         )
 
         assert response.status_code == 403
-        assert response.json()["detail"] == "User account is deactivated"
+        assert response.json()["message"] == "User account is deactivated"
 
 
 class TestRefreshEndpoint:

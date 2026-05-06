@@ -147,7 +147,7 @@ def test_unsupported_entity_type():
 
 @scenario(
     FEATURE_FILE,
-    "Return timeout error when Decision Store is unreachable during provisional write",
+    "Return service unavailable when Decision Store is unreachable during provisional write",
 )
 def test_decision_store_unreachable():
     pass
@@ -163,7 +163,7 @@ def test_request_registry_unavailable():
 
 @scenario(
     FEATURE_FILE,
-    "Return timeout error when the Decision Store fails during provisional write",
+    "Return service unavailable when the Decision Store fails during provisional write",
 )
 def test_decision_store_write_failure():
     pass
@@ -171,7 +171,7 @@ def test_decision_store_write_failure():
 
 @scenario(
     FEATURE_FILE,
-    "Issue provisional when the ERE messaging boundary is unavailable",
+    "Return service unavailable when the ERE messaging boundary is unavailable",
 )
 def test_ere_messaging_boundary_unavailable():
     pass

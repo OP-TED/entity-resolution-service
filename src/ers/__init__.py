@@ -125,6 +125,34 @@ class RedisConfig:
     def ERE_RESPONSE_CHANNEL(self, config_value: str) -> str:
         return config_value
 
+    @env_property(default_value="ers_notifications")
+    def ERS_NOTIFICATIONS_CHANNEL(self, config_value: str) -> str:
+        return config_value
+
+    @env_property(default_value="5.0")
+    def REDIS_SOCKET_CONNECT_TIMEOUT(self, config_value: str) -> float:
+        """Maximum seconds to wait for the TCP handshake when connecting to Redis.
+
+        This is a connection-establishment timeout only — it does not affect how long
+        individual commands (LPUSH, BRPOP, PUBLISH, ...) wait for a response once
+        connected. Applied to all Redis connections (ERE queue and notification subscriber)
+        so that a down or unreachable Redis host fails fast instead of blocking
+        indefinitely on the OS-level TCP timeout.
+        """
+        return float(config_value)
+
+    @env_property(default_value="5.0")
+    def ERS_SUBSCRIBER_READY_TIMEOUT(self, config_value: str) -> float:
+        """Maximum seconds to wait for the notification subscriber to finish its
+        SUBSCRIBE handshake before the API starts accepting traffic.
+
+        Closes the startup statelessness gap: without this gate the load
+        balancer can route requests before the cross-instance notification
+        channel is up, causing peer outcomes to be silently lost. Set to 0 to
+        disable the gate (not recommended in multi-instance deployments).
+        """
+        return float(config_value)
+
 
 class DecisionStoreConfig:
     @env_property(default_value="5")

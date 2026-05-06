@@ -74,7 +74,7 @@ class TestLookupEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "source_id" in body["detail"]
+        assert "source_id" in body["message"]
 
     async def test_missing_request_id_returns_400(self, client: AsyncClient) -> None:
         response = await client.get(
@@ -85,7 +85,7 @@ class TestLookupEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "request_id" in body["detail"]
+        assert "request_id" in body["message"]
 
     async def test_missing_entity_type_returns_400(self, client: AsyncClient) -> None:
         response = await client.get(
@@ -96,7 +96,7 @@ class TestLookupEndpoint:
         assert response.status_code == 400
         body = response.json()
         assert body["error_code"] == ErrorCode.VALIDATION_ERROR
-        assert "entity_type" in body["detail"]
+        assert "entity_type" in body["message"]
 
     async def test_empty_source_id_returns_400(self, client: AsyncClient) -> None:
         response = await client.get(

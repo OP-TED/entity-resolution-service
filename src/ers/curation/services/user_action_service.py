@@ -20,6 +20,7 @@ from ers.curation.domain.data_transfer_objects import (
 )
 from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.domain.models import UserActionFactory
+from ers.curation.services._pymongo_translation import translate_mongo_errors
 from ers.curation.services.canonical_entity_service import CanonicalEntityService
 from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.users import User
@@ -48,6 +49,7 @@ class UserActionService:
             if already_curated:
                 raise AlreadyCuratedError(decision.id)
 
+    @translate_mongo_errors
     async def list_user_actions(
         self,
         cursor_params: CursorParams,

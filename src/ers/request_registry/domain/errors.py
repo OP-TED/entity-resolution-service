@@ -26,12 +26,17 @@ class DuplicateTriadError(ApplicationError):
         super().__init__(message)
 
 
-class RepositoryConnectionError(ApplicationError):
-    """Raised when the adapter cannot connect to MongoDB."""
+class RegistryConnectionError(ApplicationError):
+    """Raised when the Request Registry adapter cannot connect to MongoDB.
+
+    Distinct from ``ers.resolution_decision_store.domain.errors.RepositoryConnectionError``
+    so that callers can disambiguate which Mongo-backed component is unhealthy
+    without relying on identically-named symbols imported from sibling modules.
+    """
 
     def __init__(self, detail: str) -> None:
         self.detail = detail
-        super().__init__(f"Repository connection error: {detail}")
+        super().__init__(f"Registry connection error: {detail}")
 
 
 class RepositoryOperationError(ApplicationError):

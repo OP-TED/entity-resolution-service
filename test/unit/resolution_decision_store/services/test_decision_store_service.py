@@ -1,6 +1,6 @@
 """Unit tests for DecisionStoreService."""
 from datetime import UTC, datetime
-from unittest.mock import create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from erspec.models.core import ClusterReference, Decision, EntityMentionIdentifier
@@ -147,8 +147,157 @@ class TestPublicAPIFunctions:
         assert isinstance(result, CursorPage)
 
     async def test_query_decisions_delta_delegates_to_service(self, service, mock_repo):
-        mock_repo.find_with_filters.return_value = CursorPage(results=[], next_cursor=None)
+        mock_repo.find_delta_for_source.return_value = CursorPage(results=[], next_cursor=None)
         result = await query_decisions_delta(
             source_id="s1", updated_since=None, service=service, cursor=None, page_size=10
         )
         assert isinstance(result, CursorPage)
+
+
+# ── R1 short-circuit tests (module-level, asyncio auto) ───────────────────────
+
+
+@pytest.mark.asyncio
+async def test_first_insert_passes_updated_at_none_to_repo():
+    """U-01: First insert — upsert_decision called with the new placement; no prior find."""
+    mock_repo = create_autospec(MongoDecisionRepository, instance=True)
+    now = datetime.now(UTC)
+    # No existing decision for this triad.
+    mock_repo.find_by_triad.return_value = None
+    mock_repo.upsert_decision.return_value = make_decision(now)
+
+    svc = DecisionStoreService(repository=mock_repo)
+    result = await svc.store_decision(make_identifier(), make_cluster(), [], now)
+
+    mock_repo.find_by_triad.assert_awaited_once()
+    mock_repo.upsert_decision.assert_awaited_once()
+    assert isinstance(result, Decision)
+
+
+@pytest.mark.asyncio
+async def test_same_placement_short_circuits_to_existing():
+    """U-02: Same-placement re-write — existing Decision returned; upsert NOT called."""
+    mock_repo = create_autospec(MongoDecisionRepository, instance=True)
+    now = datetime.now(UTC)
+    existing = Decision(
+        id="hash123",
+        about_entity_mention=make_identifier(),
+        current_placement=make_cluster("c1"),
+        candidates=[],
+        created_at=now,
+        updated_at=None,  # Never moved — updated_at is None
+    )
+    mock_repo.find_by_triad.return_value = existing
+
+    svc = DecisionStoreService(repository=mock_repo)
+    # Incoming current.cluster_id == "c1" matches existing.current_placement.cluster_id
+    result = await svc.store_decision(make_identifier(), make_cluster("c1"), [], now)
+
+    mock_repo.upsert_decision.assert_not_awaited()
+    assert result is existing
+
+
+@pytest.mark.asyncio
+async def test_different_placement_calls_upsert():
+    """U-03: Different-placement re-write — upsert IS called."""
+    mock_repo = create_autospec(MongoDecisionRepository, instance=True)
+    now = datetime.now(UTC)
+    existing = Decision(
+        id="hash123",
+        about_entity_mention=make_identifier(),
+        current_placement=make_cluster("c1"),
+        candidates=[],
+        created_at=now,
+        updated_at=None,
+    )
+    mock_repo.find_by_triad.return_value = existing
+    newer = Decision(
+        id="hash123",
+        about_entity_mention=make_identifier(),
+        current_placement=make_cluster("c2"),
+        candidates=[],
+        created_at=now,
+        updated_at=now,
+    )
+    mock_repo.upsert_decision.return_value = newer
+
+    svc = DecisionStoreService(repository=mock_repo)
+    result = await svc.store_decision(make_identifier(), make_cluster("c2"), [], now)
+
+    mock_repo.upsert_decision.assert_awaited_once()
+    assert result.current_placement.cluster_id == "c2"
+
+
+@pytest.mark.asyncio
+async def test_short_circuit_ignores_candidates_difference():
+    """R1: candidates are NOT part of change-detection; same cluster_id → no-op."""
+    mock_repo = create_autospec(MongoDecisionRepository, instance=True)
+    now = datetime.now(UTC)
+    existing = Decision(
+        id="hash123",
+        about_entity_mention=make_identifier(),
+        current_placement=make_cluster("c1"),
+        candidates=[],
+        created_at=now,
+        updated_at=None,
+    )
+    mock_repo.find_by_triad.return_value = existing
+
+    svc = DecisionStoreService(repository=mock_repo)
+    # Different candidates list but same cluster_id — must be a no-op
+    many_candidates = [make_cluster(f"c{i}") for i in range(5)]
+    result = await svc.store_decision(make_identifier(), make_cluster("c1"), many_candidates, now)
+
+    mock_repo.upsert_decision.assert_not_awaited()
+    assert result is existing
+
+
+# ── R8 span attribute tests ───────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_no_op_short_circuit_sets_span_attribute():
+    """R8: same-placement no-op emits decision_store.placement_unchanged=True span attribute."""
+    mock_repo = create_autospec(MongoDecisionRepository, instance=True)
+    now = datetime.now(UTC)
+    existing = Decision(
+        id="hash123",
+        about_entity_mention=make_identifier(),
+        current_placement=make_cluster("c1"),
+        candidates=[],
+        created_at=now,
+        updated_at=None,
+    )
+    mock_repo.find_by_triad.return_value = existing
+
+    mock_span = MagicMock()
+    with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+        svc = DecisionStoreService(repository=mock_repo)
+        await svc.store_decision(make_identifier(), make_cluster("c1"), [], now)
+
+    mock_span.set_attribute.assert_any_call("decision_store.placement_unchanged", True)
+
+
+@pytest.mark.asyncio
+async def test_genuine_write_does_not_set_placement_unchanged_attribute():
+    """R8: genuine placement change must NOT emit decision_store.placement_unchanged."""
+    mock_repo = create_autospec(MongoDecisionRepository, instance=True)
+    now = datetime.now(UTC)
+    existing = Decision(
+        id="hash123",
+        about_entity_mention=make_identifier(),
+        current_placement=make_cluster("c1"),
+        candidates=[],
+        created_at=now,
+        updated_at=None,
+    )
+    mock_repo.find_by_triad.return_value = existing
+    mock_repo.upsert_decision.return_value = make_decision(now)
+
+    mock_span = MagicMock()
+    with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+        svc = DecisionStoreService(repository=mock_repo)
+        await svc.store_decision(make_identifier(), make_cluster("c2"), [], now)
+
+    called_attrs = [call.args[0] for call in mock_span.set_attribute.call_args_list]
+    assert "decision_store.placement_unchanged" not in called_attrs
