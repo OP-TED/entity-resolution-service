@@ -210,7 +210,7 @@ make clean-docs       # Remove build artifacts
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **entity-resolution-service** (4069 symbols, 9790 relationships, 148 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **entity-resolution-service** (4168 symbols, 10093 relationships, 156 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
