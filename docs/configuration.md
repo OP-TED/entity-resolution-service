@@ -47,7 +47,8 @@ set `TRACING_ENABLED=true` and configure an OTLP exporter to enable distributed 
 
 **Redis** — Connection and channel configuration for the Redis broker used to communicate
 with ERE. The four connection variables (`REDIS_HOST`, `REDIS_PORT`, `REDIS_DB`,
-`REDIS_PASSWORD`) must all point to the same Redis instance. `ERE_REQUEST_CHANNEL` and
+`REDIS_PASSWORD`) must all point to the same Redis instance. Set `REDIS_TLS=true` to
+require a TLS-encrypted connection (default `false`). `ERE_REQUEST_CHANNEL` and
 `ERE_RESPONSE_CHANNEL` must match the `REQUEST_QUEUE` and `RESPONSE_QUEUE` values
 configured on the ERE side.
 
@@ -89,6 +90,7 @@ and returns a provisional identifier without any Redis interaction.
 | `REDIS_PASSWORD` | Redis | Redis authentication password. Leave empty if Redis AUTH is not configured. | | No | `REDIS_HOST`, `REDIS_PORT`, `REDIS_DB` |
 | `REDIS_PORT` | Redis | Redis server port. | `6379` | No | `REDIS_HOST`, `REDIS_DB`, `REDIS_PASSWORD` |
 | `REDIS_SOCKET_CONNECT_TIMEOUT` | Redis | Seconds to wait when establishing a new Redis connection before raising an error. | `5.0` | No | `REDIS_HOST`, `REDIS_PORT` |
+| `REDIS_TLS` | Redis | Enable TLS-encrypted connections to Redis. Set to `true` when the Redis endpoint requires TLS (e.g. AWS ElastiCache with in-transit encryption). | `false` | No | `REDIS_HOST`, `REDIS_PORT` |
 | `REFRESH_BULK_MAX_LIMIT` | ERE Integration | Maximum number of entity mentions accepted in a single bulk resolution request. | `1000` | No | |
 | `REFRESH_TOKEN_EXPIRE_MINUTES` | JWT / Auth | Refresh token validity period in minutes. Must be greater than `ACCESS_TOKEN_EXPIRE_MINUTES`. | `10080` | No | `ACCESS_TOKEN_EXPIRE_MINUTES` |
 | `TRACING_ENABLED` | Observability | Enable OpenTelemetry tracing. | `false` | No | `OTEL_SERVICE_NAME` |
