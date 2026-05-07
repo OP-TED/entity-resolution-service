@@ -141,6 +141,11 @@ class RedisConfig:
         """
         return float(config_value)
 
+    @env_property(default_value="false")
+    def REDIS_TLS(self, config_value: str) -> bool:
+        """Enable TLS for all Redis connections when set to 'true'."""
+        return config_value.lower() == "true"
+
     @env_property(default_value="5.0")
     def ERS_SUBSCRIBER_READY_TIMEOUT(self, config_value: str) -> float:
         """Maximum seconds to wait for the notification subscriber to finish its

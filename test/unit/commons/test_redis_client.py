@@ -191,6 +191,30 @@ class TestPublishNotification:
             await client.publish_notification("ers_notifications", "k")
 
 
+class TestRedisConnectionConfig:
+    def test_ssl_defaults_to_false_in_kwargs(self):
+        cfg = RedisConnectionConfig(host="localhost", port=6379, db=0)
+        assert cfg.to_redis_kwargs()["ssl"] is False
+
+    def test_ssl_true_propagated_to_kwargs(self):
+        cfg = RedisConnectionConfig(host="localhost", port=6379, db=0, ssl=True)
+        assert cfg.to_redis_kwargs()["ssl"] is True
+
+    def test_from_settings_reads_redis_tls(self):
+        mock_settings = MagicMock()
+        mock_settings.REDIS_HOST = "redis.example.com"
+        mock_settings.REDIS_PORT = 6380
+        mock_settings.REDIS_DB = 1
+        mock_settings.REDIS_PASSWORD = None
+        mock_settings.REDIS_SOCKET_CONNECT_TIMEOUT = 5.0
+        mock_settings.REDIS_TLS = True
+
+        cfg = RedisConnectionConfig.from_settings(mock_settings)
+
+        assert cfg.ssl is True
+        assert cfg.to_redis_kwargs()["ssl"] is True
+
+
 class TestContextManager:
     async def test_closes_on_normal_exit(self):
         mock_redis = AsyncMock(spec=aioredis.Redis)
