@@ -14,12 +14,13 @@ log = logging.getLogger(__name__)
 class RedisConnectionConfig:
     """Simple data class to hold Redis connection configuration."""
 
-    def __init__(self, host: str, port: int, db: int, password: str | None = None, socket_connect_timeout: float | None = None):
+    def __init__(self, host: str, port: int, db: int, password: str | None = None, socket_connect_timeout: float | None = None, ssl: bool = False):
         self.host = host
         self.port = port
         self.db = db
         self.password = password
         self.socket_connect_timeout = socket_connect_timeout
+        self.ssl = ssl
 
     @classmethod
     def from_settings(cls, settings) -> "RedisConnectionConfig":
@@ -37,6 +38,7 @@ class RedisConnectionConfig:
             db=settings.REDIS_DB,
             password=settings.REDIS_PASSWORD,
             socket_connect_timeout=settings.REDIS_SOCKET_CONNECT_TIMEOUT,
+            ssl=settings.REDIS_TLS,
         )
 
     def to_redis_kwargs(self) -> dict:
@@ -51,11 +53,12 @@ class RedisConnectionConfig:
             "db": self.db,
             "password": self.password,
             "socket_connect_timeout": self.socket_connect_timeout,
+            "ssl": self.ssl,
         }
 
     def __str__(self) -> str:
         return (
-            f'RedisConnectionConfig ( host: "{self.host}", port: "{self.port}", db: "{self.db}" )'
+            f'RedisConnectionConfig ( host: "{self.host}", port: "{self.port}", db: "{self.db}", ssl: "{self.ssl}" )'
         )
 
 
