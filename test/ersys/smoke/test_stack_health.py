@@ -7,8 +7,8 @@ Purpose:
   non-error response to a lightweight probe request.
 
 Usage:
-  make test-smoke                  # runs pytest -m smoke -v
-  make up && make test-smoke       # typical pre-e2e check
+  make test-ersys-smoke            # runs pytest -m ersys_smoke -v
+  make up && make test-ersys-smoke # typical pre-e2e check
 
 Requires:
   The full Docker Compose stack must be running (make up) and infra/.env must

@@ -1,7 +1,7 @@
 # ================================================================
 # Feature:  clustering/clustering
 # Purpose:  Demonstrate 2-cluster formation from the org-tiny dataset
-# (distibuted with ere-basic: https://github.com/OP-TED/entity-resolution-engine-basic/blob/develop/demo/data/org-tiny.json).
+# (distributed with ere-basic: https://github.com/OP-TED/entity-resolution-engine-basic/blob/develop/demo/data/org-tiny.json).
 #           6 mentions across 2 countries resolve into exactly 2 clusters.
 #           Blocking rule prevents cross-country candidate generation.
 #

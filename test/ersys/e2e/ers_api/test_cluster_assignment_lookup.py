@@ -316,7 +316,8 @@ def given_no_cluster_changes_since_snapshot_source002(ctx, ers_client):
 # ---------------------------------------------------------------------------
 
 @when("the Originator requests the cluster assignment for that entity mention")
-def when_originator_requests_cluster_assignment(ctx, ers_client):
+def when_originator_requests_cluster_assignment(ctx, ers_client, mongo_db):
+    ctx["decisions_count_before_lookup"] = mongo_db["decisions"].count_documents({})
     resp = ers_client.get("/api/v1/lookup", params={
         "source_id": ctx["source_id"],
         "request_id": ctx["request_id"],
@@ -324,7 +325,6 @@ def when_originator_requests_cluster_assignment(ctx, ers_client):
     })
     ctx["response"] = resp
     ctx["response_body"] = resp.json()
-    ctx["decisions_count_before_lookup"] = None  # set in dedicated Then step
 
 
 @when('the Originator invokes refreshBulk for origin "test-source-001"')
@@ -397,22 +397,12 @@ def then_response_contains_triad_fields(ctx):
 
 @then("the decision store is not modified by the lookup")
 def then_decisions_not_modified_by_lookup(ctx, mongo_db):
-    # Count now and compare to count taken before lookup (which was just after resolution)
+    count_before = ctx["decisions_count_before_lookup"]
     count_after = mongo_db["decisions"].count_documents({})
-    # We rely on a count captured before the lookup step
-    # For the resolved-mention scenario: we know exactly 1 decision was created
-    # For the provisional-injection scenario: we injected 1 decision
-    # In both cases: count must not have changed due to the GET /lookup
-    expected_count = ctx.get("decisions_count_before_lookup")
-    if expected_count is not None:
-        assert count_after == expected_count, (
-            f"decisions collection changed after lookup: "
-            f"expected {expected_count}, got {count_after}."
-        )
-    # Fallback: at least assert no new decisions beyond what was set up
-    # (count 0 before = count 0 after, count N before = count N after)
-    # The count stored must be <= count after (lookup cannot add decisions)
-    assert count_after >= 0  # trivially true; real check is above when expected_count is set
+    assert count_after == count_before, (
+        f"decisions collection changed after lookup: "
+        f"expected {count_before}, got {count_after}."
+    )
 
 
 @then("the response indicates the mention was not found")

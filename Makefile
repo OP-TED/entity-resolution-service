@@ -197,27 +197,27 @@ check-architecture: ## Check architecture constraints with import-linter
 
 test: ## Run all tests (with coverage)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running all tests$(END_BUILD_PRINT)"
-	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) $(COV_FLAGS) --junitxml=$(REPO_ROOT)/test-results.xml
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) --ignore=$(TEST_PATH)/ersys $(COV_FLAGS) --junitxml=$(REPO_ROOT)/test-results.xml
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) All tests passed$(END_BUILD_PRINT)"
 
 test-unit: ## Run unit tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running unit tests$(END_BUILD_PRINT)"
-	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "unit"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) --ignore=$(TEST_PATH)/ersys -m "unit"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Unit tests passed$(END_BUILD_PRINT)"
 
 test-feature: ## Run BDD feature tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running feature tests$(END_BUILD_PRINT)"
-	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "feature"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) --ignore=$(TEST_PATH)/ersys -m "feature"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Feature tests passed$(END_BUILD_PRINT)"
 
 test-e2e: ## Run end-to-end tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running e2e tests$(END_BUILD_PRINT)"
-	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "e2e"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) --ignore=$(TEST_PATH)/ersys -m "e2e"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) E2e tests passed$(END_BUILD_PRINT)"
 
 test-integration: ## Run integration tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running integration tests$(END_BUILD_PRINT)"
-	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "integration"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) --ignore=$(TEST_PATH)/ersys -m "integration"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Integration tests passed$(END_BUILD_PRINT)"
 
 #-----------------------------------------------------------------------------
@@ -252,9 +252,9 @@ INJECT_PID_FILE = .inject-app.pid
 
 redis-rest-api-start: ## Start the ERE response injector REST API in the background
 	@ set -a; source $(ENV_FILE); set +a; \
-		cd $(SRC_PATH) && INJECT_APP_PORT=$${INJECT_APP_PORT:-8020} poetry run python scripts/inject_ere_response_app.py & \
+		cd $(SRC_PATH) && INJECT_APP_PORT=$${INJECT_APP_PORT:-8002} poetry run python scripts/inject_ere_response_app.py & \
 		echo $$! > $(REPO_ROOT)/$(INJECT_PID_FILE)
-	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Injector API started on port $${INJECT_APP_PORT:-8020} (PID: $$(cat $(REPO_ROOT)/$(INJECT_PID_FILE)))$(END_BUILD_PRINT)"
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Injector API started on port $${INJECT_APP_PORT:-8002} (PID: $$(cat $(REPO_ROOT)/$(INJECT_PID_FILE)))$(END_BUILD_PRINT)"
 
 redis-rest-api-stop: ## Stop the ERE response injector REST API
 	@ if [ -f $(REPO_ROOT)/$(INJECT_PID_FILE) ]; then \

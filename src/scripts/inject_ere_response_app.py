@@ -34,6 +34,8 @@ from pathlib import Path
 # Allow importing inject_ere_response as a sibling script regardless of cwd.
 sys.path.insert(0, str(Path(__file__).parent))
 
+import redis
+import redis.exceptions
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 
@@ -62,7 +64,7 @@ async def push(request: Request) -> dict:
         messages = inject_response(data, redis_config=_redis_config)
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except ConnectionError as exc:
+    except redis.exceptions.RedisError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"pushed": len(messages), "messages": messages}
 

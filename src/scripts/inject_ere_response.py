@@ -14,7 +14,7 @@ Usage (CLI) — single object or list of objects:
     poetry run python scripts/inject_ere_response.py --input '[{"entity_mention": {...}}, ...]'
     poetry run python scripts/inject_ere_response.py --input-file payload.json
 
-    Note: install dependencies with `poetry install --with test-manual` before running.
+    Note: install dependencies with poetry before running.
     
 Usage (Python):
     from scripts.inject_ere_response import build_response, inject_response
