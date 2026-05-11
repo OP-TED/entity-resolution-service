@@ -15,7 +15,6 @@ from pytest_bdd import given, scenario, then, when
 
 from test.ersys.e2e.curation_api.conftest import TEST_CURATOR_EMAIL, TEST_CURATOR_PASSWORD
 
-
 # ---------------------------------------------------------------------------
 # Scenario bindings
 # ---------------------------------------------------------------------------

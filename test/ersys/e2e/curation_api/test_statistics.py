@@ -10,7 +10,6 @@ Implements:
 import pytest
 from pytest_bdd import given, parsers, scenario, then, when
 
-
 # ---------------------------------------------------------------------------
 # Scenario bindings
 # ---------------------------------------------------------------------------

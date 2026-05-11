@@ -8,6 +8,7 @@ Module-level helpers (importable by all suites):
   - derive_provisional_id()    SHA-256 draft cluster id for a triad
   - wait_for_canonical()       poll GET /lookup until ERE returns a cluster
 """
+import contextlib
 import hashlib
 import time
 
@@ -16,7 +17,6 @@ import pymongo
 import pytest
 import redis
 from pytest_bdd import given
-
 
 # ---------------------------------------------------------------------------
 # Cross-suite helper functions — importable from any suite conftest or test
@@ -260,10 +260,8 @@ def resolved_mention(ers_client, resolve_payload):
     resp.raise_for_status()
     data = resp.json()
     triad = resolve_payload["mention"]["identifiedBy"]
-    try:
+    with contextlib.suppress(TimeoutError):
         data["lookup"] = wait_for_canonical(ers_client, triad, timeout_s=30.0)
-    except TimeoutError:
-        pass
     return data
 
 

@@ -324,13 +324,13 @@ def message_carries_interaction_type(ctx, recommendation_type):
       placement → ACCEPT_ALTERNATIVE  (via POST /assign)
       exclusion → REJECT_ALL          (via POST /reject)
     """
-    _EXPECTED_ACTION_TYPE = {
+    expected_action_type = {
         "placement": "ACCEPT_ALTERNATIVE",
         "exclusion": "REJECT_ALL",
     }
     doc = ctx.get("user_action_doc")
     assert doc is not None, "No user_action_doc in context"
-    expected = _EXPECTED_ACTION_TYPE.get(recommendation_type.lower())
+    expected = expected_action_type.get(recommendation_type.lower())
     assert expected is not None, f"Unknown recommendation_type {recommendation_type!r}"
     actual = doc.get("action_type")
     assert actual == expected, (

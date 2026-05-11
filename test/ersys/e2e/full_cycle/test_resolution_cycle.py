@@ -197,10 +197,7 @@ def ere_later_finishes_processing(ctx, ers_client):
 def originator_requests_bulk_refresh(ctx, ers_client):
     # In single-mention scenarios ctx["triad"] provides the source_id.
     # In the batch combining scenario ctx["batch_source_id"] is used instead.
-    if "triad" in ctx:
-        source_id = ctx["triad"]["source_id"]
-    else:
-        source_id = ctx["batch_source_id"]
+    source_id = ctx["triad"]["source_id"] if "triad" in ctx else ctx["batch_source_id"]
     resp = ers_client.post(
         "/api/v1/refresh-bulk",
         json={"source_id": source_id},

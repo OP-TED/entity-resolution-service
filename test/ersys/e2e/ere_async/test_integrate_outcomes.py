@@ -340,7 +340,7 @@ def mentions_registered_with_existing_assignments(ctx, ers_client, mongo_db, red
 
     cluster_ids = [str(uuid.uuid4()), str(uuid.uuid4())]
 
-    for triad, content, cluster_id in zip(triads, contents, cluster_ids):
+    for triad, content, cluster_id in zip(triads, contents, cluster_ids, strict=False):
         _submit_mention(ers_client, triad, content)
         # Wait for the request to be registered
         doc_id = f"{triad['source_id']}::{triad['request_id']}::{triad['entity_type']}"

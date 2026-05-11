@@ -9,7 +9,10 @@ suites without an explicit import in test files.
 """
 import pytest
 
-from test.ersys.e2e.conftest import build_resolve_payload, derive_provisional_id  # re-export for test files
+from test.ersys.e2e.conftest import (  # re-export for test files
+    build_resolve_payload,
+    derive_provisional_id,
+)
 
 __all__ = ["derive_provisional_id"]  # test files import derive_provisional_id from here
 

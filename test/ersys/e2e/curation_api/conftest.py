@@ -24,7 +24,6 @@ import pytest
 
 from test.ersys.e2e.conftest import derive_provisional_id
 
-
 # ---------------------------------------------------------------------------
 # Test account constants
 # ---------------------------------------------------------------------------
@@ -55,7 +54,7 @@ def _make_decision_doc(
     """
     doc_id = derive_provisional_id(source_id, request_id, entity_type)
     effective_cluster = cluster_id or str(uuid.uuid4())
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     candidates = [
         {
             "cluster_id": effective_cluster,
@@ -91,7 +90,7 @@ def _make_registry_doc(
     received_at: dt.datetime | None = None,
 ) -> dict:
     """Build a resolution_requests record for MongoDB injection."""
-    now = received_at or dt.datetime.now(dt.timezone.utc)
+    now = received_at or dt.datetime.now(dt.UTC)
     return {
         "_id": f"{source_id}::{request_id}::{entity_type}",
         "identifiedBy": {
@@ -207,7 +206,7 @@ def seed_decisions_and_requests(mongo_db):
         recent_request_count: int,
     ) -> None:
         cluster_ids = [str(uuid.uuid4()) for _ in range(cluster_count)]
-        now = dt.datetime.now(dt.timezone.utc)
+        now = dt.datetime.now(dt.UTC)
         old_ts = now - dt.timedelta(days=7)
 
         for i in range(mention_count):

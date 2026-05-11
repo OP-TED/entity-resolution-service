@@ -142,7 +142,7 @@ def given_mention_provisional(ctx, mongo_db):
         "content": "stub content",
         "content_type": "text/turtle",
         "content_hash": "stub-hash",
-        "received_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "received_at": dt.datetime.now(dt.UTC).isoformat(),
     })
 
     # Insert a decision with the provisional cluster_id (cluster_id == provisional_id)
@@ -159,8 +159,8 @@ def given_mention_provisional(ctx, mongo_db):
             "similarity_score": 0.0,
         },
         "candidates": [],
-        "created_at": dt.datetime.now(dt.timezone.utc),
-        "updated_at": dt.datetime.now(dt.timezone.utc),
+        "created_at": dt.datetime.now(dt.UTC),
+        "updated_at": dt.datetime.now(dt.UTC),
     })
 
     ctx["source_id"] = source_id
