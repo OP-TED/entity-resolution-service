@@ -51,6 +51,7 @@ _ORG_FIELDS = {
     "post_code": "cccev:registeredAddress/locn:postCode",
     "post_name": "cccev:registeredAddress/locn:postName",
     "thoroughfare": "cccev:registeredAddress/locn:thoroughfare",
+    "full_address": "cccev:registeredAddress/locn:fullAddress",
 }
 
 _ORG_KEY = "ORGANISATION"
@@ -98,6 +99,7 @@ def adapter_mock():
             "post_code": "10115",
             "post_name": "Berlin",
             "thoroughfare": "Unter den Linden 1",
+            "full_address": "Unter den Linden 1, 10115 Berlin",
         }
     ]
     return mock
@@ -158,11 +160,11 @@ class TestBuildSparqlQuery:
 
 
 class TestMentionParserServiceParse:
-    def test_returns_dict_with_all_six_fields(self, service, adapter_mock):
+    def test_returns_dict_with_all_seven_fields(self, service, adapter_mock):
         result = service.parse(_make_entity_mention("dummy content"))
 
         assert isinstance(result, dict)
-        assert len(result) == 6
+        assert len(result) == 7
         assert result["legal_name"] == "Test Org"
         assert result["post_code"] == "10115"
 
@@ -182,6 +184,7 @@ class TestMentionParserServiceParse:
                 "post_code": None,
                 "post_name": None,
                 "thoroughfare": None,
+                "full_address": None,
             }
         ]
         result = service.parse(_make_entity_mention("dummy"))
@@ -241,6 +244,7 @@ class TestMultipleEntitiesFound:
                 "post_code": None,
                 "post_name": None,
                 "thoroughfare": None,
+                "full_address": None,
             },
             {
                 "entity": "http://example.org/org/2",
@@ -250,6 +254,7 @@ class TestMultipleEntitiesFound:
                 "post_code": None,
                 "post_name": None,
                 "thoroughfare": None,
+                "full_address": None,
             },
         ]
 
@@ -271,6 +276,7 @@ class TestMultipleEntitiesFound:
                 "post_code": "10115",
                 "post_name": None,
                 "thoroughfare": None,
+                "full_address": None,
             },
             {
                 "entity": "http://example.org/org/1",
@@ -280,6 +286,7 @@ class TestMultipleEntitiesFound:
                 "post_code": None,
                 "post_name": "Berlin",
                 "thoroughfare": None,
+                "full_address": None,
             },
         ]
 
@@ -306,6 +313,7 @@ class TestEmptyExtraction:
                 "post_code": None,
                 "post_name": None,
                 "thoroughfare": None,
+                "full_address": None,
             }
         ]
 

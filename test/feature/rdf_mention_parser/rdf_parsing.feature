@@ -4,26 +4,26 @@ Feature: Parse RDF Entity Mention into JSON Representation
   So that downstream components work with structured data regardless of the RDF serialisation format.
 
   Background:
-    Given the parser is configured for ORGANISATION with 6 field mappings
+    Given the parser is configured for ORGANISATION with 7 field mappings
     And the entity type is "ORGANISATION"
 
   Scenario Outline: Extract configured fields from valid RDF content
-    Given an RDF payload in "<content_type>" format describing an Organisation with <present_count> of 6 configured fields present
+    Given an RDF payload in "<content_type>" format describing an Organisation with <present_count> of 7 configured fields present
     When the mention is parsed
     Then a JSON representation is returned with <present_count> extracted fields
     And the remaining <absent_count> configured fields are absent
 
     Examples:
       | content_type        | present_count | absent_count |
-      | text/turtle         | 6             | 0            |
-      | application/rdf+xml | 6             | 0            |
-      | text/turtle         | 2             | 4            |
-      | text/turtle         | 1             | 5            |
+      | text/turtle         | 7             | 0            |
+      | application/rdf+xml | 7             | 0            |
+      | text/turtle         | 2             | 5            |
+      | text/turtle         | 1             | 6            |
 
   Scenario: Ignore RDF triples not declared in the configuration
-    Given an RDF Turtle payload describing an Organisation with all 6 configured fields and 3 additional properties not in the configuration
+    Given an RDF Turtle payload describing an Organisation with all 7 configured fields and 3 additional properties not in the configuration
     When the mention is parsed
-    Then a JSON representation is returned with 6 extracted fields
+    Then a JSON representation is returned with 7 extracted fields
     And no additional fields beyond the configured mappings appear in the result
 
   Scenario: Extract fields from multi-hop property paths where intermediate nodes exist but leaf is absent
@@ -53,5 +53,5 @@ Feature: Parse RDF Entity Mention into JSON Representation
       | a payload with content type "application/json"                                        | ORGANISATION | unsupported_content_type |
       | an RDF Turtle payload with malformed syntax                                           | ORGANISATION | malformed_rdf            |
       | a valid RDF Turtle payload describing a Person, not an Organisation                   | ORGANISATION | entity_type_mismatch     |
-      | a valid Organisation RDF but with none of the 6 configured fields present             | ORGANISATION | empty_extraction         |
+      | a valid Organisation RDF but with none of the 7 configured fields present             | ORGANISATION | empty_extraction         |
       | a valid RDF Turtle payload describing an Organisation                                 | UNKNOWN_TYPE | unsupported_entity_type  |

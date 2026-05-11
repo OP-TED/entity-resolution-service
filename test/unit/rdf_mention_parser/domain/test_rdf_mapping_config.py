@@ -30,6 +30,7 @@ ORGANISATION_FIELDS = {
     "post_code": "cccev:registeredAddress/locn:postCode",
     "post_name": "cccev:registeredAddress/locn:postName",
     "thoroughfare": "cccev:registeredAddress/locn:thoroughfare",
+    "full_address": "cccev:registeredAddress/locn:fullAddress",
 }
 
 
@@ -52,12 +53,12 @@ def minimal_config(extra_types: dict | None = None) -> dict:
 
 
 class TestRDFMappingConfigValid:
-    def test_loads_single_entity_type_with_six_fields(self):
+    def test_loads_single_entity_type_with_seven_fields(self):
         config = RDFMappingConfig(**minimal_config())
 
         assert len(config.namespaces) == 4
         assert len(config.entity_types) == 1
-        assert len(config.entity_types["ORGANISATION"].fields) == 6
+        assert len(config.entity_types["ORGANISATION"].fields) == 7
 
     def test_loads_two_entity_types(self):
         extra = {
@@ -89,7 +90,7 @@ class TestRDFMappingConfigValid:
 
         assert "ORGANISATION" in config.entity_types
         assert "PROCEDURE" in config.entity_types
-        assert len(config.entity_types["ORGANISATION"].fields) == 6
+        assert len(config.entity_types["ORGANISATION"].fields) == 7
         assert len(config.entity_types["PROCEDURE"].fields) == 7
 
 
