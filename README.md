@@ -96,6 +96,19 @@ make check-quality    # lint + typecheck + architecture boundaries
 make ci-full          # full CI pipeline — run before opening a PR
 ```
 
+### ERSys black-box tests
+
+A separate suite of black-box tests targets the full running stack (ERS + ERE + Webapp)
+and lives in `test/ersys/`:
+
+```bash
+make test-ersys-smoke   # stack reachability checks (requires make up)
+make test-ersys-e2e     # full black-box e2e suite (requires full ERSys stack)
+make test-ersys-all     # smoke + e2e
+```
+
+See [docs/testing-ersys.md](docs/testing-ersys.md) for setup instructions, required env files, and which components each suite needs.
+
 Pre-commit hooks (format + lint on every commit):
 
 ```bash

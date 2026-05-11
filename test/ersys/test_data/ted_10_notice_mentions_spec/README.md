@@ -1,0 +1,3 @@
+File mention_ids_10_notices.json contains identifiers of 67 entities extracted from a set of 10 notices used for testing Use Case 3 of the new resolution component developed as a part of TEDSWS pipeline.
+
+The purpose of this file is to be used with [inject_ere_response.py](../../../scripts/inject_ere_response.py) script that injects crafted messages to a Redis channel, mimicking reaction of the basic ERE on placements proposed in a request coming from ERS.
