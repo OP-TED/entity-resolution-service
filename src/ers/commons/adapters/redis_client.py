@@ -192,7 +192,7 @@ class RedisEREClient(AbstractClient):
         return count
 
     async def pull_response(self) -> EREResponse:
-        """Pull the next response from the response channel identified by ERSYS_RESPONSE_QUEUE.
+        """Pull the next response from the configured response channel.
 
         Blocks until a message is available or the configured timeout expires.
 
