@@ -107,22 +107,26 @@ class TestSourceNotFoundError:
 
 
 class TestCoordinatorConfig:
-    def test_single_request_budget_default(self):
+    def test_single_request_budget_default(self, monkeypatch):
+        monkeypatch.delenv("ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET", raising=False)
         from ers import config
 
         assert config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET == 30.0
 
-    def test_bulk_request_budget_default(self):
+    def test_bulk_request_budget_default(self, monkeypatch):
+        monkeypatch.delenv("ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET", raising=False)
         from ers import config
 
         assert config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET == 120.0
 
-    def test_single_budget_returns_float(self):
+    def test_single_budget_returns_float(self, monkeypatch):
+        monkeypatch.delenv("ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET", raising=False)
         from ers import config
 
         assert isinstance(config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET, float)
 
-    def test_bulk_budget_returns_float(self):
+    def test_bulk_budget_returns_float(self, monkeypatch):
+        monkeypatch.delenv("ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET", raising=False)
         from ers import config
 
         assert isinstance(config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET, float)
