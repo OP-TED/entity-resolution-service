@@ -75,13 +75,14 @@ _FOUR_NAMESPACES = {
     "locn": "http://www.w3.org/ns/locn#",
 }
 
-_ORGANISATION_FIELDS_6 = {
+_ORGANISATION_FIELDS_7 = {
     "legal_name": "epo:hasLegalName",
     "country_code": "cccev:registeredAddress/epo:hasCountryCode",
     "nuts_code": "cccev:registeredAddress/epo:hasNutsCode",
     "post_code": "cccev:registeredAddress/locn:postCode",
     "post_name": "cccev:registeredAddress/locn:postName",
     "thoroughfare": "cccev:registeredAddress/locn:thoroughfare",
+    "full_address": "cccev:registeredAddress/locn:fullAddress",
 }
 
 # Minimal second entity type using only the four base namespaces.
@@ -105,13 +106,13 @@ def _base_valid_config(
     assert entity_type == "ORGANISATION", (
         "Only ORGANISATION primary type is currently supported"
     )
-    assert field_count == 6, "Only 6-field ORGANISATION configs are currently supported"
+    assert field_count == 7, "Only 7-field ORGANISATION configs are currently supported"
 
     entity_types = {
         "ORGANISATION": {
             "rdf_type": "org:Organization",
             "entity_label_field": "legal_name",
-            "fields": dict(_ORGANISATION_FIELDS_6),
+            "fields": dict(_ORGANISATION_FIELDS_7),
         }
     }
     if type_count == 2:
@@ -155,7 +156,7 @@ def valid_yaml_config(ctx, namespace_count, type_count, field_count, entity_type
     )
 )
 def yaml_with_undeclared_prefix(ctx, location, prefix):
-    data = _base_valid_config(4, 1, "ORGANISATION", 6)
+    data = _base_valid_config(4, 1, "ORGANISATION", 7)
 
     if location == "a field property path":
         data["entity_types"]["ORGANISATION"]["fields"]["bad_field"] = (
@@ -173,7 +174,7 @@ def yaml_with_undeclared_prefix(ctx, location, prefix):
 
 @given(parsers.parse('a YAML configuration where "{structural_problem}"'))
 def yaml_with_structural_problem(ctx, structural_problem):
-    data = _base_valid_config(4, 1, "ORGANISATION", 6)
+    data = _base_valid_config(4, 1, "ORGANISATION", 7)
 
     if structural_problem.startswith("entity_types is an empty map"):
         data["entity_types"] = {}
@@ -203,7 +204,7 @@ def config_with_organisation_mapped(ctx, rdf_type):
             "ORGANISATION": {
                 "rdf_type": rdf_type,
                 "entity_label_field": "legal_name",
-                "fields": dict(_ORGANISATION_FIELDS_6),
+                "fields": dict(_ORGANISATION_FIELDS_7),
             }
         },
     }

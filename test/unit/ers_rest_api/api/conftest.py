@@ -23,8 +23,10 @@ from ers.rdf_mention_parser.domain.rdf_mapping_config import (
 
 STUB_RDF_CONFIG = RDFMappingConfig(
     namespaces={
-        "org": "http://www.w3.org/ns/org#",
+        "adms": "http://www.w3.org/ns/adms#",
         "epo": "http://data.europa.eu/a4g/ontology#",
+        "org": "http://www.w3.org/ns/org#",
+        "skos": "http://www.w3.org/2004/02/skos/core#",
     },
     entity_types={
         "ORGANISATION": EntityTypeConfig(
@@ -35,7 +37,7 @@ STUB_RDF_CONFIG = RDFMappingConfig(
         "PROCEDURE": EntityTypeConfig(
             rdf_type="epo:Procedure",
             entity_label_field="identifier",
-            fields={"identifier": "epo:hasID"},
+            fields={"identifier": "adms:identifier/skos:notation"},
         ),
     },
 )

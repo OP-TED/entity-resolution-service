@@ -79,14 +79,18 @@ class EntityMentionFactory(ModelFactory):
     @classmethod
     def _organisation_payload(cls) -> dict:
         faker = cls.__faker__
+        post_code = faker.postcode()
+        post_name = faker.city()
+        thoroughfare = faker.street_address()
         return {
             "legal_name": faker.company(),
             "country_code": faker.country_code(),
             "nuts_code": faker.lexify("??", letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ")
             + faker.numerify("###"),
-            "post_code": faker.postcode(),
-            "post_name": faker.city(),
-            "thoroughfare": faker.street_address(),
+            "post_code": post_code,
+            "post_name": post_name,
+            "thoroughfare": thoroughfare,
+            "full_address": f"{thoroughfare}, {post_code} {post_name}",
         }
 
     @classmethod
@@ -153,6 +157,10 @@ class ResolutionRequestRecordFactory(EntityMentionFactory):
             address_props.append(
                 f'locn:thoroughfare "{_escape_turtle_string(thoroughfare)}"'
             )
+        if full_address := payload.get("full_address"):
+            address_props.append(
+                f'locn:fullAddress "{_escape_turtle_string(full_address)}"'
+            )
         address_content = " ;\n        ".join(address_props)
         uid = cls.__faker__.uuid4()
         return (
@@ -188,14 +196,16 @@ class ResolutionRequestRecordFactory(EntityMentionFactory):
         nature_uri = f"http://publications.europa.eu/resource/authority/contract-nature/{purpose_nature}"
         cpv_uri = f"http://data.europa.eu/cpv/cpv/{purpose_classification}"
         return (
+            "@prefix adms: <http://www.w3.org/ns/adms#> .\n"
             "@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n"
             "@prefix epd: <http://data.europa.eu/a4g/resource/> .\n"
-            "@prefix dct: <http://purl.org/dc/terms/> .\n\n"
+            "@prefix dct: <http://purl.org/dc/terms/> .\n"
+            "@prefix skos: <http://www.w3.org/2004/02/skos/core#> .\n\n"
             f"epd:ent{uid} a epo:Procedure ;\n"
             f'    dct:title "{title}" ;\n'
             f'    dct:description "{description}" ;\n'
-            f"    epo:hasID [\n"
-            f'        epo:hasIdentifierValue "{identifier}"\n'
+            f"    adms:identifier [\n"
+            f'        skos:notation "{identifier}"\n'
             f"    ] ;\n"
             f"    epo:hasLegalBasis <{legal_basis_uri}> ;\n"
             f"    epo:hasProcedureType <{procedure_type_uri}> ;\n"
