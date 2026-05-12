@@ -1,0 +1,73 @@
+# ================================================================
+# Purpose:  Minimal smoke test - exercises all three services in one
+#           linear flow: ERS REST API (resolve + lookup), ERE Basic
+#           (triggered asynchronously by resolve), and Curation API
+#           (auth + list decisions).
+#
+# Use this to confirm the full stack is wired correctly after
+# `make up` or a rebuild, before running the full scenario suite.
+#
+# Prerequisites:
+#   - Full stack running:  make up
+#   - Environment active:  local  (Ctrl+Alt+E in VS Code)
+#   - httpyac CLI:  httpyac --env local tests/manual/full_cycle/resolution_cycle_simple.http
+#
+# Steps:
+#   1  POST /resolve          (ERS REST API + ERE Basic)  → 200
+#   2  GET  /lookup           (ERS REST API)              → 200
+#   3  POST /auth/login       (Curation API)              → 200
+#   4  GET  /curation/decisions (Curation API)            → 200
+# ================================================================
+
+@source     = fc-simple-manual
+@request_id = fc-simple-req-001
+
+
+### 1 - Resolve one mention
+# Triggers ERE Basic asynchronously.
+# Expected: 200  { canonical_entity_id, status }
+# @name step1_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{source}}",
+      "request_id": "{{request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000001 a org:Organization ;\n    epo:hasLegalName \"Smoke Test Organisation GmbH\" ."
+  }
+}
+
+
+### 2 - Lookup cluster assignment
+# Expected: 200  { cluster_reference.cluster_id, ... }
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{source}}&request_id={{request_id}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+### 3 - Authenticate (Curation API)
+# Expected: 200  { access_token }
+# @name step3_login
+POST {{curation_api_url}}/api/{{api_version}}/auth/login HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "{{admin_email}}",
+  "password": "{{admin_password}}"
+}
+
+
+### 4 - List decisions (Curation API)
+# Expected: 200  { items: [...] }  - the decision for this mention should appear here
+# once ERE Basic has processed the resolve request from step 1.
+@token = {{step3_login.response.body.$.access_token}}
+
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?entity_type=ORGANISATION&limit=10 HTTP/1.1
+Authorization: Bearer {{token}}
+Accept: application/json

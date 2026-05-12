@@ -1,0 +1,982 @@
+# ================================================================
+# Feature:  full_cycle/resolution_cycle.feature
+# Purpose:  End-to-end walkthrough of the full resolution cycle:
+#           submit → lookup → curate → re-process → new assignment.
+#
+# Prerequisites:
+#   - Full stack running:  make up
+#   - Injector API running (Scenarios 3, 7, 8, 11):
+#     poetry run python scripts/inject_ere_response_app.py
+#   - Environment active:  local  (Ctrl+Alt+E in VS Code)
+#   - httpyac CLI:         httpyac --env local tests/manual/full_cycle/resolution_cycle.http
+#
+# Note on re-runs:
+#   The ERSys resolution API is idempotent per (source_id, request_id, entity_type) triad.
+#   If you run these scenarios against a live database that already holds prior results,
+#   change the @source_* variables below, or wipe state with:  make down-volumes && make up
+#
+# Scenarios covered:
+#   1. Happy path — submit a mention, ERE resolves it, lookup returns canonical cluster
+#   2. Idempotent replay — same mention submitted twice returns identical canonical_entity_id
+#   3. Batch resolution — 3 mentions (2 ORGANISATION + 1 PROCEDURE) + refresh-bulk delta
+#   4. Curation loop — resolve, then curator reassigns to a different cluster
+#   5. Lookup before first resolve → 404, then 200 after resolve
+#   6. Idempotency conflict does not corrupt stored decision
+#   7. Multi-source delta isolation — source A delta ≠ source B delta
+#   8. Refresh-bulk pagination completeness + snapshot advance
+#   9. Resolve-bulk with mixed outcomes: idempotency conflict, malformed RDF, success
+#  10. ERE outcome for an unknown triad is discarded — no decision record created
+# ================================================================
+
+
+# ================================================================
+# SCENARIO 1 — Happy path: direct engine response
+#
+# Steps:
+#   1.1  POST /resolve          → 200  { canonical_entity_id, status: "CANONICAL" }
+#   1.2  GET  /lookup           → 200  { cluster_reference.cluster_id } (re-send if PROVISIONAL)
+#
+# Polling note: if 1.1 returns status "PROVISIONAL", re-send 1.2 every few seconds
+# until cluster_reference.cluster_id is a UUID (not a 64-char hex string).
+# ================================================================
+
+@s1_source     = fc-s1-manual
+@s1_request_id = fc-s1-req-005
+
+
+### 1.1 — Submit resolution request (ORGANISATION)
+# @name s1_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s1_source}}",
+      "request_id": "{{s1_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix cccev: <http://data.europa.eu/m8g/> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix locn: <http://www.w3.org/ns/locn#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co KG\" ;\n    cccev:registeredAddress [\n        epo:hasCountryCode \"DEU\" ;\n        epo:hasNutsCode \"DE942\" ;\n        locn:postCode \"27751\" ;\n        locn:postName \"Delmenhorst\" ;\n        locn:thoroughfare \"Nordenhamer Str. 65\"\n    ] .",
+    "context": "notice-xyz"
+  }
+}
+
+### 
+@s1_source     = fc-s1-manual
+@s1b_request_id = fc-s1-req-005b
+
+
+### 1.1 — Submit resolution request (ORGANISATION)
+# @name s1_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s1_source}}",
+      "request_id": "{{s1b_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix cccev: <http://data.europa.eu/m8g/> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix locn: <http://www.w3.org/ns/locn#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000145 a org:Organization ;\n    epo:hasLegalName \"GreenCity Waste Management Solutions Ltd.\" ;\n    cccev:registeredAddress [\n        epo:hasCountryCode \"IRL\" ;\n        epo:hasNutsCode \"IE061\" ;\n        locn:postCode \"D02 X285\" ;\n        locn:postName \"Dublin\" ;\n        locn:thoroughfare \"14 Riverfront Business Park\"\n    ] .",
+    "context": "notice-xyz"
+  }
+}
+
+
+### 1.2 — Lookup cluster assignment (re-send until cluster_reference.cluster_id is a UUID, not a 64-char hex)
+# @name s1_lookup
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{s1_source}}&request_id={{s1_request_id}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+
+# ================================================================
+# SCENARIO 2 — Idempotent replay: same mention submitted twice
+#
+# Steps:
+#   2.1  POST /resolve (first)   → 200  { canonical_entity_id: X }
+#   2.2  POST /resolve (second)  → 200  { canonical_entity_id: X }  (identical — same triad & content)
+#   2.3  GET  /lookup            → 200  { cluster_reference.cluster_id }
+#
+# Expected: 2.1 and 2.2 return the same canonical_entity_id.
+# The resolution registry will contain exactly 1 entry for this triad.
+# ================================================================
+
+@s2_source     = fc-s2-manual
+@s2_request_id = fc-s2-req-001
+
+
+### 2.1 — First submission
+# @name s2_resolve_first
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s2_source}}",
+      "request_id": "{{s2_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000099 a org:Organization ;\n    epo:hasLegalName \"Bauunternehmen Nordsee AG\" ."
+  }
+}
+
+
+### 2.2 — Second submission (identical payload — must return same canonical_entity_id)
+# @name s2_resolve_second
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s2_source}}",
+      "request_id": "{{s2_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000099 a org:Organization ;\n    epo:hasLegalName \"Bauunternehmen Nordsee AG\" ."
+  }
+}
+
+
+### 2.3 — Lookup (verify canonical_entity_id matches both submissions above)
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{s2_source}}&request_id={{s2_request_id}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+
+# ================================================================
+# SCENARIO 3 — Batch resolution: 3 mentions + refresh-bulk delta
+#
+# Steps:
+#   3.1  POST /resolve  (mention 1 — ORGANISATION A)  → 200
+#   3.2  POST /resolve  (mention 2 — ORGANISATION B)  → 200
+#   3.3  POST /resolve  (mention 3 — PROCEDURE)       → 200
+#   3.3a POST /push (inject updated ERE outcomes)     → {"pushed": 3}
+#   3.4  POST /refresh-bulk (first call)               → 200  { deltas: [3 items] }
+#   3.5  POST /refresh-bulk (second call)              → 200  { deltas: [] }  (no new changes)
+#
+# refresh-bulk returns only decisions whose cluster assignment changed
+# (updated_at is set). First-insert decisions have updated_at=None and are excluded from
+# the cold-start delta. Step 3.3a injects fresh ERE outcomes with new cluster IDs, triggering
+# the UPDATE path and setting updated_at for all 3 mentions before calling refresh-bulk.
+#
+# Polling note: wait for all 3 mentions to reach CANONICAL before running step 3.3a.
+# Use the lookup endpoint to confirm (re-send 1.2-style requests for each triad).
+# ================================================================
+
+@s3_source      = fc-s3-manual
+@s3_request_a   = fc-s3-req-org-a
+@s3_request_b   = fc-s3-req-org-b
+@s3_request_p   = fc-s3-req-proc
+
+
+### 3.1 — Submit mention 1 (ORGANISATION A)
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s3_source}}",
+      "request_id": "{{s3_request_a}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000201 a org:Organization ;\n    epo:hasLegalName \"Infrastruktur Bau GmbH\" ."
+  }
+}
+
+
+### 3.2 — Submit mention 2 (ORGANISATION B)
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s3_source}}",
+      "request_id": "{{s3_request_b}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000202 a org:Organization ;\n    epo:hasLegalName \"Technische Anlagen Müller KG\" ."
+  }
+}
+
+
+### 3.3 — Submit mention 3 (PROCEDURE)
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s3_source}}",
+      "request_id": "{{s3_request_p}}",
+      "entity_type": "PROCEDURE"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n@prefix dcterms: <http://purl.org/dc/terms/> .\n\nepd:proc000101 a epo:Procedure ;\n    epo:hasProcedureType epo:OpenProcedure ;\n    dcterms:title \"Supply of Road Maintenance Equipment\" ;\n    epo:hasMainCpvCode <http://data.europa.eu/cpv/cpv/34921000> ."
+  }
+}
+
+
+### 3.3a — Inject updated ERE outcomes to set updated_at for all 3 mentions
+# cold-start refresh-bulk returns only decisions with updated_at set.
+# Omitting proposed_cluster_ids causes the injector to generate a fresh cluster ID,
+# guaranteeing a genuine cluster change that sets updated_at on each decision.
+# Wait a moment after sending before calling step 3.4.
+# Expected: {"pushed": 3}
+POST {{inject_ere_response_api}}/push HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+[
+  {"entity_mention": {"source_id": "{{s3_source}}", "request_id": "{{s3_request_a}}", "entity_type": "ORGANISATION"}},
+  {"entity_mention": {"source_id": "{{s3_source}}", "request_id": "{{s3_request_b}}", "entity_type": "ORGANISATION"}},
+  {"entity_mention": {"source_id": "{{s3_source}}", "request_id": "{{s3_request_p}}", "entity_type": "PROCEDURE"}}
+]
+
+
+### 3.4 — Refresh-bulk: first call — expect all 3 mentions in delta
+# Updated cluster assignments from step 3.3a set updated_at, making all 3 visible in the delta.
+# @name s3_refresh_first
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "{{s3_source}}",
+  "limit": 1000,
+  "continuation_cursor": null
+}
+
+
+### 3.5 — Refresh-bulk: second call — expect empty delta (snapshot already set)
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "{{s3_source}}",
+  "limit": 1000,
+  "continuation_cursor": null
+}
+
+
+
+# ================================================================
+# SCENARIO 4 — Curation loop: resolve → curate → re-process → new assignment
+#
+# Steps:
+#   4.1  POST /resolve                     → 200  { canonical_entity_id: cluster_A }
+#   4.2  GET  /lookup                      → 200  { cluster_reference.cluster_id: cluster_A }
+#   4.3  POST /auth/login  (Curation API)  → 200  { access_token }
+#   4.4  GET  /curation/decisions          → 200  { items: [...] }
+#          ↳ find the decision for (s4_source, s4_request_id, ORGANISATION)
+#          ↳ note its id → use as DECISION_ID in step 4.5
+#          ↳ pick any other cluster_id from items → use as CLUSTER_B in step 4.5
+#   4.5  POST /curation/decisions/{DECISION_ID}/assign  → 204
+#   4.6  GET  /lookup (re-send after ERE reprocesses)   → 200  { cluster_reference.cluster_id: cluster_B }
+#
+# Note: Steps 4.5 and 4.6 require you to manually fill in DECISION_ID and CLUSTER_B
+# from the step 4.4 response — see comments inline.
+# ================================================================
+
+@s4_source     = fc-s4-manual
+@s4_request_id = fc-s4-req-001
+
+
+### 4.1 — Submit resolution request
+# @name s4_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s4_source}}",
+      "request_id": "{{s4_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000301 a org:Organization ;\n    epo:hasLegalName \"Elektrotechnik Berger und Söhne GmbH\" ."
+  }
+}
+
+
+### 4.2 — Lookup initial cluster assignment (cluster A)
+# Re-send until cluster_reference.cluster_id is a UUID (not provisional SHA-256 hex).
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{s4_source}}&request_id={{s4_request_id}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+### 4.3 — Authenticate as admin (Curation API)
+# @name s4_login
+POST {{curation_api_url}}/api/{{api_version}}/auth/login HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "{{admin_email}}",
+  "password": "{{admin_password}}"
+}
+
+
+### 4.4 — List decisions (find the one for this mention)
+# Look for the entry where about_entity_mention matches:
+#   source_id = fc-s4-manual, request_id = fc-s4-req-001, entity_type = ORGANISATION
+# Note the decision id and any alternative cluster_id to use in step 4.5.
+@s4_token = {{s4_login.response.body.$.access_token}}
+
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?entity_type=ORGANISATION&limit=50 HTTP/1.1
+Authorization: Bearer {{s4_token}}
+Accept: application/json
+
+
+### 4.5 — Assign mention to a different cluster (curation action)
+# BEFORE SENDING:
+#   Replace DECISION_ID with the decision id from step 4.4
+#   Replace CLUSTER_B   with a target cluster_id (any other canonical entity from step 4.4)
+# Expected: 204 No Content
+POST {{curation_api_url}}/api/{{api_version}}/curation/decisions/DECISION_ID/assign HTTP/1.1
+Authorization: Bearer {{s4_token}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "cluster_id": "CLUSTER_B"
+}
+
+
+### 4.6 — Verify new assignment via lookup (re-send until cluster_id changes to cluster B)
+# After the ERE worker processes the re-evaluation request, the cluster_id will update.
+# This may take a few seconds; re-send until the value differs from step 4.2.
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{s4_source}}&request_id={{s4_request_id}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+
+# ================================================================
+# SCENARIO 5 — Lookup before first resolve → 404, then 200 after
+#
+# Steps:
+#   5.1  GET  /lookup (unknown triad)  → 404  MENTION_NOT_FOUND
+#   5.2  POST /resolve                 → 200  { canonical_entity_id }
+#   5.3  GET  /lookup (same triad)     → 200  { cluster_reference.cluster_id }
+#
+# Verifies that /lookup returns a proper 404 (not 500 or empty 200)
+# before any record exists for a triad.
+# ================================================================
+
+@s5_source     = fc-s5-manual
+@s5_request_id = fc-s5-req-001
+
+
+### 5.1 — Lookup unknown triad (expect 404 MENTION_NOT_FOUND)
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{s5_source}}&request_id={{s5_request_id}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+### 5.2 — Submit resolution request
+# @name s5_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s5_source}}",
+      "request_id": "{{s5_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000501 a org:Organization ;\n    epo:hasLegalName \"Müller Metallbau GmbH\" ."
+  }
+}
+
+
+### 5.3 — Lookup same triad (expect 200 with the cluster_id from step 5.2)
+# Re-send until cluster_reference.cluster_id is a UUID (not a 64-char provisional hex).
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{s5_source}}&request_id={{s5_request_id}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+
+# ================================================================
+# SCENARIO 6 — Idempotency conflict does not corrupt stored decision
+#
+# Steps:
+#   6.1  POST /resolve (triad T, content H1)  → 200  { canonical_entity_id: C1 }
+#   6.2  GET  /lookup (triad T)               → 200  { cluster_id: C1 }
+#   6.3  POST /resolve (triad T, content H2)  → 422  IDEMPOTENCY_CONFLICT
+#   6.4  GET  /lookup (triad T)               → 200  { cluster_id: C1 }  (unchanged)
+#
+# The conflict guard must leave the original Decision record untouched.
+# A bug could overwrite the stored cluster assignment.
+# ================================================================
+
+@s6_source     = fc-s6-manual
+@s6_request_id = fc-s6-req-001
+
+
+### 6.1 — First submission (content H1: legal name only)
+# @name s6_resolve_h1
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s6_source}}",
+      "request_id": "{{s6_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000601 a org:Organization ;\n    epo:hasLegalName \"Reinhardt Logistik GmbH\" ."
+  }
+}
+
+
+### 6.2 — Lookup (note cluster_id C1 — must match step 6.4)
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{s6_source}}&request_id={{s6_request_id}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+### 6.3 — Replay same triad with different content (expect 422 IDEMPOTENCY_CONFLICT)
+# Content H2 adds epo:hasCountryCode — same triad, different hash.
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s6_source}}",
+      "request_id": "{{s6_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000601 a org:Organization ;\n    epo:hasLegalName \"Reinhardt Logistik GmbH\" ;\n    epo:hasCountryCode \"DEU\" ."
+  }
+}
+
+
+### 6.4 — Lookup again (cluster_id must still equal C1 from step 6.2)
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{s6_source}}&request_id={{s6_request_id}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+
+# ================================================================
+# SCENARIO 7 — Multi-source delta isolation
+#
+# Steps:
+#   7.1  POST /resolve (source=A, request=r1)  → 200
+#   7.2  POST /resolve (source=B, request=r1)  → 200
+#   7.2a POST /push (inject for source A)      → {"pushed": 1}
+#   7.2b POST /push (inject for source B)      → {"pushed": 1}
+#   7.3  POST /refresh-bulk (source=A)         → 200  delta contains r1 from source A ONLY
+#   7.4  POST /refresh-bulk (source=B)         → 200  delta contains r1 from source B ONLY
+#
+# steps 7.2a and 7.2b inject new cluster assignments so updated_at is set for
+# each mention before calling refresh-bulk (cold-start returns only changed decisions).
+#
+# Assert: source A delta does not contain source B's mention (and vice versa).
+# A missing filter in the Decision Store query would leak cross-source data.
+# ================================================================
+
+@s7_src_a      = fc-s7-src-a
+@s7_src_b      = fc-s7-src-b
+@s7_request_id = fc-s7-req-001
+
+
+### 7.1 — Submit mention under source A
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s7_src_a}}",
+      "request_id": "{{s7_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000701 a org:Organization ;\n    epo:hasLegalName \"Nordische Holzverarbeitung AG\" ."
+  }
+}
+
+
+### 7.2 — Submit mention under source B (different entity to make inspection unambiguous)
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s7_src_b}}",
+      "request_id": "{{s7_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000702 a org:Organization ;\n    epo:hasLegalName \"Süddeutsche Fenster und Türen GmbH\" ."
+  }
+}
+
+
+### 7.2a — Inject updated ERE response for source A's mention
+# triggers the UPDATE path so updated_at is set; source A's mention appears in delta.
+# Expected: {"pushed": 1}
+POST {{inject_ere_response_api}}/push HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{"entity_mention": {"source_id": "{{s7_src_a}}", "request_id": "{{s7_request_id}}", "entity_type": "ORGANISATION"}}
+
+
+### 7.2b — Inject updated ERE response for source B's mention
+# same as 7.2a, for source B.
+# Expected: {"pushed": 1}
+POST {{inject_ere_response_api}}/push HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{"entity_mention": {"source_id": "{{s7_src_b}}", "request_id": "{{s7_request_id}}", "entity_type": "ORGANISATION"}}
+
+
+### 7.3 — Refresh-bulk for source A (expect only source A's mention, NOT source B's)
+# Assert: deltas contains exactly 1 item with source_id == "fc-s7-src-a"
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "{{s7_src_a}}",
+  "limit": 1000,
+  "continuation_cursor": null
+}
+
+
+### 7.4 — Refresh-bulk for source B (expect only source B's mention, NOT source A's)
+# Assert: deltas contains exactly 1 item with source_id == "fc-s7-src-b"
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "{{s7_src_b}}",
+  "limit": 1000,
+  "continuation_cursor": null
+}
+
+
+###
+# ================================================================
+# SCENARIO 8 — Refresh-bulk pagination completeness + snapshot advance
+#
+# Steps:
+#   8.1–8.3  POST /resolve ×3 (same source)       → 200 each
+#   8.3a     POST /push (inject for all 3)         → {"pushed": 3}
+#   8.4      POST /refresh-bulk limit=1, cursor=∅  → [r1], has_more=true,  cursor=C1
+#   8.5      POST /refresh-bulk limit=1, cursor=C1 → [r2], has_more=true,  cursor=C2
+#   8.6      POST /refresh-bulk limit=1, cursor=C2 → [r3], has_more=false, cursor=null
+#              ↳ snapshot advances here
+#   8.7      POST /refresh-bulk limit=100, cursor=∅ → empty delta
+#
+# first-insert decisions have updated_at=None and are excluded from the delta.
+# Step 8.3a injects new cluster assignments so all 3 mentions have updated_at set
+# before starting pagination.
+#
+# Verifies:
+# - All 3 mentions are reachable across pages in order (after injection)
+# - Snapshot advances only on the final page (has_more=false)
+# - After snapshot advance, a fresh call returns an empty delta
+#
+# Note: continuation_cursor is extracted from each response and used in the next call.
+# ================================================================
+
+@s8_source  = fc-s8-manual
+@s8_req_1   = fc-s8-req-001
+@s8_req_2   = fc-s8-req-002
+@s8_req_3   = fc-s8-req-003
+
+
+### 8.1 — Submit mention r1
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s8_source}}",
+      "request_id": "{{s8_req_1}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000801 a org:Organization ;\n    epo:hasLegalName \"Bauunternehmen Hoffmann KG\" ."
+  }
+}
+
+
+### 8.2 — Submit mention r2
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s8_source}}",
+      "request_id": "{{s8_req_2}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000802 a org:Organization ;\n    epo:hasLegalName \"Recycling Dresden GmbH\" ."
+  }
+}
+
+
+### 8.3 — Submit mention r3
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s8_source}}",
+      "request_id": "{{s8_req_3}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org000803 a org:Organization ;\n    epo:hasLegalName \"Meier Transport und Spedition GmbH\" ."
+  }
+}
+
+
+### 8.3a — Inject updated ERE outcomes for all 3 mentions
+# cold-start refresh-bulk only returns decisions with updated_at set.
+# Inject new cluster assignments for all 3 mentions before starting pagination.
+# Wait a moment after sending before calling step 8.4.
+# Expected: {"pushed": 3}
+POST {{inject_ere_response_api}}/push HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+[
+  {"entity_mention": {"source_id": "{{s8_source}}", "request_id": "{{s8_req_1}}", "entity_type": "ORGANISATION"}},
+  {"entity_mention": {"source_id": "{{s8_source}}", "request_id": "{{s8_req_2}}", "entity_type": "ORGANISATION"}},
+  {"entity_mention": {"source_id": "{{s8_source}}", "request_id": "{{s8_req_3}}", "entity_type": "ORGANISATION"}}
+]
+
+
+### 8.4 — Page 1: expect 1 item, has_more=true
+# @name s8_page1
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "{{s8_source}}",
+  "limit": 1,
+  "continuation_cursor": null
+}
+
+
+### 8.5 — Page 2: use cursor from page 1, expect 1 item, has_more=true
+# @name s8_page2
+@s8_cursor_1 = {{s8_page1.response.body.$.continuation_cursor}}
+
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "{{s8_source}}",
+  "limit": 1,
+  "continuation_cursor": "{{s8_cursor_1}}"
+}
+
+
+### 8.6 — Page 3 (final): use cursor from page 2, expect 1 item, has_more=false, cursor=null
+# Snapshot advances here.
+@s8_cursor_2 = {{s8_page2.response.body.$.continuation_cursor}}
+
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "{{s8_source}}",
+  "limit": 1,
+  "continuation_cursor": "{{s8_cursor_2}}"
+}
+
+
+### 8.7 — Fresh call after snapshot advance: expect empty delta
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "{{s8_source}}",
+  "limit": 100,
+  "continuation_cursor": null
+}
+
+
+# ================================================================
+# SCENARIO 9 — Resolve-bulk with mixed outcomes
+#
+# Steps:
+#   9.1  POST /resolve  (m1)                     → 200  (establishes m1 record)
+#   9.2  POST /resolve-bulk  (m1 conflict + m2 malformed + m3 ok)
+#           m1 — same triad as 9.1, different content   → IDEMPOTENCY_CONFLICT (per-item error)
+#           m2 — new triad, syntactically invalid Turtle → PARSING_FAILED (per-item error)
+#           m3 — new triad, valid content               → canonical_entity_id
+#         HTTP envelope: 207 Multi-Status (mixed outcomes)
+#   9.3  POST /lookup-bulk  (m1, m2, m3)
+#           m1 — found (created in step 9.1)
+#           m2 — error: MENTION_NOT_FOUND (resolve failed → no Decision record)
+#           m3 — found (created in step 9.2)
+#
+# Verifies that per-item errors in resolve-bulk do not affect sibling items,
+# and that failed mentions leave no Decision record visible via lookup.
+# ================================================================
+
+@s9_source = fc-s9-manual
+@s9_m1_req = fc-s9-req-m1
+@s9_m2_req = fc-s9-req-m2
+@s9_m3_req = fc-s9-req-m3
+
+
+### 9.1 — Resolve m1 (establishes the record for the idempotency conflict in 9.2)
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s9_source}}",
+      "request_id": "{{s9_m1_req}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org001001 a org:Organization ;\n    epo:hasLegalName \"Druckerei Scholz GmbH\" ."
+  }
+}
+
+
+### 9.2 — Resolve-bulk: m1 conflict + m2 malformed + m3 ok (expect 207)
+POST {{ers_api_url}}/api/{{api_version}}/resolve-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mentions": [
+    {
+      "mention": {
+        "identifiedBy": {
+          "source_id": "{{s9_source}}",
+          "request_id": "{{s9_m1_req}}",
+          "entity_type": "ORGANISATION"
+        },
+        "content_type": "text/turtle",
+        "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org001001 a org:Organization ;\n    epo:hasLegalName \"Druckerei Scholz GmbH — modified\" ."
+      }
+    },
+    {
+      "mention": {
+        "identifiedBy": {
+          "source_id": "{{s9_source}}",
+          "request_id": "{{s9_m2_req}}",
+          "entity_type": "ORGANISATION"
+        },
+        "content_type": "text/turtle",
+        "content": "THIS IS NOT VALID TURTLE @@@"
+      }
+    },
+    {
+      "mention": {
+        "identifiedBy": {
+          "source_id": "{{s9_source}}",
+          "request_id": "{{s9_m3_req}}",
+          "entity_type": "ORGANISATION"
+        },
+        "content_type": "text/turtle",
+        "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org001003 a org:Organization ;\n    epo:hasLegalName \"Kältetechnik Bremer KG\" ."
+      }
+    }
+  ]
+}
+
+
+### 9.3 — Lookup-bulk: m1 and m3 found; m2 returns MENTION_NOT_FOUND
+POST {{ers_api_url}}/api/{{api_version}}/lookup-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mentions": [
+    {
+      "identified_by": {
+        "source_id": "{{s9_source}}",
+        "request_id": "{{s9_m1_req}}",
+        "entity_type": "ORGANISATION"
+      }
+    },
+    {
+      "identified_by": {
+        "source_id": "{{s9_source}}",
+        "request_id": "{{s9_m2_req}}",
+        "entity_type": "ORGANISATION"
+      }
+    },
+    {
+      "identified_by": {
+        "source_id": "{{s9_source}}",
+        "request_id": "{{s9_m3_req}}",
+        "entity_type": "ORGANISATION"
+      }
+    }
+  ]
+}
+
+
+
+# ================================================================
+# SCENARIO 10 — ERE outcome for an unknown triad is discarded
+#
+# Gherkin: ere_async/integrate_outcomes.feature — Scenario 6 (line 79)
+#          UC-B1.2 Minimal Guarantee — Uncorrelated Outcome
+#
+# Steps:
+#   10.1  POST {{inject_ere_response_api}}/push  → {"pushed": 1}
+#           ↳ injects an ERE response for a triad that was never submitted to ERS
+#           ↳ outcome integrator receives it but finds no matching request registry entry
+#           ↳ message is discarded; no Decision record is created
+#   10.2  GET  /lookup (same triad)              → 404  MENTION_NOT_FOUND
+#
+# Expected:
+#   10.1 → {"pushed": 1}  (injector accepted the message)
+#   10.2 → 404            (no Decision record exists — the outcome was silently discarded)
+# ================================================================
+
+@s10_source = fc-s10-unknown-manual
+@s10_req    = fc-s10-unknown-req-001
+
+
+### 10.1 — Inject ERE outcome for a triad that was never submitted to ERS
+# Expected: {"pushed": 1} — the injector pushes to Redis regardless.
+# The outcome integrator will discard it because no request registry entry exists
+# for this (source_id, request_id, entity_type) triad.
+POST {{inject_ere_response_api}}/push HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "entity_mention": {
+    "source_id": "{{s10_source}}",
+    "request_id": "{{s10_req}}",
+    "entity_type": "ORGANISATION"
+  }
+}
+
+
+### 10.2 — Lookup the unknown triad (expect 404 — no Decision record was created)
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{s10_source}}&request_id={{s10_req}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+
+# ================================================================
+# SCENARIO 11 — Context field propagation
+#
+# Verifies that the optional `context` value submitted with a resolve
+# request is stored and returned unchanged in the resolve response,
+# subsequent lookup, and refresh-bulk delta.
+#
+# Steps:
+#   11.1  POST /resolve with context="notice-ctx-test"  → 200  { ..., context: "notice-ctx-test" }
+#   11.2  GET  /lookup                                  → 200  { ..., context: "notice-ctx-test" }
+#   11.2a POST /push (inject updated ERE outcome)       → {"pushed": 1}
+#   11.3  POST /refresh-bulk                            → 200  { deltas: [{ ..., context: "notice-ctx-test" }] }
+#
+# step 11.2a injects a new ERE outcome to set updated_at on the decision so the
+# mention appears in the cold-start refresh-bulk delta.
+# ================================================================
+
+@s11_source     = fc-s11-manual
+@s11_request_id = fc-s11-req-ctx-001
+
+
+### 11.1 — Resolve with context set
+# Expected: 200
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s11_source}}",
+      "request_id": "{{s11_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org009901 a org:Organization ;\n    epo:hasLegalName \"Kontextprüfung Testgesellschaft mbH\" .",
+    "context": "notice-ctx-test"
+  }
+}
+
+
+### 11.2 — Lookup: verify context is returned
+# Expected: 200  { ..., context: "notice-ctx-test" }
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{s11_source}}&request_id={{s11_request_id}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+### 11.2a — Inject updated ERE outcome to set updated_at 
+# Cold-start refresh-bulk returns only decisions with updated_at set.
+# Inject a fresh ERE response with a new cluster ID to trigger the UPDATE path.
+# Expected: {"pushed": 1}
+POST {{inject_ere_response_api}}/push HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{"entity_mention": {"source_id": "{{s11_source}}", "request_id": "{{s11_request_id}}", "entity_type": "ORGANISATION"}}
+
+
+### 11.3 — Refresh-bulk: verify context appears in delta item
+# Expected: 200  { deltas: [{ ..., context: "notice-ctx-test" }], has_more: false }
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "{{s11_source}}",
+  "limit": 1000,
+  "continuation_cursor": null
+}
