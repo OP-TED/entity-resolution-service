@@ -48,9 +48,8 @@ set `TRACING_ENABLED=true` and configure an OTLP exporter to enable distributed 
 **Redis** — Connection and channel configuration for the Redis broker used to communicate
 with ERE. The four connection variables (`REDIS_HOST`, `REDIS_PORT`, `REDIS_DB`,
 `REDIS_PASSWORD`) must all point to the same Redis instance. Set `REDIS_TLS=true` to
-require a TLS-encrypted connection (default `false`). `ERE_REQUEST_CHANNEL` and
-`ERE_RESPONSE_CHANNEL` must match the `REQUEST_QUEUE` and `RESPONSE_QUEUE` values
-configured on the ERE side.
+require a TLS-encrypted connection (default `false`). `ERSYS_REQUEST_QUEUE` and
+`ERSYS_RESPONSE_QUEUE` must match the corresponding values configured on the ERE side.
 
 **Resolution Coordinator** — Time budget settings for the resolution coordinator. Setting
 either budget to `0` enables immediate provisional mode: ERS skips ERE submission entirely
@@ -70,8 +69,8 @@ and returns a provisional identifier without any Redis interaction.
 | `DECISION_STORE_DEFAULT_PAGE_SIZE` | Decision Store | Default page size for decision store queries. Must not exceed `DECISION_STORE_MAX_PAGE_SIZE`. | `250` | No | `DECISION_STORE_MAX_PAGE_SIZE` |
 | `DECISION_STORE_MAX_CANDIDATES` | Decision Store | Maximum number of resolution candidates stored per entity mention. | `5` | No | |
 | `DECISION_STORE_MAX_PAGE_SIZE` | Decision Store | Maximum allowed page size for decision store queries. | `1000` | No | `DECISION_STORE_DEFAULT_PAGE_SIZE` |
-| `ERE_REQUEST_CHANNEL` | Redis | Redis list key for outbound resolution requests sent to ERE. Must match ERE's `REQUEST_QUEUE`. | `ere_requests` | No | `ERE_RESPONSE_CHANNEL` |
-| `ERE_RESPONSE_CHANNEL` | Redis | Redis list key for inbound resolution results received from ERE. Must match ERE's `RESPONSE_QUEUE`. | `ere_responses` | No | `ERE_REQUEST_CHANNEL` |
+| `ERSYS_REQUEST_QUEUE` | Redis | Redis list key for outbound resolution requests sent to ERE. Must match the ERE-side queue name. | `ere_requests` | No | `ERSYS_RESPONSE_QUEUE` |
+| `ERSYS_RESPONSE_QUEUE` | Redis | Redis list key for inbound resolution results received from ERE. Must match the ERE-side queue name. | `ere_responses` | No | `ERSYS_REQUEST_QUEUE` |
 | `ERS_API_NAME` | ERS REST API | Application name displayed in the ERS API documentation. | `ERS REST API` | No | |
 | `ERS_API_PORT` | ERS REST API | Port on which the ERS API listens. | `8001` | No | |
 | `ERS_API_PREFIX` | ERS REST API | URL prefix for the ERS API v1 endpoints. | `/api/v1` | No | |

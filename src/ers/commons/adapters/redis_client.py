@@ -167,7 +167,7 @@ class RedisEREClient(AbstractClient):
             log.debug("Redis ERE client: pull_response() timeout not set, blocking indefinitely")
 
     async def push_request(self, request: ERERequest) -> int:
-        """Push a request onto the request channel identified by ERE_REQUEST_CHANNEL_ID.
+        """Push a request onto the request channel identified by ERSYS_REQUEST_QUEUE.
 
         Args:
             request: The ERE request to serialize and enqueue.
@@ -192,7 +192,7 @@ class RedisEREClient(AbstractClient):
         return count
 
     async def pull_response(self) -> EREResponse:
-        """Pull the next response from the response channel identified by ERE_RESPONSE_CHANNEL_ID.
+        """Pull the next response from the configured response channel.
 
         Blocks until a message is available or the configured timeout expires.
 

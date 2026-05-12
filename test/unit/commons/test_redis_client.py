@@ -75,8 +75,8 @@ async def mock_ere_service(redis_client: aioredis.Redis, dummy_response: EntityM
     _settings = config
 
     async def _serve():
-        await redis_client.brpop(_settings.ERE_REQUEST_CHANNEL)
-        await redis_client.lpush(_settings.ERE_RESPONSE_CHANNEL, dummy_response.model_dump_json())
+        await redis_client.brpop(_settings.ERSYS_REQUEST_QUEUE)
+        await redis_client.lpush(_settings.ERSYS_RESPONSE_QUEUE, dummy_response.model_dump_json())
 
     task = asyncio.create_task(_serve())
     yield
@@ -106,7 +106,7 @@ class TestPullResponse:
     async def test_raises_timeout_when_no_message(self, redis_client: aioredis.Redis):
         client = RedisEREClient(config_or_client=redis_client, timeout=0.1)
 
-        with pytest.raises(TimeoutError, match=config.ERE_RESPONSE_CHANNEL):
+        with pytest.raises(TimeoutError, match=config.ERSYS_RESPONSE_QUEUE):
             await client.pull_response()
 
     async def test_raises_on_connection_error(self, redis_ere_client: RedisEREClient):

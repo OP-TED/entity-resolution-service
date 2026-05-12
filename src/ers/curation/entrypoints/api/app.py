@@ -36,8 +36,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     redis_config = RedisConnectionConfig.from_settings(config)
     redis_client = RedisEREClient(
         config_or_client=redis_config,
-        request_channel=config.ERE_REQUEST_CHANNEL,
-        response_channel=config.ERE_RESPONSE_CHANNEL,
+        request_channel=config.ERSYS_REQUEST_QUEUE,
+        response_channel=config.ERSYS_RESPONSE_QUEUE,
     )
     app.state.redis_client = redis_client
 

@@ -118,11 +118,11 @@ class RedisConfig:
         return config_value
 
     @env_property(default_value="ere_requests")
-    def ERE_REQUEST_CHANNEL(self, config_value: str) -> str:
+    def ERSYS_REQUEST_QUEUE(self, config_value: str) -> str:
         return config_value
 
     @env_property(default_value="ere_responses")
-    def ERE_RESPONSE_CHANNEL(self, config_value: str) -> str:
+    def ERSYS_RESPONSE_QUEUE(self, config_value: str) -> str:
         return config_value
 
     @env_property(default_value="ers_notifications")
