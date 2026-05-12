@@ -111,7 +111,7 @@ def publish_service(redis_client):
 @pytest.fixture()
 def coordinator(registry_service, publish_service, decision_service, waiter):
     with patch(_CONFIG_PATH, _FAST_CONFIG):
-        return ResolutionCoordinatorService(
+        yield ResolutionCoordinatorService(
             registry_service=registry_service,
             ere_publish_service=publish_service,
             decision_store_service=decision_service,
@@ -279,19 +279,19 @@ async def test_it005_concurrent_identical_requests(
             waiter=waiter,
         )
 
-    tasks = [asyncio.create_task(svc.resolve_single(mention)) for _ in range(5)]
-    await asyncio.sleep(0.05)  # Let all tasks register and start waiting.
+        tasks = [asyncio.create_task(svc.resolve_single(mention)) for _ in range(5)]
+        await asyncio.sleep(0.05)  # Let all tasks register and start waiting.
 
-    # Simulate EPIC-05 writing the canonical decision and notifying waiter.
-    cluster = ClusterReference(
-        cluster_id="cl-concurrent", confidence_score=0.95, similarity_score=0.90
-    )
-    await decision_service._repository.upsert_decision(
-        mention.identifiedBy, cluster, [cluster], datetime.now(UTC)
-    )
-    await waiter.notify(key)
+        # Simulate EPIC-05 writing the canonical decision and notifying waiter.
+        cluster = ClusterReference(
+            cluster_id="cl-concurrent", confidence_score=0.95, similarity_score=0.90
+        )
+        await decision_service._repository.upsert_decision(
+            mention.identifiedBy, cluster, [cluster], datetime.now(UTC)
+        )
+        await waiter.notify(key)
 
-    results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
 
     cluster_ids = {decision.current_placement.cluster_id for decision, _ in results}
     assert len(cluster_ids) == 1, f"Expected 1 unique cluster, got: {cluster_ids}"

@@ -116,7 +116,19 @@ def waiter():
 
 
 @pytest.fixture
-def coordinator(registry_svc, publish_svc, decision_svc, waiter):
+def default_config(monkeypatch):
+    """Pin coordinator config to deterministic defaults, decoupling unit tests from .env."""
+    monkeypatch.setattr(
+        "ers.resolution_coordinator.services.resolution_coordinator_service.config",
+        type("C", (), {
+            "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 30.0,
+            "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 120.0,
+        })(),
+    )
+
+
+@pytest.fixture
+def coordinator(default_config, registry_svc, publish_svc, decision_svc, waiter):
     return ResolutionCoordinatorService(
         registry_svc, publish_svc, decision_svc, waiter
     )
@@ -156,7 +168,7 @@ class TestInitValidation:
 
 class TestResolveSingleHappyPath:
     async def test_ere_responds_returns_canonical_decision(
-        self, registry_svc, publish_svc, decision_svc
+        self, default_config, registry_svc, publish_svc, decision_svc
     ):
         real_waiter = AsyncResolutionWaiter()
         svc = ResolutionCoordinatorService(
