@@ -95,7 +95,7 @@ services:
       - ersys-local
 
   ersys-redis:
-    image: redis:7-alpine
+    image: redis:7.4.4-alpine
     restart: unless-stopped
     container_name: "ersys-redis"
     ports:
