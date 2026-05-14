@@ -48,8 +48,12 @@ set `TRACING_ENABLED=true` and configure an OTLP exporter to enable distributed 
 **Redis** — Connection and channel configuration for the Redis broker used to communicate
 with ERE. The four connection variables (`REDIS_HOST`, `REDIS_PORT`, `REDIS_DB`,
 `REDIS_PASSWORD`) must all point to the same Redis instance. Set `REDIS_TLS=true` to
-require a TLS-encrypted connection (default `false`). `ERSYS_REQUEST_QUEUE` and
-`ERSYS_RESPONSE_QUEUE` must match the corresponding values configured on the ERE side.
+require a TLS-encrypted connection (default `false`). `REDIS_SOCKET_CONNECT_TIMEOUT`
+controls the TCP handshake timeout when establishing new Redis connections. `ERSYS_REQUEST_QUEUE`
+and `ERSYS_RESPONSE_QUEUE` must match the corresponding values configured on the ERE side.
+`ERS_SUBSCRIBER_READY_TIMEOUT` controls how long the API waits for the notification
+subscriber to complete its SUBSCRIBE handshake before starting to accept traffic; set to
+`0` to disable this gate (not recommended in multi-instance deployments).
 
 **Resolution Coordinator** — Time budget settings for the resolution coordinator. Setting
 either budget to `0` enables immediate provisional mode: ERS skips ERE submission entirely
@@ -78,6 +82,7 @@ and returns a provisional identifier without any Redis interaction.
 | `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET` | Resolution Coordinator | Maximum time budget in seconds for a single-mention resolution response; also the ERE wait window. Set to `0` to enable immediate provisional mode (no Redis interaction). | `30` | No | `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET` |
 | `ERS_NOTIFICATIONS_CHANNEL` | Redis | Redis Pub/Sub channel used to broadcast ERE outcome notifications across ERS instances. | `ers_notifications` | No | |
 | `ERS_PARSER_MAX_CONTENT_LENGTH` | RDF Mention Parser | Maximum byte length of RDF content accepted by the mention parser. | `1048576` | No | |
+| `ERS_SUBSCRIBER_READY_TIMEOUT` | Redis | Maximum seconds to wait for the notification subscriber to complete its SUBSCRIBE handshake before the API starts accepting traffic. Set to `0` to disable the gate (not recommended in multi-instance deployments). | `5.0` | No | `ERS_NOTIFICATIONS_CHANNEL` |
 | `JWT_ALGORITHM` | JWT / Auth | JWT signing algorithm. | `HS256` | No | `JWT_SECRET_KEY` |
 | `JWT_SECRET_KEY` | JWT / Auth | Secret key for signing JWT tokens. Must be a strong random string of at least 32 characters. | | **Yes** | `JWT_ALGORITHM` |
 | `MONGO_DATABASE_NAME` | MongoDB | MongoDB database name. | `ers` | No | `MONGO_URI` |
