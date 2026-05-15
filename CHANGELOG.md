@@ -7,22 +7,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [1.1.0] - 2026-05-15
 ### Added
-* Immediate provisional mode: setting `ERS_COORDINATOR_SINGLE_TIME_BUDGET=0` or `ERS_COORDINATOR_BULK_TIME_BUDGET=0` returns a provisional identifier without waiting for ERE
+* Immediate provisional mode: setting `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0` returns a provisional identifier without waiting for ERE
 * Stateless multi-instance deployment via Redis Pub/Sub cross-instance notification — coordinators on separate instances signal each other when a resolution outcome arrives
 * Optional TLS support for Redis connections via `REDIS_TLS` environment variable
 * `ServiceUnavailableError` propagated as HTTP 503 on MongoDB and Redis infrastructure outages — `resolve`, curation, and lookup endpoints return a structured error response instead of crashing
-* Configurable entity display name field per entity type; returned by the `/entity-types` discovery endpoint
+* Configurable entity display name field per entity type; returned by the `GET /curation/entity-types` discovery endpoint
 * Exponential backoff with jitter for `OutcomeIntegrationWorker` reconnect on Redis failures
 * Socket connect timeout for the Redis subscriber worker
 * Black-box end-to-end ERSys test suite migrated from er-ops
 * `ERS_SUBSCRIBER_READY_TIMEOUT` environment variable for startup readiness gate
-* Environment variables index added to README
+* Notable environment variables documented in README with defaults and descriptions
 
 ### Changed
-* `ERE_REQUEST_CHANNEL` / `ERE_RESPONSE_CHANNEL` renamed to `ERSYS_REQUEST_CHANNEL` / `ERSYS_RESPONSE_CHANNEL` — update `.env` files accordingly
+* `ERE_REQUEST_CHANNEL` / `ERE_RESPONSE_CHANNEL` renamed to `ERSYS_REQUEST_QUEUE` / `ERSYS_RESPONSE_QUEUE` — update `.env` files accordingly
 * `display_name_field` property renamed to `entity_label_field` in entity-type configuration
 * Error field in REST API responses renamed from `error` to `message`; `SERVICE_UNAVAILABLE` added to all error enums
-* `POST /refreshBulk` now returns only decisions whose cluster placement changed, reducing payload size for unchanged entities
+* `POST /refresh-bulk` now returns only decisions whose cluster placement changed, reducing payload size for unchanged entities
 * Startup readiness gate and MongoDB-fallback safety net added to coordinator startup
 * Dependency versions pinned to exact values for reproducible builds
 
