@@ -93,11 +93,6 @@ Authenticate and receive access + refresh tokens.
 | User account is deactivated
 | <<CurationErrorResponse,CurationErrorResponse>>
 
-
-| 403
-| User account is deactivated
-| <<ErrorResponse,ErrorResponse>>
-
 |===
 
 
@@ -859,54 +854,6 @@ Reject multiple decisions in a single request.
 | 400
 | Bad Request
 | <<CurationErrorResponse,CurationErrorResponse>>
-
-|===
-
-
-
-[.EntityTypes]
-=== EntityTypes
-
-
-[.entityTypesApiV1CurationEntityTypesGet]
-==== GET /api/v1/curation/entity-types
-
-List Entity Types
-
-===== Description
-
-Return the list of configured entity types.
-
-
-===== Parameters
-
-
-
-
-
-
-
-===== Return Type
-
-
-`List`
-
-
-===== Content Type
-
-* application/json
-
-===== Responses
-
-.HTTP Response Codes
-[cols="2,3,1"]
-|===
-| Code | Message | Datatype
-
-
-| 200
-| Successful Response
-| List[`string`]
 
 |===
 
@@ -1788,7 +1735,7 @@ Result of a single decision within a bulk action.
 | 
 | X
 |  `String`
-| 
+| Human-readable explanation when the status is not success.
 |     
 
 |===
@@ -2011,7 +1958,7 @@ before the middleware ran or by handlers that do not need correlation.
 | 
 | X
 |  `String`
-| 
+| ERS business request UUID for log/trace correlation. Populated by handlers that run after the request-id middleware.
 |     
 
 |===
@@ -2090,7 +2037,7 @@ Statistics about the curation process based on UserAction counts.
 | 
 | X
 |  `String`
-| 
+| Opaque cursor to fetch the next page, or null if there are no more pages.
 |     
 
 |===
@@ -2126,7 +2073,7 @@ Statistics about the curation process based on UserAction counts.
 | 
 | X
 |  `String`
-| 
+| Opaque cursor to fetch the next page, or null if there are no more pages.
 |     
 
 |===
@@ -2199,7 +2146,7 @@ Decision summary for list display.
 | 
 | X
 |  `Date`
-| 
+| Timestamp of the last update to this decision.
 | date-time    
 
 |===
@@ -2306,26 +2253,6 @@ Discoverability descriptor for a configured entity type.
 
 
 
-[#ErrorResponse]
-=== ErrorResponse
-
-Standard error response body for OpenAPI documentation.
-
-
-[.fields-ErrorResponse]
-[cols="2,1,1,2,4,1"]
-|===
-| Field Name| Required| Nullable | Type| Description | Format
-
-| detail
-| X
-| 
-|     
-
-|===
-
-
-
 [#HTTPValidationError]
 === HTTPValidationError
 
@@ -2414,14 +2341,14 @@ Request body for user login.
 | 
 | X
 |  `Integer`
-| 
+| Previous page number, or null if on the first page.
 |     
 
 | next
 | 
 | X
 |  `Integer`
-| 
+| Next page number, or null if on the last page.
 |     
 
 | results
@@ -2457,14 +2384,14 @@ Request body for user login.
 | 
 | X
 |  `Integer`
-| 
+| Previous page number, or null if on the first page.
 |     
 
 | next
 | 
 | X
 |  `Integer`
-| 
+| Next page number, or null if on the last page.
 |     
 
 | results
@@ -2793,28 +2720,21 @@ Admin request to update user attributes.
 | 
 | X
 |  `Boolean`
-| 
+| Set to true to enable the account or false to disable it.
 |     
 
 | is_superuser
 | 
 | X
 |  `Boolean`
-| 
+| Set to true to grant or false to revoke superuser privileges.
 |     
 
 | is_verified
 | 
 | X
 |  `Boolean`
-| 
-|     
-
-| password
-| 
-| X
-|  `String`
-| 
+| Set to true to mark the email as verified or false to unverify.
 |     
 
 | password
@@ -2885,7 +2805,7 @@ Public user representation (no password).
 | 
 | X
 |  `Date`
-| 
+| Timestamp of the last update to the user account.
 | date-time    
 
 |===
