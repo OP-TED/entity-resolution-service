@@ -19,6 +19,7 @@ ignore = [
 [lint.per-file-ignores]
 "ers/__init__.py" = ["N802"]  # env_property methods use UPPER_SNAKE_CASE to match env var names
 "../test/unit/commons/adapters/test_config_resolver.py" = ["N802"]
+"../test/demo/demo_full_cycle.py" = ["ALL"]
 
 [lint.mccabe]
 max-complexity = 10
