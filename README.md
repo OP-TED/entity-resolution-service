@@ -96,6 +96,21 @@ make check-quality    # lint + typecheck + architecture boundaries
 make ci-full          # full CI pipeline — run before opening a PR
 ```
 
+### OpenAPI schemas (`resources/`)
+
+The `resources/` directory contains the generated OpenAPI schemas for both APIs:
+
+- `ers-openapi-schema.json` — ERS REST API
+- `curation-openapi-schema.json` — Curation API
+
+Generate or refresh them with:
+
+```bash
+make openapi
+```
+
+These files are committed to the repository. The [entity-resolution-service-webapp](https://github.com/OP-TED/entity-resolution-service-webapp) fetches them from this repo at build time to generate its API client.
+
 ### ERSys black-box tests
 
 A separate suite of black-box tests targets the full running stack (ERS + ERE + Webapp)
