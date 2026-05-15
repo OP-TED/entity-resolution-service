@@ -9,6 +9,7 @@ and the Resolution Coordinator (EPIC-06). This is a single-process MVP design.
 """
 import asyncio
 import logging
+import random
 
 from ers.ere_result_integrator.adapters.outcome_listener import AsyncOutcomeListener
 from ers.ere_result_integrator.domain.errors import (
@@ -21,6 +22,20 @@ from ers.ere_result_integrator.services.outcome_integration_service import (
 )
 
 _log = logging.getLogger(__name__)
+
+_BACKOFF_INITIAL = 1.0
+_BACKOFF_CAP = 30.0
+# Each reconnect sleep is multiplied by a uniform random factor in
+# ``[1 - _BACKOFF_JITTER, 1 + _BACKOFF_JITTER]`` to prevent multiple ERS
+# instances behind the same Redis from synchronizing their reconnect
+# attempts (thundering-herd) when Redis recovers.
+_BACKOFF_JITTER = 0.5
+
+
+def _jittered(base: float) -> float:
+    """Return ``base`` multiplied by a uniform jitter factor in ±50%."""
+    factor = 1.0 + random.uniform(-_BACKOFF_JITTER, _BACKOFF_JITTER)
+    return base * factor
 
 
 class OutcomeIntegrationWorker:
@@ -70,7 +85,9 @@ class OutcomeIntegrationWorker:
     async def run(self) -> None:
         """Polling loop - pull one outcome, process it, repeat.
 
-        Restarts automatically after a Redis ``ConnectionError`` (5 s back-off).
+        Restarts automatically after a Redis ``ConnectionError`` using
+        exponential backoff (1s -> 2s -> 4s ... capped at 30s). Backoff resets
+        to 1s after any successful message receive.
         ``OutcomeValidationError`` and ``TriadNotFoundError`` are logged and
         swallowed so the loop continues. Infrastructure ``ConnectionError`` from
         the service layer (registry / decision store) is logged distinctly and
@@ -78,10 +95,12 @@ class OutcomeIntegrationWorker:
         crashing the background task.
         """
         _log.info("OutcomeIntegrationWorker started")
+        backoff = _BACKOFF_INITIAL
         try:
             while True:
                 try:
                     async for message in self._listener.consume():
+                        backoff = _BACKOFF_INITIAL
                         try:
                             await integrate_outcome(message, self._service)
                         except OutcomeValidationError as exc:
@@ -115,8 +134,12 @@ class OutcomeIntegrationWorker:
                             )
                     break  # listener exhausted normally (test or graceful shutdown)
                 except ConnectionError as exc:
-                    _log.error("Redis disconnected - retrying in 5 s", exc_info=exc)
-                    await asyncio.sleep(5)
+                    sleep_for = _jittered(backoff)
+                    _log.error(
+                        "Redis disconnected - retrying in %.1fs", sleep_for, exc_info=exc
+                    )
+                    await asyncio.sleep(sleep_for)
+                    backoff = min(backoff * 2, _BACKOFF_CAP)
                     _log.info("Attempting to reconnect to Redis outcome listener")
         except asyncio.CancelledError:
             _log.info("OutcomeIntegrationWorker stopped")

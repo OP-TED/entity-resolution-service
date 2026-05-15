@@ -29,7 +29,7 @@ class TestRDFConfigReaderFromString:
     def test_returns_correct_namespace_count(self, sample_rdf_mapping: str):
         config = RDFConfigReader.from_string(sample_rdf_mapping)
 
-        assert len(config.namespaces) == 6  # epo, org, locn, cccev, dct, adms
+        assert len(config.namespaces) == 7  # adms, cccev, dct, epo, locn, org, skos
 
     def test_raises_validation_error_for_invalid_config(self):
         bad_yaml = textwrap.dedent("""
@@ -57,7 +57,7 @@ class TestRDFConfigReaderFromString:
         fields = config.entity_types["PROCEDURE"].fields
 
         assert fields["title"] == "dct:title"
-        assert fields["identifier"] == "epo:hasID/epo:hasIdentifierValue"
+        assert fields["identifier"] == "adms:identifier/skos:notation"
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,8 @@
+import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
@@ -18,8 +19,86 @@ from ers.commons.adapters.tracing import (
 from ers.ers_rest_api.entrypoints.api.exception_handlers import register_exception_handlers
 from ers.ers_rest_api.entrypoints.api.health import router as health_router
 from ers.ers_rest_api.entrypoints.api.v1.router import v1_router
+from ers.resolution_coordinator.services.async_resolution_waiter import (
+    AsyncResolutionWaiter,
+)
 
 _log = logging.getLogger(__name__)
+
+
+class _ReadinessSignal(Protocol):
+    """Minimal structural type satisfied by NotificationSubscriberWorker."""
+
+    @property
+    def subscribed(self) -> asyncio.Event: ...
+
+
+async def _await_subscriber_ready(worker: _ReadinessSignal, timeout: float) -> None:
+    """Block until the notification subscriber has subscribed, or timeout.
+
+    Closes the startup statelessness gap: peer ERS instances may publish
+    cross-instance outcomes the moment this pod becomes routable, so we
+    must wait for SUBSCRIBE before yielding to the HTTP server.
+
+    Args:
+        worker: Anything exposing a ``subscribed`` ``asyncio.Event``.
+        timeout: Seconds to wait. ``0`` (or any non-positive value) skips
+            the wait entirely — operator opt-out for single-instance
+            deployments where the gate has no effect.
+    """
+    if timeout <= 0:
+        return
+    try:
+        await asyncio.wait_for(worker.subscribed.wait(), timeout=timeout)
+    except TimeoutError:
+        _log.warning(
+            "Notification subscriber not ready after %.1fs; cross-instance "
+            "notifications may be lost during this window. The pod will "
+            "continue starting in degraded mode.",
+            timeout,
+        )
+
+
+def make_outcome_stored_callback(
+    waiter: AsyncResolutionWaiter,
+    ere_client: RedisEREClient,
+    channel: str,
+) -> Callable[[str], Awaitable[None]]:
+    """Return an async callback that notifies locally first, then via Pub/Sub.
+
+    Only publishes to ``channel`` when the local waiter has no event for the
+    triad key — i.e. the ERE response was pulled by a different ERS instance.
+    Single-instance deployments never touch Redis Pub/Sub on this path.
+
+    Args:
+        waiter: The process-local resolution waiter.
+        ere_client: A Redis client able to publish on Pub/Sub channels.
+        channel: The Pub/Sub channel name on which peers listen for outcomes.
+
+    Returns:
+        An async callable taking the triad key, suitable as
+        ``OutcomeIntegrationService(on_outcome_stored=...)``.
+    """
+    async def _on_outcome_stored(key: str) -> None:
+        if await waiter.notify(key):
+            _log.debug(
+                "ERE outcome for triad '%s': resolved on this instance, "
+                "no cross-instance notification needed", key,
+            )
+            return
+        _log.debug(
+            "ERE outcome for triad '%s': no local waiter, publishing to '%s'", key, channel,
+        )
+        try:
+            await ere_client.publish_notification(channel, key)
+        except ConnectionError:
+            _log.warning(
+                "Cross-instance notification publish failed for triad '%s' on "
+                "channel '%s'; remote waiter may time out to provisional",
+                key, channel,
+            )
+            raise
+    return _on_outcome_stored
 
 
 @asynccontextmanager
@@ -35,8 +114,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     redis_config = RedisConnectionConfig.from_settings(config)
     redis_client = RedisEREClient(
         config_or_client=redis_config,
-        request_channel=config.ERE_REQUEST_CHANNEL,
-        response_channel=config.ERE_RESPONSE_CHANNEL,
+        request_channel=config.ERSYS_REQUEST_QUEUE,
+        response_channel=config.ERSYS_RESPONSE_QUEUE,
     )
     app.state.redis_client = redis_client
 
@@ -46,10 +125,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.rdf_config = RDFConfigReader.from_file(config.RDF_MENTION_CONFIG_FILE)
 
     # --- AsyncResolutionWaiter (process-scoped singleton) ---
-    from ers.resolution_coordinator.services.async_resolution_waiter import (
-        AsyncResolutionWaiter,
-    )
-
     waiter = AsyncResolutionWaiter()
     app.state.waiter = waiter
 
@@ -94,28 +169,63 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         repository=MongoDecisionRepository(db),
     )
 
+    from ers.resolution_coordinator.entrypoints.notification_subscriber_worker import (
+        NotificationSubscriberWorker,
+    )
+
+    notifications_channel = config.ERS_NOTIFICATIONS_CHANNEL
+    ere_client = app.state.redis_client
     outcome_service = OutcomeIntegrationService(
         registry_service=registry_service,
         decision_service=decision_service,
-        on_outcome_stored=waiter.notify,
+        on_outcome_stored=make_outcome_stored_callback(waiter, ere_client, notifications_channel),
     )
 
     # Separate Redis client for the listener (needs its own BRPOP connection)
     listener_client = RedisEREClient(
         config_or_client=redis_config,
-        request_channel=config.ERE_REQUEST_CHANNEL,
-        response_channel=config.ERE_RESPONSE_CHANNEL,
+        request_channel=config.ERSYS_REQUEST_QUEUE,
+        response_channel=config.ERSYS_RESPONSE_QUEUE,
     )
     listener = RedisOutcomeListener(client=listener_client)
     worker = OutcomeIntegrationWorker(listener=listener, service=outcome_service)
     worker.start()
     _log.info("OutcomeIntegrationWorker started in lifespan")
 
+    # Dedicated subscriber connection (SUBSCRIBE mode cannot share LPUSH/BRPOP connections)
+    subscriber_worker = NotificationSubscriberWorker(
+        redis_config=redis_config,
+        channel=notifications_channel,
+        waiter=waiter,
+    )
+    subscriber_worker.start()
+    _log.info("NotificationSubscriberWorker started in lifespan")
+
+    # Gate the HTTP-traffic-yielding moment on a successful SUBSCRIBE handshake
+    # so peer instances cannot publish into a not-yet-subscribed pod.
+    await _await_subscriber_ready(
+        subscriber_worker, timeout=config.ERS_SUBSCRIBER_READY_TIMEOUT
+    )
+
+    if config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET == 0:
+        _log.info(
+            "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0: ERE processing disabled for"
+            " single requests - ERS will generate provisional identifiers immediately"
+            " without submitting to ERE."
+        )
+    if config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET == 0:
+        _log.info(
+            "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET=0: outer bulk timeout disabled -"
+            " no asyncio.wait_for wrapper applied to bulk resolution gather."
+        )
+
     try:
         yield
     finally:
         await worker.stop()
         _log.info("OutcomeIntegrationWorker stopped")
+        await subscriber_worker.stop()
+        _log.info("NotificationSubscriberWorker stopped")
         await redis_client.close()
         await listener_client.close()
         await manager.close()
@@ -145,6 +255,15 @@ def _custom_openapi(app: FastAPI) -> dict[str, Any]:
 
 def create_app() -> FastAPI:
     """Application factory for the ERS REST API."""
+    # Wire the ers logger into uvicorn's handler so application logs are visible.
+    # Uvicorn only configures its own logger hierarchy; without this, ers.* records
+    # have no handler and are silently dropped.
+    _ers_log = logging.getLogger("ers")
+    _ers_log.setLevel(logging.DEBUG if config.DEBUG else logging.INFO)
+    for _h in logging.getLogger("uvicorn").handlers:
+        if _h not in _ers_log.handlers:
+            _ers_log.addHandler(_h)
+
     # Bootstrap OTel tracing (no-op when TRACING_ENABLED=False).
     configure_tracing(config)
     configure_auto_instrumentation(config)

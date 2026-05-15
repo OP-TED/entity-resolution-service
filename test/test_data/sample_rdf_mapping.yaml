@@ -1,11 +1,12 @@
 # Namespace prefix registry - used by rdf_mapper.py to resolve prefixed names in field paths
 namespaces:
-  epo: "http://data.europa.eu/a4g/ontology#"
-  org: "http://www.w3.org/ns/org#"
-  locn: "http://www.w3.org/ns/locn#"
+  adms: "http://www.w3.org/ns/adms#"
   cccev: "http://data.europa.eu/m8g/"
   dct: "http://purl.org/dc/terms/"
-  adms: "http://www.w3.org/ns/adms#"
+  epo: "http://data.europa.eu/a4g/ontology#"
+  locn: "http://www.w3.org/ns/locn#"
+  org: "http://www.w3.org/ns/org#"
+  skos: "http://www.w3.org/2004/02/skos/core#"
 
 # Entity type mappings: entity_type_string -> rdf_type + field property paths
 # Property paths use / as separator for multi-hop traversal.
@@ -13,6 +14,7 @@ namespaces:
 entity_types:
   ORGANISATION:
     rdf_type: "org:Organization"
+    entity_label_field: "legal_name"
     fields:
       legal_name: "epo:hasLegalName"
       country_code: "cccev:registeredAddress/epo:hasCountryCode"
@@ -20,11 +22,13 @@ entity_types:
       post_code: "cccev:registeredAddress/locn:postCode"
       post_name: "cccev:registeredAddress/locn:postName"
       thoroughfare: "cccev:registeredAddress/locn:thoroughfare"
+      full_address: "cccev:registeredAddress/locn:fullAddress"
 
   PROCEDURE:
     rdf_type: "epo:Procedure"
+    entity_label_field: "title"
     fields:
-      identifier: "epo:hasID/epo:hasIdentifierValue"
+      identifier: "adms:identifier/skos:notation"
       title: "dct:title"
       description: "dct:description"
       legalBasis: "epo:hasLegalBasis"

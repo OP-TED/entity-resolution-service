@@ -43,7 +43,7 @@ class AsyncResolutionWaiter:
             self._events[triad_key] = event
         return event
 
-    async def notify(self, triad_key: str) -> None:
+    async def notify(self, triad_key: str) -> bool:
         """Signal all waiters for this triad that an ERE outcome is available.
 
         Called by EPIC-05 (OutcomeIntegrationService) after writing the ERE
@@ -52,10 +52,17 @@ class AsyncResolutionWaiter:
 
         Args:
             triad_key: Concatenation of source_id + request_id + entity_type.
+
+        Returns:
+            True if a local event was found and set (request is owned by this
+            instance); False if the key is unknown (request originated elsewhere
+            or has already timed out).
         """
         event = self._events.get(triad_key)
         if event is not None:
             event.set()
+            return True
+        return False
 
     async def release(self, triad_key: str) -> None:
         """No-op — exists to satisfy the integration contract with T6.3.

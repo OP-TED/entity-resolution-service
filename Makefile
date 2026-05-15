@@ -10,10 +10,7 @@ BUILD_PATH   = $(REPO_ROOT)/dist
 PACKAGE_NAME = ers
 COMPOSE_FILE = $(SRC_PATH)/infra/compose.dev.yaml
 ENV_FILE     = $(SRC_PATH)/infra/.env
-# TODO: bump to v7.22.0 once released — v7.21.0 drops descriptions from nullable
-#       (anyOf) properties in the asciidoc generator. The fix is in the 7.22.0-SNAPSHOT
-#       but no stable release or Docker image exists yet.
-OPENAPI_GENERATOR_IMAGE = openapitools/openapi-generator-cli:v7.21.0
+OPENAPI_GENERATOR_IMAGE = openapitools/openapi-generator-cli:v7.22.0
 DOCS_API_REL ?= docs/api-docs
 DOCS_API_PATH = $(REPO_ROOT)/$(DOCS_API_REL)
 DOCS_TEMPLATE_PATH = $(REPO_ROOT)/docs/templates/asciidoc
@@ -33,7 +30,7 @@ COV_FLAGS = --cov=ers \
 #-----------------------------------------------------------------------------
 # Dev commands
 #-----------------------------------------------------------------------------
-.PHONY: help install-poetry install lock build seed-db openapi generate-api-docs
+.PHONY: help install-poetry install lock build seed-db openapi api-docs
 
 help: ## Display available targets
 	@ echo -e "$(BUILD_PRINT)Available targets:$(END_BUILD_PRINT)"
@@ -84,6 +81,16 @@ help: ## Display available targets
 	@ echo "    rebuild-clean        - Rebuild from scratch (no cache)"
 	@ echo "    logs                 - Follow service logs"
 	@ echo "    watch                - Start services with file watching (hot-reload)"
+	@ echo ""
+	@ echo -e "  $(BUILD_PRINT)ERSys tests (black-box, requires make up):$(END_BUILD_PRINT)"
+	@ echo "    test-ersys-smoke     - Smoke tests — checks stack reachability"
+	@ echo "    test-ersys-e2e       - End-to-end black-box tests"
+	@ echo "    test-ersys-all       - All ERSys tests (smoke + e2e)"
+	@ echo ""
+	@ echo -e "  $(BUILD_PRINT)Dev & testing utilities:$(END_BUILD_PRINT)"
+	@ echo "    redis-monitor        - Stream all Redis commands in real time (requires make up)"
+	@ echo "    redis-rest-api-start - Start ERE response injector REST API in the background"
+	@ echo "    redis-rest-api-stop  - Stop ERE response injector REST API"
 	@ echo ""
 	@ echo -e "  $(BUILD_PRINT)Utilities:$(END_BUILD_PRINT)"
 	@ echo "    clean                - Remove build artifacts and caches"
@@ -171,7 +178,7 @@ pre-commit: ## Run pre-commit hooks on all files
 #-----------------------------------------------------------------------------
 # Validation — non-mutating targets
 #-----------------------------------------------------------------------------
-.PHONY: lint typecheck check-architecture test test-unit test-feature test-e2e test-integration
+.PHONY: lint typecheck check-architecture test test-unit test-feature test-e2e test-integration test-ersys-smoke test-ersys-e2e test-ersys-all
 
 lint: ## Run Ruff linting checks
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running Ruff checks$(END_BUILD_PRINT)"
@@ -190,28 +197,73 @@ check-architecture: ## Check architecture constraints with import-linter
 
 test: ## Run all tests (with coverage)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running all tests$(END_BUILD_PRINT)"
-	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) $(COV_FLAGS) --junitxml=$(REPO_ROOT)/test-results.xml
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) --ignore=$(TEST_PATH)/ersys $(COV_FLAGS) --junitxml=$(REPO_ROOT)/test-results.xml
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) All tests passed$(END_BUILD_PRINT)"
 
 test-unit: ## Run unit tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running unit tests$(END_BUILD_PRINT)"
-	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "unit"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) --ignore=$(TEST_PATH)/ersys -m "unit"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Unit tests passed$(END_BUILD_PRINT)"
 
 test-feature: ## Run BDD feature tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running feature tests$(END_BUILD_PRINT)"
-	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "feature"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) --ignore=$(TEST_PATH)/ersys -m "feature"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Feature tests passed$(END_BUILD_PRINT)"
 
 test-e2e: ## Run end-to-end tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running e2e tests$(END_BUILD_PRINT)"
-	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "e2e"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) --ignore=$(TEST_PATH)/ersys -m "e2e"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) E2e tests passed$(END_BUILD_PRINT)"
 
 test-integration: ## Run integration tests only
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running integration tests$(END_BUILD_PRINT)"
-	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) -m "integration"
+	@ cd src && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH) --ignore=$(TEST_PATH)/ersys -m "integration"
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Integration tests passed$(END_BUILD_PRINT)"
+
+#-----------------------------------------------------------------------------
+# ERSys tests — black-box tests against the full running stack
+#-----------------------------------------------------------------------------
+
+test-ersys-smoke: ## Run ERSys smoke tests — checks stack reachability (requires make up)
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running ERSys smoke tests$(END_BUILD_PRINT)"
+	@ cd $(SRC_PATH) && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH)/ersys/smoke -v
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) ERSys smoke tests passed$(END_BUILD_PRINT)"
+
+test-ersys-e2e: ## Run ERSys end-to-end tests (requires full ERSys stack: make up)
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running ERSys e2e tests$(END_BUILD_PRINT)"
+	@ cd $(SRC_PATH) && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH)/ersys/e2e -v
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) ERSys e2e tests passed$(END_BUILD_PRINT)"
+
+test-ersys-all: ## Run all ERSys tests (smoke + e2e; requires full ERSys stack: make up)
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Running all ERSys tests$(END_BUILD_PRINT)"
+	@ cd $(SRC_PATH) && poetry run pytest -c pytest.ini --rootdir=$(REPO_ROOT) $(TEST_PATH)/ersys -v
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) All ERSys tests passed$(END_BUILD_PRINT)"
+
+#-----------------------------------------------------------------------------
+# Dev & testing utilities
+#-----------------------------------------------------------------------------
+.PHONY: redis-monitor redis-rest-api-start redis-rest-api-stop
+
+redis-monitor: ## Stream all Redis commands in real time (requires make up)
+	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) exec ersys-redis \
+		sh -c 'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" MONITOR'
+
+INJECT_PID_FILE = .inject-app.pid
+
+redis-rest-api-start: ## Start the ERE response injector REST API in the background
+	@ set -a; source $(ENV_FILE); set +a; \
+		cd $(SRC_PATH) && INJECT_APP_PORT=$${INJECT_APP_PORT:-8002} poetry run python scripts/inject_ere_response_app.py & \
+		echo $$! > $(REPO_ROOT)/$(INJECT_PID_FILE)
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Injector API started on port $${INJECT_APP_PORT:-8002} (PID: $$(cat $(REPO_ROOT)/$(INJECT_PID_FILE)))$(END_BUILD_PRINT)"
+
+redis-rest-api-stop: ## Stop the ERE response injector REST API
+	@ if [ -f $(REPO_ROOT)/$(INJECT_PID_FILE) ]; then \
+		kill $$(cat $(REPO_ROOT)/$(INJECT_PID_FILE)) 2>/dev/null || true; \
+		rm -f $(REPO_ROOT)/$(INJECT_PID_FILE); \
+		echo -e "$(BUILD_PRINT)$(ICON_DONE) Injector API stopped$(END_BUILD_PRINT)"; \
+	else \
+		echo -e "$(BUILD_PRINT)$(ICON_WARNING) No PID file found — is the injector running?$(END_BUILD_PRINT)"; \
+	fi
 
 #-----------------------------------------------------------------------------
 # Aggregates

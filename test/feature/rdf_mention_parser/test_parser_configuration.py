@@ -21,7 +21,10 @@ from pytest_bdd import given, parsers, scenario, then, when
 
 from ers.rdf_mention_parser.adapter.rdf_mapping_config_reader import RDFConfigReader
 from ers.rdf_mention_parser.domain.exceptions import UnsupportedEntityTypeError
-from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
+from ers.rdf_mention_parser.domain.rdf_mapping_config import (
+    EntityTypeConfig,
+    RDFMappingConfig,
+)
 
 # ---------------------------------------------------------------------------
 # Scenario bindings
@@ -72,19 +75,21 @@ _FOUR_NAMESPACES = {
     "locn": "http://www.w3.org/ns/locn#",
 }
 
-_ORGANISATION_FIELDS_6 = {
+_ORGANISATION_FIELDS_7 = {
     "legal_name": "epo:hasLegalName",
     "country_code": "cccev:registeredAddress/epo:hasCountryCode",
     "nuts_code": "cccev:registeredAddress/epo:hasNutsCode",
     "post_code": "cccev:registeredAddress/locn:postCode",
     "post_name": "cccev:registeredAddress/locn:postName",
     "thoroughfare": "cccev:registeredAddress/locn:thoroughfare",
+    "full_address": "cccev:registeredAddress/locn:fullAddress",
 }
 
 # Minimal second entity type using only the four base namespaces.
 _SECOND_ENTITY_TYPE = {
     "PROCEDURE": {
         "rdf_type": "epo:Procedure",
+        "entity_label_field": "title",
         "fields": {"title": "epo:hasTitle"},
     }
 }
@@ -95,14 +100,19 @@ def _base_valid_config(
 ) -> dict:
     """Build a valid YAML dict to spec: namespace_count ns, type_count entity types,
     entity_type has field_count fields."""
-    assert namespace_count == 4, "Only 4-namespace configs are currently supported by this step"
-    assert entity_type == "ORGANISATION", "Only ORGANISATION primary type is currently supported"
-    assert field_count == 6, "Only 6-field ORGANISATION configs are currently supported"
+    assert namespace_count == 4, (
+        "Only 4-namespace configs are currently supported by this step"
+    )
+    assert entity_type == "ORGANISATION", (
+        "Only ORGANISATION primary type is currently supported"
+    )
+    assert field_count == 7, "Only 7-field ORGANISATION configs are currently supported"
 
     entity_types = {
         "ORGANISATION": {
             "rdf_type": "org:Organization",
-            "fields": dict(_ORGANISATION_FIELDS_6),
+            "entity_label_field": "legal_name",
+            "fields": dict(_ORGANISATION_FIELDS_7),
         }
     }
     if type_count == 2:
@@ -135,7 +145,9 @@ def config_loader_available(ctx):
     )
 )
 def valid_yaml_config(ctx, namespace_count, type_count, field_count, entity_type):
-    ctx["yaml_content"] = _base_valid_config(namespace_count, type_count, entity_type, field_count)
+    ctx["yaml_content"] = _base_valid_config(
+        namespace_count, type_count, entity_type, field_count
+    )
 
 
 @given(
@@ -144,10 +156,12 @@ def valid_yaml_config(ctx, namespace_count, type_count, field_count, entity_type
     )
 )
 def yaml_with_undeclared_prefix(ctx, location, prefix):
-    data = _base_valid_config(4, 1, "ORGANISATION", 6)
+    data = _base_valid_config(4, 1, "ORGANISATION", 7)
 
     if location == "a field property path":
-        data["entity_types"]["ORGANISATION"]["fields"]["bad_field"] = f"{prefix}:something"
+        data["entity_types"]["ORGANISATION"]["fields"]["bad_field"] = (
+            f"{prefix}:something"
+        )
     elif location == "the rdf_type":
         data["entity_types"]["ORGANISATION"]["rdf_type"] = f"{prefix}:Organization"
     elif location == "the second segment of a multi-hop field path":
@@ -160,17 +174,23 @@ def yaml_with_undeclared_prefix(ctx, location, prefix):
 
 @given(parsers.parse('a YAML configuration where "{structural_problem}"'))
 def yaml_with_structural_problem(ctx, structural_problem):
-    data = _base_valid_config(4, 1, "ORGANISATION", 6)
+    data = _base_valid_config(4, 1, "ORGANISATION", 7)
 
     if structural_problem.startswith("entity_types is an empty map"):
         data["entity_types"] = {}
-    elif structural_problem.startswith("the ORGANISATION entry has an empty fields map"):
+    elif structural_problem.startswith(
+        "the ORGANISATION entry has an empty fields map"
+    ):
         data["entity_types"]["ORGANISATION"]["fields"] = {}
     elif structural_problem.startswith("the namespaces section is missing entirely"):
         del data["namespaces"]
-    elif structural_problem.startswith("a field value contains an invalid property path syntax"):
+    elif structural_problem.startswith(
+        "a field value contains an invalid property path syntax"
+    ):
         data["entity_types"]["ORGANISATION"]["fields"]["bad"] = "not a path"
-    elif structural_problem.startswith("a field value uses double slashes in the property path"):
+    elif structural_problem.startswith(
+        "a field value uses double slashes in the property path"
+    ):
         data["entity_types"]["ORGANISATION"]["fields"]["bad"] = "epo://bad"
 
     ctx["yaml_content"] = data
@@ -183,7 +203,8 @@ def config_with_organisation_mapped(ctx, rdf_type):
         "entity_types": {
             "ORGANISATION": {
                 "rdf_type": rdf_type,
-                "fields": dict(_ORGANISATION_FIELDS_6),
+                "entity_label_field": "legal_name",
+                "fields": dict(_ORGANISATION_FIELDS_7),
             }
         },
     }
@@ -218,7 +239,9 @@ def resolve_entity_type_uri(ctx, entity_type_uri):
 
 @then("a parser configuration is created")
 def config_created(ctx):
-    assert ctx.get("raised_exception") is None, f"Unexpected error: {ctx['raised_exception']}"
+    assert ctx.get("raised_exception") is None, (
+        f"Unexpected error: {ctx['raised_exception']}"
+    )
     assert ctx["config"] is not None
     assert isinstance(ctx["config"], RDFMappingConfig)
 

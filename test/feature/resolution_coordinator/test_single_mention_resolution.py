@@ -24,15 +24,13 @@ from pytest_bdd import given, parsers, scenario, then, when
 
 from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+from ers.commons.services.exceptions import ServiceUnavailableError
 from ers.ere_contract_client.domain.errors import ChannelUnavailableError
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.rdf_mention_parser.domain.exceptions import MalformedRDFError
 from ers.request_registry.services.exceptions import IdempotencyConflictError
 from ers.request_registry.services.request_registry_service import RequestRegistryService
-from ers.resolution_coordinator.domain.exceptions import (
-    ParsingFailedError,
-    ResolutionTimeoutError,
-)
+from ers.resolution_coordinator.domain.exceptions import ParsingFailedError
 from ers.resolution_coordinator.services.async_resolution_waiter import AsyncResolutionWaiter
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
     ResolutionCoordinatorService,
@@ -94,6 +92,11 @@ def test_parse_failure():
 
 @scenario(FEATURE_FILE, "Raise a fatal error when the Decision Store is unavailable")
 def test_decision_store_unavailable():
+    pass
+
+
+@scenario(FEATURE_FILE, "Issue provisional immediately when time budget is zero")
+def test_immediate_provisional_zero_budget():
     pass
 
 
@@ -161,6 +164,7 @@ def _triad_key(mention: EntityMention) -> str:
 
 def _run_resolve(ctx) -> None:
     notify_fn = ctx.pop("ere_notification_task", None)
+    run_config = ctx.get("override_config", _FAST_CONFIG)
 
     async def _call():
         if notify_fn is not None:
@@ -168,7 +172,7 @@ def _run_resolve(ctx) -> None:
         return await ctx["service"].resolve_single(ctx["mention"])
 
     try:
-        with patch(_CONFIG_PATH, _FAST_CONFIG):
+        with patch(_CONFIG_PATH, run_config):
             ctx["result"], ctx["outcome"] = asyncio.run(_call())
         ctx["raised_exception"] = None
     except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -277,14 +281,10 @@ def ere_does_not_respond(ctx):
 
 @given("the messaging channel is unavailable")
 def messaging_channel_unavailable(ctx):
-    ident = ctx["mention"].identifiedBy
     ctx["publish_svc"].publish_request = AsyncMock(
         side_effect=ChannelUnavailableError("no consumers")
     )
-    prov_id = derive_provisional_cluster_id(ident)
-    prov_decision = _make_decision(ident, cluster_id=prov_id)
     ctx["decision_svc"].get_decision_by_triad = AsyncMock(return_value=None)
-    ctx["decision_svc"].store_decision = AsyncMock(return_value=prov_decision)
 
 
 @given("the ERE has already written a decision to the Decision Store for that triad")
@@ -302,6 +302,19 @@ def ere_already_wrote(ctx):
         )
     )
     ctx["decision_svc"].get_decision_by_triad = AsyncMock(side_effect=[None, ere_decision])
+
+
+@given("the time budget is configured to zero")
+def time_budget_zero(ctx):
+    ctx["override_config"] = type("C", (), {
+        "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0,
+        "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 5.0,
+    })()
+    ident = ctx["mention"].identifiedBy
+    prov_id = derive_provisional_cluster_id(ident)
+    prov_decision = _make_decision(ident, cluster_id=prov_id)
+    ctx["decision_svc"].get_decision_by_triad = AsyncMock(return_value=None)
+    ctx["decision_svc"].store_decision = AsyncMock(return_value=prov_decision)
 
 
 @given("the Decision Store is unavailable")
@@ -474,8 +487,8 @@ def no_publish(ctx):
     ctx["publish_svc"].publish_request.assert_not_called()
 
 
-@then("a resolution timeout error is raised")
-def resolution_timeout_error(ctx):
-    assert isinstance(ctx["raised_exception"], ResolutionTimeoutError), (
-        f"Expected ResolutionTimeoutError, got {type(ctx['raised_exception']).__name__}"
+@then("a service unavailable error is raised")
+def service_unavailable_error(ctx):
+    assert isinstance(ctx["raised_exception"], ServiceUnavailableError), (
+        f"Expected ServiceUnavailableError, got {type(ctx['raised_exception']).__name__}"
     )

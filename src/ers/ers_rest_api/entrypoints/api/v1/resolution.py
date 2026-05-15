@@ -22,6 +22,10 @@ router = APIRouter(tags=["Resolution"])
         200: {"description": "Canonical resolution"},
         202: {"description": "Provisional resolution"},
         400: {"model": ErrorResponse, "description": "Validation error"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Backend service unavailable (MongoDB, Redis, or messaging channel)",
+        },
     },
 )
 async def resolve(
@@ -60,6 +64,10 @@ def _bulk_status_code(result: BulkResolveResponse) -> int:
         202: {"description": "All provisional"},
         207: {"description": "Mixed outcomes"},
         400: {"model": ErrorResponse, "description": "Validation error"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Backend service unavailable (MongoDB, Redis, or messaging channel)",
+        },
     },
 )
 async def resolve_bulk(

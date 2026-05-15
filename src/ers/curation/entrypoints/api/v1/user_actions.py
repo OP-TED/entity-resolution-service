@@ -24,7 +24,11 @@ router = APIRouter(prefix="/user-actions", tags=["User Actions"])
 
 @router.get(
     "",
-    responses={400: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        503: {"model": ErrorResponse, "description": "MongoDB unavailable"},
+    },
     response_description="Cursor-paginated list of user actions.",
 )
 async def list_user_actions(

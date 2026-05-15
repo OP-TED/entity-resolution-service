@@ -36,8 +36,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     redis_config = RedisConnectionConfig.from_settings(config)
     redis_client = RedisEREClient(
         config_or_client=redis_config,
-        request_channel=config.ERE_REQUEST_CHANNEL,
-        response_channel=config.ERE_RESPONSE_CHANNEL,
+        request_channel=config.ERSYS_REQUEST_QUEUE,
+        response_channel=config.ERSYS_RESPONSE_QUEUE,
     )
     app.state.redis_client = redis_client
 
@@ -84,6 +84,15 @@ async def _seed_admin_user(db: object) -> None:
 
 def create_app() -> FastAPI:
     """Application factory for the FastAPI instance."""
+    # Wire the ers logger into uvicorn's handler so application logs are visible.
+    # Uvicorn only configures its own logger hierarchy; without this, ers.* records
+    # have no handler and are silently dropped.
+    _ers_log = logging.getLogger("ers")
+    _ers_log.setLevel(logging.DEBUG if config.DEBUG else logging.INFO)
+    for _h in logging.getLogger("uvicorn").handlers:
+        if _h not in _ers_log.handlers:
+            _ers_log.addHandler(_h)
+
     # Bootstrap OTel tracing (no-op when TRACING_ENABLED=False).
     configure_tracing(config)
     configure_auto_instrumentation(config)

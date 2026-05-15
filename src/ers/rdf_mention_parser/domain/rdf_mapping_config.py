@@ -11,9 +11,11 @@ _SEGMENT_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*:[a-zA-Z][a-zA-Z0-9_./-]*$")
 
 
 class EntityTypeConfig(BaseModel):
-    """Configuration for a single entity type: its RDF type and field-to-property-path mappings."""
+    """Configuration for a single entity type: its RDF type, field-to-property-path
+    mappings, and a human-readable label for an entity type."""
 
     rdf_type: str
+    entity_label_field: str
     fields: dict[str, str]
 
     @field_validator("fields")
@@ -35,6 +37,15 @@ class EntityTypeConfig(BaseModel):
                         "Each segment must be 'prefix:localName'."
                     )
         return v
+
+    @model_validator(mode="after")
+    def entity_label_field_must_be_a_configured_field(self) -> "EntityTypeConfig":
+        if self.entity_label_field not in self.fields:
+            raise ValueError(
+                f"entity_label_field '{self.entity_label_field}' must be one of "
+                f"the configured fields: {sorted(self.fields)}."
+            )
+        return self
 
 
 class RDFMappingConfig(BaseModel):

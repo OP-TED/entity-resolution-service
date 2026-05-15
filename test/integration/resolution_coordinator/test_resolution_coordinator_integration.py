@@ -19,6 +19,7 @@ from ers.commons.adapters.hasher import SHA256ContentHasher
 from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.commons.adapters.redis_client import RedisEREClient
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+from ers.commons.services.exceptions import ServiceUnavailableError
 from ers.ere_contract_client.domain.errors import RedisConnectionError
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.request_registry.adapters.records_repository import (
@@ -110,7 +111,7 @@ def publish_service(redis_client):
 @pytest.fixture()
 def coordinator(registry_service, publish_service, decision_service, waiter):
     with patch(_CONFIG_PATH, _FAST_CONFIG):
-        return ResolutionCoordinatorService(
+        yield ResolutionCoordinatorService(
             registry_service=registry_service,
             ere_publish_service=publish_service,
             decision_store_service=decision_service,
@@ -188,15 +189,15 @@ async def test_it002_timeout_issues_provisional(coordinator, decision_service):
 
 
 # ---------------------------------------------------------------------------
-# IT-003: Redis down → provisional returned and persisted
+# IT-003: Redis down → ServiceUnavailableError raised
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
-async def test_it003_redis_down_issues_provisional(
+async def test_it003_redis_down_raises_service_unavailable(
     registry_service, decision_service, waiter
 ):
-    """IT-003: Redis unavailable → provisional returned and persisted in MongoDB."""
+    """IT-003: Redis unavailable → ServiceUnavailableError raised (no provisional written)."""
     failing_publish = AsyncMock(spec=EREPublishService)
     failing_publish.publish_request = AsyncMock(
         side_effect=RedisConnectionError("connection refused")
@@ -208,14 +209,8 @@ async def test_it003_redis_down_issues_provisional(
             decision_store_service=decision_service,
             waiter=waiter,
         )
-        decision, outcome = await svc.resolve_single(make_mention(req="req-it-003"))
-
-    expected_prov_id = derive_provisional_cluster_id(make_identifier(req="req-it-003"))
-    assert outcome == ResolutionOutcome.PROVISIONAL
-    assert decision.current_placement.cluster_id == expected_prov_id
-
-    stored = await decision_service.get_decision_by_triad(make_identifier(req="req-it-003"))
-    assert stored is not None
+        with pytest.raises(ServiceUnavailableError):
+            await svc.resolve_single(make_mention(req="req-it-003"))
 
 
 # ---------------------------------------------------------------------------
@@ -284,19 +279,19 @@ async def test_it005_concurrent_identical_requests(
             waiter=waiter,
         )
 
-    tasks = [asyncio.create_task(svc.resolve_single(mention)) for _ in range(5)]
-    await asyncio.sleep(0.05)  # Let all tasks register and start waiting.
+        tasks = [asyncio.create_task(svc.resolve_single(mention)) for _ in range(5)]
+        await asyncio.sleep(0.05)  # Let all tasks register and start waiting.
 
-    # Simulate EPIC-05 writing the canonical decision and notifying waiter.
-    cluster = ClusterReference(
-        cluster_id="cl-concurrent", confidence_score=0.95, similarity_score=0.90
-    )
-    await decision_service._repository.upsert_decision(
-        mention.identifiedBy, cluster, [cluster], datetime.now(UTC)
-    )
-    await waiter.notify(key)
+        # Simulate EPIC-05 writing the canonical decision and notifying waiter.
+        cluster = ClusterReference(
+            cluster_id="cl-concurrent", confidence_score=0.95, similarity_score=0.90
+        )
+        await decision_service._repository.upsert_decision(
+            mention.identifiedBy, cluster, [cluster], datetime.now(UTC)
+        )
+        await waiter.notify(key)
 
-    results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
 
     cluster_ids = {decision.current_placement.cluster_id for decision, _ in results}
     assert len(cluster_ids) == 1, f"Expected 1 unique cluster, got: {cluster_ids}"
@@ -378,29 +373,30 @@ async def test_it007_bulk_refresh_delta(registry_service, decision_service, bulk
     )
     await repo.store(rec)
 
-    snapshot_time = datetime.now(UTC)
     decision_repo = MongoDecisionRepository(mongo_db)
 
-    # Store 2 decisions before snapshot (old).
-    for i in range(2):
-        ident = make_identifier(source=source_id, req=f"req-old-{i}")
+    # Step 1: Insert 5 decisions (all first-time → updated_at=None per R1).
+    for i in range(5):
+        ident = make_identifier(source=source_id, req=f"req-{i}")
         cluster = ClusterReference(
-            cluster_id=f"cl-old-{i}", confidence_score=0.9, similarity_score=0.85
+            cluster_id=f"cl-initial-{i}", confidence_score=0.9, similarity_score=0.85
         )
         await decision_repo.upsert_decision(
-            ident, cluster, [cluster], snapshot_time - timedelta(minutes=5)
+            ident, cluster, [cluster], datetime.now(UTC) - timedelta(minutes=10)
         )
 
-    await asyncio.sleep(0.01)  # Ensure updated_at is strictly after snapshot_time.
+    # Snapshot taken after initial inserts (all have updated_at=None, not in warm delta).
+    snapshot_time = datetime.now(UTC)
+    await asyncio.sleep(0.01)  # Ensure subsequent updates are strictly after snapshot.
 
-    # Store 3 decisions after snapshot (new).
+    # Step 2: Update 3 of the 5 decisions with a new placement (sets updated_at > snapshot_time).
     for i in range(3):
-        ident = make_identifier(source=source_id, req=f"req-new-{i}")
-        cluster = ClusterReference(
+        ident = make_identifier(source=source_id, req=f"req-{i}")
+        new_cluster = ClusterReference(
             cluster_id=f"cl-new-{i}", confidence_score=0.9, similarity_score=0.85
         )
         await decision_repo.upsert_decision(
-            ident, cluster, [cluster], snapshot_time + timedelta(seconds=1)
+            ident, new_cluster, [new_cluster], datetime.now(UTC)
         )
 
     # Set lookup state to snapshot_time.
@@ -413,6 +409,7 @@ async def test_it007_bulk_refresh_delta(registry_service, decision_service, bulk
 
     page = await bulk_refresh.refresh_bulk(source_id)
 
+    # Warm delta: only decisions updated after snapshot_time are returned (3 out of 5)
     assert len(page.results) == 3
     cluster_ids = {r.current_placement.cluster_id for r in page.results}
     assert cluster_ids == {"cl-new-0", "cl-new-1", "cl-new-2"}
@@ -443,7 +440,7 @@ async def test_it008_bulk_refresh_first_lookup(
     )
     await repo.store(rec)
 
-    # Store 4 decisions.
+    # Store 4 decisions (first-time inserts → updated_at=None per R1).
     decision_repo = MongoDecisionRepository(mongo_db)
     for i in range(4):
         ident = make_identifier(source=source_id, req=f"req-{i}")
@@ -454,7 +451,10 @@ async def test_it008_bulk_refresh_first_lookup(
 
     page = await bulk_refresh.refresh_bulk(source_id)
 
-    assert len(page.results) == 4
+    # AC4: cold-start returns empty when all decisions have updated_at=None
+    # (no placement changes have occurred yet)
+    assert len(page.results) == 0
+    assert page.next_cursor is None
 
 
 # ---------------------------------------------------------------------------
@@ -469,3 +469,78 @@ async def test_it009_bulk_refresh_unknown_source(bulk_refresh):
         await bulk_refresh.refresh_bulk("UNKNOWN_SOURCE")
 
     assert exc_info.value.source_id == "UNKNOWN_SOURCE"
+
+
+# ---------------------------------------------------------------------------
+# IT-010: Zero single budget — immediate provisional, no Redis publish
+# ---------------------------------------------------------------------------
+
+_ZERO_SINGLE_BUDGET_CONFIG = type("C", (), {
+    "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0,
+    "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 5.0,
+})()
+
+
+@pytest.mark.integration
+async def test_it010_zero_single_budget_immediate_provisional(
+    registry_service, decision_service, waiter
+):
+    """IT-010: single budget == 0 → provisional issued immediately, publish_request never called."""
+    mention = make_mention(source="IT_SYS", req="req-it-010")
+    tracking_publish = AsyncMock(spec=EREPublishService)
+
+    with patch(_CONFIG_PATH, _ZERO_SINGLE_BUDGET_CONFIG):
+        svc = ResolutionCoordinatorService(
+            registry_service=registry_service,
+            ere_publish_service=tracking_publish,
+            decision_store_service=decision_service,
+            waiter=waiter,
+        )
+        decision, outcome = await svc.resolve_single(mention)
+
+    expected_prov_id = derive_provisional_cluster_id(mention.identifiedBy)
+    assert outcome == ResolutionOutcome.PROVISIONAL
+    assert decision.current_placement.cluster_id == expected_prov_id
+    tracking_publish.publish_request.assert_not_called()
+
+    stored = await decision_service.get_decision_by_triad(mention.identifiedBy)
+    assert stored is not None
+    assert stored.current_placement.cluster_id == expected_prov_id
+
+
+# ---------------------------------------------------------------------------
+# IT-011: Zero both budgets — bulk all provisional, no outer timeout, no Redis
+# ---------------------------------------------------------------------------
+
+_ZERO_BOTH_BUDGETS_CONFIG = type("C", (), {
+    "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET": 0,
+    "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET": 0,
+})()
+
+
+@pytest.mark.integration
+async def test_it011_zero_bulk_budget_all_provisional(
+    registry_service, decision_service, waiter
+):
+    """IT-011: both budgets == 0 → bulk returns all provisional with no Redis publish."""
+    mentions = [
+        make_mention(source="IT11_SYS", req=f"req-it-011-{i}") for i in range(3)
+    ]
+    tracking_publish = AsyncMock(spec=EREPublishService)
+
+    with patch(_CONFIG_PATH, _ZERO_BOTH_BUDGETS_CONFIG):
+        svc = ResolutionCoordinatorService(
+            registry_service=registry_service,
+            ere_publish_service=tracking_publish,
+            decision_store_service=decision_service,
+            waiter=waiter,
+        )
+        results = await svc.resolve_bulk(mentions)
+
+    assert len(results) == 3
+    for i, (decision, outcome) in enumerate(results):
+        expected_prov_id = derive_provisional_cluster_id(mentions[i].identifiedBy)
+        assert outcome == ResolutionOutcome.PROVISIONAL
+        assert decision.current_placement.cluster_id == expected_prov_id
+
+    tracking_publish.publish_request.assert_not_called()

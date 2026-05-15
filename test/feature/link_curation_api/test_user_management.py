@@ -432,7 +432,7 @@ def deactivation_rejected(response: Any) -> None:
 @then("the administrator account remains active")
 def admin_remains_active(response: Any) -> None:
     assert response.status_code == 409
-    assert "last active administrator" in response.json()["detail"].lower()
+    assert "last active administrator" in response.json()["message"].lower()
 
 
 @then("the response contains the user's email and role flags")

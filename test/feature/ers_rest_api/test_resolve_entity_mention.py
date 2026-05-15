@@ -228,7 +228,7 @@ def _make_error_result(
             request_id=request_id,
             entity_type=entity_type,
         ),
-        error=ErrorResponse(error_code=error_code, detail=detail),
+        error=ErrorResponse(error_code=error_code, message=detail),
     )
 
 
@@ -804,15 +804,15 @@ def response_error_code(ctx, error_code):
 @then("the response body contains a human-readable error message")
 def response_has_error_message(ctx):
     data = ctx["response"].json()
-    assert data.get("detail"), f"Expected a non-empty 'detail' field. Body: {data}"
+    assert data.get("message"), f"Expected a non-empty 'message' field. Body: {data}"
 
 
 @then(parsers.parse('the response body error detail references "{field_name}"'))
 def response_error_detail_references_field(ctx, field_name):
     data = ctx["response"].json()
-    detail = str(data.get("detail", ""))
-    assert field_name in detail, (
-        f"Expected '{field_name}' in error detail, got: {detail!r}"
+    message = str(data.get("message", ""))
+    assert field_name in message, (
+        f"Expected '{field_name}' in error message, got: {message!r}"
     )
 
 

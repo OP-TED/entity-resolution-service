@@ -331,6 +331,11 @@ Resolve an entity mention and return canonical or provisional cluster ID.
 | Validation error
 | <<ErrorResponse,ErrorResponse>>
 
+
+| 503
+| Backend service unavailable (MongoDB, Redis, or messaging channel)
+| <<ErrorResponse,ErrorResponse>>
+
 |===
 
 
@@ -400,6 +405,11 @@ Resolve multiple entity mentions in a single batch.
 
 | 400
 | Validation error
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 503
+| Backend service unavailable (MongoDB, Redis, or messaging channel)
 | <<ErrorResponse,ErrorResponse>>
 
 |===
@@ -488,6 +498,13 @@ or an error (error present), never both.
 |  `Date`
 | Timestamp of the most recent assignment update.
 | date-time    
+
+| context
+| 
+| X
+|  `String`
+| Optional context originally submitted with the resolution request.
+|     
 
 | error
 | 
@@ -859,6 +876,8 @@ Machine-readable error codes returned in error responses.
 | SOURCE_NOT_FOUND
 | SERVICE_ERROR
 | SERVICE_TIMEOUT
+| APPLICATION_ERROR
+| SERVICE_UNAVAILABLE
 
 |===
 
@@ -867,6 +886,12 @@ Machine-readable error codes returned in error responses.
 === ErrorResponse
 
 Standard error response body returned by all ERS REST API endpoints.
+
+The &#x60;&#x60;request_id&#x60;&#x60; field carries the ERS business UUID set by the request
+middleware (&#x60;&#x60;set_request_id&#x60;&#x60; in &#x60;&#x60;ers.commons.adapters.tracing&#x60;&#x60;). It is
+populated only by handlers that have access to that context — primarily the
+&#x60;&#x60;Exception&#x60;&#x60; (HTTP 500) handler — and is &#x60;&#x60;None&#x60;&#x60; on responses produced
+before the middleware ran or by handlers that do not need correlation.
 
 
 [.fields-ErrorResponse]
@@ -879,13 +904,20 @@ Standard error response body returned by all ERS REST API endpoints.
 | 
 | <<ErrorCode,ErrorCode>>
 | 
-|    VALIDATION_ERROR, IDEMPOTENCY_CONFLICT, PARSING_FAILED, MENTION_NOT_FOUND, SOURCE_NOT_FOUND, SERVICE_ERROR, SERVICE_TIMEOUT,  
+|    VALIDATION_ERROR, IDEMPOTENCY_CONFLICT, PARSING_FAILED, MENTION_NOT_FOUND, SOURCE_NOT_FOUND, SERVICE_ERROR, SERVICE_TIMEOUT, APPLICATION_ERROR, SERVICE_UNAVAILABLE,  
 
-| detail
+| message
 | X
 | 
 |  `String`
 | Human-readable explanation of the error.
+|     
+
+| request_id
+| 
+| X
+|  `String`
+| ERS business request UUID for log/trace correlation. Populated by handlers that run after the request-id middleware.
 |     
 
 |===
@@ -1015,6 +1047,13 @@ each item inside RefreshBulkResponse (delta synchronisation).
 | Timestamp of the most recent assignment update.
 | date-time    
 
+| context
+| 
+| X
+|  `String`
+| Optional context originally submitted with the resolution request.
+|     
+
 |===
 
 
@@ -1096,8 +1135,13 @@ Response body for POST /refreshBulk.
 
 Possible outcomes of a single entity mention resolution.
 
-CANONICAL — the cluster ID was produced by the Entity Resolution Engine.
-PROVISIONAL — the cluster ID was derived deterministically (singleton).
+CANONICAL — the assignment was produced by the Entity Resolution Engine,
+    or an existing decision is being replayed (the stored answer is
+    authoritative regardless of how it was originally written).
+PROVISIONAL — the cluster ID was issued by ERS as a deterministic draft
+    identifier because ERE did not respond within the execution window.
+    This is a short-lived state; ERE will process the mention
+    asynchronously and may supersede it via the delta-sync channel.
 
 
 

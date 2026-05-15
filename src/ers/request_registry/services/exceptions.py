@@ -1,6 +1,6 @@
 """Use-case exceptions for the Request Registry service layer.
 
-Repository-level errors (DuplicateTriadError, RepositoryConnectionError,
+Repository-level errors (DuplicateTriadError, RegistryConnectionError,
 RepositoryOperationError) live in domain/errors.py so adapters can raise
 them without importing from this module.
 """

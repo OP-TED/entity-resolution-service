@@ -16,8 +16,8 @@ Feature: Parser Configuration Loading and Entity Type Resolution
 
     Examples:
       | namespace_count | type_count | entity_type  | field_count |
-      | 4               | 1          | ORGANISATION | 6           |
-      | 4               | 2          | ORGANISATION | 6           |
+      | 4               | 1          | ORGANISATION | 7           |
+      | 4               | 2          | ORGANISATION | 7           |
 
   Scenario Outline: Reject a configuration with an undeclared namespace prefix
     Given a YAML configuration where <location> uses prefix "<prefix>" not declared in namespaces

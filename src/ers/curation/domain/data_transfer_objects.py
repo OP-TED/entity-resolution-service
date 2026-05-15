@@ -45,6 +45,17 @@ class UserActionFilters(FrozenDTO):
     ordering: BaseOrdering | None = None
 
 
+class EntityTypeDescriptor(FrozenDTO):
+    """Discoverability descriptor for a configured entity type."""
+
+    name: str = Field(description="The entity type identifier (e.g. 'ORGANISATION').")
+    display_name_field: str = Field(
+        description=(
+            "Key in parsed_representation that the UI should render as the entity's display title."
+        )
+    )
+
+
 class EntityMentionPreview(FrozenDTO):
     """Lightweight entity mention projection for display."""
 

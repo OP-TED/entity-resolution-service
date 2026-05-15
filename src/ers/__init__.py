@@ -118,12 +118,45 @@ class RedisConfig:
         return config_value
 
     @env_property(default_value="ere_requests")
-    def ERE_REQUEST_CHANNEL(self, config_value: str) -> str:
+    def ERSYS_REQUEST_QUEUE(self, config_value: str) -> str:
         return config_value
 
     @env_property(default_value="ere_responses")
-    def ERE_RESPONSE_CHANNEL(self, config_value: str) -> str:
+    def ERSYS_RESPONSE_QUEUE(self, config_value: str) -> str:
         return config_value
+
+    @env_property(default_value="ers_notifications")
+    def ERS_NOTIFICATIONS_CHANNEL(self, config_value: str) -> str:
+        return config_value
+
+    @env_property(default_value="5.0")
+    def REDIS_SOCKET_CONNECT_TIMEOUT(self, config_value: str) -> float:
+        """Maximum seconds to wait for the TCP handshake when connecting to Redis.
+
+        This is a connection-establishment timeout only — it does not affect how long
+        individual commands (LPUSH, BRPOP, PUBLISH, ...) wait for a response once
+        connected. Applied to all Redis connections (ERE queue and notification subscriber)
+        so that a down or unreachable Redis host fails fast instead of blocking
+        indefinitely on the OS-level TCP timeout.
+        """
+        return float(config_value)
+
+    @env_property(default_value="false")
+    def REDIS_TLS(self, config_value: str) -> bool:
+        """Enable TLS for all Redis connections when set to 'true'."""
+        return config_value.lower() == "true"
+
+    @env_property(default_value="5.0")
+    def ERS_SUBSCRIBER_READY_TIMEOUT(self, config_value: str) -> float:
+        """Maximum seconds to wait for the notification subscriber to finish its
+        SUBSCRIBE handshake before the API starts accepting traffic.
+
+        Closes the startup statelessness gap: without this gate the load
+        balancer can route requests before the cross-instance notification
+        channel is up, causing peer outcomes to be silently lost. Set to 0 to
+        disable the gate (not recommended in multi-instance deployments).
+        """
+        return float(config_value)
 
 
 class DecisionStoreConfig:
@@ -170,8 +203,11 @@ class ResolutionCoordinatorConfig:
     def ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET(self, config_value: str) -> float:
         """Maximum time budget for a single-mention resolution response.
 
-        Also serves as the ERE wait window — if ERE does not respond within
+        Also serves as the ERE wait window - if ERE does not respond within
         this budget, a provisional identifier is issued and returned to the client.
+
+        Set to 0 to enable immediate provisional mode: ERS skips ERE submission
+        entirely and issues a provisional identifier without any Redis interaction.
         """
         return float(config_value)
 
@@ -179,7 +215,13 @@ class ResolutionCoordinatorConfig:
     def ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET(self, config_value: str) -> float:
         """Maximum time budget for a bulk resolution response (all mentions combined).
 
-        Each mention waits up to SINGLE_REQUEST_TIME_BUDGET for ERE internally.
+        Each mention waits up to ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET for ERE
+        internally.
+
+        Set to 0 to remove the outer gather timeout entirely - the bulk call runs
+        until all individual mentions complete. Use with
+        ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0 for immediate provisional mode
+        with no Redis interaction.
         """
         return float(config_value)
 

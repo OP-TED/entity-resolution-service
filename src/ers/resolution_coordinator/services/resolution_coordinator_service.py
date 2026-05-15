@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import logging
 from datetime import UTC, datetime
 
 from erspec.models.core import (
@@ -17,6 +18,7 @@ from ers import config
 from ers.commons.adapters.provisional_id import derive_provisional_cluster_id
 from ers.commons.adapters.tracing import trace_function
 from ers.commons.domain.data_transfer_objects import ResolutionOutcome
+from ers.commons.services.exceptions import ServiceUnavailableError
 from ers.ere_contract_client.domain.errors import (
     ChannelUnavailableError,
     RedisConnectionError,
@@ -30,7 +32,10 @@ from ers.rdf_mention_parser.domain.exceptions import (
     MultipleEntitiesFoundError,
     UnsupportedEntityTypeError,
 )
-from ers.request_registry.domain.errors import DuplicateTriadError
+from ers.request_registry.domain.errors import (
+    DuplicateTriadError,
+    RegistryConnectionError,
+)
 from ers.request_registry.services.request_registry_service import (
     RequestRegistryService,
 )
@@ -49,6 +54,8 @@ from ers.resolution_decision_store.services.decision_store_service import (
     DecisionStoreService,
 )
 
+_log = logging.getLogger(__name__)
+
 _PARSING_ERRORS = (
     ValueError,
     MalformedRDFError,
@@ -57,6 +64,11 @@ _PARSING_ERRORS = (
     EntityTypeMismatchError,
     MultipleEntitiesFoundError,
     EmptyExtractionError,
+)
+
+_MONGO_CONNECTION_ERRORS = (
+    RegistryConnectionError,    # ers.request_registry.domain.errors
+    RepositoryConnectionError,  # ers.resolution_decision_store.domain.errors
 )
 
 
@@ -77,13 +89,13 @@ class ResolutionCoordinatorService:
     ) -> None:
         single_budget: float = config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET
         bulk_budget: float = config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET
-        if single_budget <= 0:  # pylint: disable=comparison-with-callable
+        if single_budget < 0:  # pylint: disable=comparison-with-callable
             raise ValueError(
-                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET must be > 0"
+                "ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET must be >= 0"
             )
-        if bulk_budget <= 0:  # pylint: disable=comparison-with-callable
+        if bulk_budget < 0:  # pylint: disable=comparison-with-callable
             raise ValueError(
-                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET must be > 0"
+                "ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET must be >= 0"
             )
         self._registry_service = registry_service
         self._ere_publish_service = ere_publish_service
@@ -131,8 +143,8 @@ class ResolutionCoordinatorService:
         Raises:
             ParsingFailedError: If registration fails due to invalid content.
             IdempotencyConflictError: If the triad exists with different content.
-            ResolutionTimeoutError: If the Decision Store is unreachable
-                during provisional write.
+            ServiceUnavailableError: If a MongoDB or Redis/channel connection
+                failure is detected during registration, publish, or provisional write.
         """
         # 1. Register (embeds RDF parsing)
         try:
@@ -143,16 +155,30 @@ class ResolutionCoordinatorService:
             raise ParsingFailedError(str(exc), cause=exc) from exc
         except DuplicateTriadError:
             pass  # Concurrent registration — another coroutine inserted first; proceed.
+        except _MONGO_CONNECTION_ERRORS as exc:
+            raise ServiceUnavailableError("mongodb", str(exc)) from exc
 
         # 2. Check existing decision — instant return for replays (always CANONICAL)
         identifier = entity_mention.identifiedBy
-        existing = await self._decision_store_service.get_decision_by_triad(
-            identifier
-        )
+        try:
+            existing = await self._decision_store_service.get_decision_by_triad(
+                identifier
+            )
+        except RepositoryConnectionError as exc:
+            raise ServiceUnavailableError("mongodb", str(exc)) from exc
         if existing is not None:
             return existing, ResolutionOutcome.CANONICAL
 
-        # 3+4+5. Publish → wait → provisional fallback
+        # 3. Immediate provisional mode — budget == 0 means ERE is not consulted.
+        if config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET == 0:
+            _log.debug(
+                "ERE processing disabled (ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0): issuing"
+                " provisional identifier immediately for %s/%s/%s.",
+                identifier.source_id, identifier.request_id, identifier.entity_type,
+            )
+            return await self._issue_provisional(identifier)
+
+        # 4+5+6. Publish → wait → provisional fallback
         triad_key = (
             f"{identifier.source_id}"
             f"{identifier.request_id}"
@@ -160,28 +186,67 @@ class ResolutionCoordinatorService:
         )
         event = await self._waiter.get_or_create(triad_key)
         try:
-            try:
-                request = EntityMentionResolutionRequest(
-                    entity_mention=entity_mention,
-                    ere_request_id="",
-                )
-                await self._ere_publish_service.publish_request(request)
-                await asyncio.wait_for(
-                    asyncio.shield(event.wait()),
-                    timeout=config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET,
-                )
-                decision = await self._decision_store_service.get_decision_by_triad(
-                    identifier
-                )
-                if decision is not None:
-                    return decision, ResolutionOutcome.CANONICAL
-            except (TimeoutError, RedisConnectionError, ChannelUnavailableError):
-                pass
-
+            decision = await self._publish_and_wait(entity_mention, event)
+            if decision is not None:
+                return decision, ResolutionOutcome.CANONICAL
             return await self._issue_provisional(identifier)
         finally:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await asyncio.shield(self._waiter.release(triad_key))
+
+    async def _publish_and_wait(
+        self,
+        entity_mention: EntityMention,
+        event: asyncio.Event,
+    ) -> Decision | None:
+        """Publish to ERE, await the waiter, and read the authoritative decision.
+
+        On ERE timeout the method performs one final Mongo read before returning
+        ``None`` — this closes the statelessness gap that arises when a
+        cross-instance notification is lost during a subscriber-reconnect window.
+        Mongo is always written *before* the doorbell, so the fallback read is
+        sufficient to return CANONICAL even when the notification never arrived.
+
+        Returns:
+            The persisted Decision (success path or Mongo-fallback), or ``None``
+            when the budget elapsed and Mongo has no decision yet (caller issues
+            a provisional identifier).
+
+        Raises:
+            ServiceUnavailableError: If Redis, the messaging channel, or the
+                Decision Store is unreachable. The ``service_name`` field
+                identifies which backend failed.
+        """
+        identifier = entity_mention.identifiedBy
+        try:
+            request = EntityMentionResolutionRequest(
+                entity_mention=entity_mention,
+                ere_request_id="",
+            )
+            await self._ere_publish_service.publish_request(request)
+            await asyncio.wait_for(
+                asyncio.shield(event.wait()),
+                timeout=config.ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET,
+            )
+            return await self._decision_store_service.get_decision_by_triad(
+                identifier
+            )
+        except RedisConnectionError as exc:
+            raise ServiceUnavailableError("redis", str(exc)) from exc
+        except ChannelUnavailableError as exc:
+            raise ServiceUnavailableError("channel", str(exc)) from exc
+        except RepositoryConnectionError as exc:
+            raise ServiceUnavailableError("mongodb", str(exc)) from exc
+        except TimeoutError:
+            # H5 statelessness safety net: doorbell may have been lost during a
+            # subscriber-reconnect window. Mongo is the source of truth — one
+            # final read before falling back to provisional.
+            try:
+                return await self._decision_store_service.get_decision_by_triad(
+                    identifier
+                )
+            except RepositoryConnectionError as exc:
+                raise ServiceUnavailableError("mongodb", str(exc)) from exc
 
     async def resolve_bulk(
         self, entity_mentions: list[EntityMention]
@@ -211,10 +276,14 @@ class ResolutionCoordinatorService:
             return []
         tasks = [self.resolve_single(m) for m in entity_mentions]
         try:
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET,
-            )
+            bulk_budget = config.ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET
+            if bulk_budget == 0:
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+            else:
+                results = await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True),
+                    timeout=bulk_budget,
+                )
             return list(results)
         except TimeoutError as exc:
             raise ResolutionTimeoutError(
@@ -235,7 +304,7 @@ class ResolutionCoordinatorService:
             ERE has already written a decision (StaleOutcomeError race).
 
         Raises:
-            ResolutionTimeoutError: If the Decision Store is unreachable.
+            ServiceUnavailableError: If the Decision Store is unreachable.
         """
         provisional_id = derive_provisional_cluster_id(identifier)
         cluster_ref = ClusterReference(
@@ -252,18 +321,21 @@ class ResolutionCoordinatorService:
             )
             return decision, ResolutionOutcome.PROVISIONAL
         except StaleOutcomeError as exc:
-            decision = await self._decision_store_service.get_decision_by_triad(
-                identifier
-            )
+            try:
+                decision = await self._decision_store_service.get_decision_by_triad(
+                    identifier
+                )
+            except RepositoryConnectionError as conn_exc:
+                raise ServiceUnavailableError("mongodb", str(conn_exc)) from conn_exc
             if decision is None:  # pragma: no cover — ERE wrote it moments ago
                 raise ResolutionTimeoutError(
                     "Decision vanished after StaleOutcomeError"
                 ) from exc
             return decision, ResolutionOutcome.CANONICAL
         except RepositoryConnectionError as exc:
-            raise ResolutionTimeoutError(
-                f"Cannot persist provisional decision: {exc}"
-            ) from None
+            raise ServiceUnavailableError(
+                "mongodb", f"Cannot persist provisional decision: {exc}"
+            ) from exc
 
 
 @trace_function(span_name="resolution_coordinator.lookup_by_triad")

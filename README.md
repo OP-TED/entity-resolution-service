@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-informational)](src/VERSION)
+[![Version](https://img.shields.io/badge/version-1.1.0-informational)](src/VERSION)
 
 ERS is the coordination backbone of an entity resolution platform. It receives RDF entity mention submissions, registers them, and orchestrates their resolution through a pluggable Entity Resolution Engine (ERE) over Redis. For each mention it returns a canonical cluster identifier — either confirmed by the ERE or provisionally issued when the engine does not respond within the configured time budget.
 
@@ -11,6 +11,10 @@ The system is engine-authoritative: the ERE determines canonical identity, ERS n
 ---
 
 ## Getting Started
+
+**To set up the complete ERSys stack** (ERS + ERE + Webapp), see the [Installation Guide](INSTALL.md).
+
+The instructions below cover running ERS on its own.
 
 ### Prerequisites
 
@@ -42,6 +46,8 @@ The defaults work for local development. Notable variables in `src/infra/.env`:
 | `REDIS_PASSWORD` | `changeme` | Redis password — **must match ERE** |
 | `ADMIN_EMAIL` | `admin@ers.local` | Default admin account |
 | `ADMIN_PASSWORD` | `changeme` | Default admin password |
+| `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET` | `30` | Seconds ERS waits per mention for an ERE response before issuing a provisional identifier. Set to `0` to skip ERE entirely and issue provisional IDs immediately (no Redis required). |
+| `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET` | `120` | Outer timeout in seconds for a bulk resolution request covering all mentions. Set to `0` to remove the outer timeout; use with `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0` for fully immediate provisional bulk mode. |
 
 ### 3. Start the stack
 
@@ -67,27 +73,19 @@ This repo starts the ERS backend and its infrastructure (Redis, database). It do
 
 Without ERE running and connected to the **same Redis instance**, entity mentions will be accepted and registered but resolution will never complete — ERS will issue provisional cluster IDs until the ERE responds.
 
-- To add ERE: follow the Getting Started section in [entity-resolution-engine-basic](https://github.com/OP-TED/entity-resolution-engine-basic#getting-started).
-- To add the web UI: follow the Getting Started section in [entity-resolution-service-webapp](https://github.com/OP-TED/entity-resolution-service-webapp#getting-started).
+To skip ERE submission entirely and receive provisional identifiers immediately (no Redis required), set both `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0` and `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET=0`. This is useful for environments where ERE is not deployed and provisional IDs are the intended steady-state output.
+
+- To add ERE and the web UI: see the [Installation Guide](INSTALL.md) for the full ERSys stack setup.
 
 ---
 
 ## Application configuration
 
-### `src/config/rdf_mention_config.yaml`
-
-Maps RDF entity types to extraction rules used when parsing incoming entity mentions. It tells ERS how to identify each entity type in RDF and which property paths to follow when extracting attribute values.
-
-**`namespaces`** — prefix registry used to resolve shortened property paths throughout the file. Each entry maps a prefix (e.g. `epo`) to its full IRI base (e.g. `http://data.europa.eu/a4g/ontology#`). All prefixes used in `fields` values must be declared here.
-
-**`entity_types`** — one entry per supported entity type (e.g. `ORGANISATION`, `PROCEDURE`). Each entry contains:
-
-| Key | Type | Purpose |
-|-----|------|---------|
-| `rdf_type` | prefixed IRI string | RDF class that identifies this entity type (e.g. `org:Organization`) |
-| `fields` | mapping of field name → property path | Attributes to extract; `/` separates hops for multi-step traversal (e.g. `cccev:registeredAddress/epo:hasCountryCode`) |
-
-Field names defined here must match the field names expected by the Entity Resolution Engine. To add a new entity type, add a new key under `entity_types` with its `rdf_type` and the `fields` to extract. To add a new attribute to an existing type, add a new key under its `fields` mapping with the corresponding RDF property path.
+ERS is configured through environment variables and the YAML mapping file
+`src/config/rdf_mention_config.yaml`, which defines how RDF entity types are parsed and
+which attributes are extracted from each. The full reference for both — including all
+environment variables, their defaults, and the structure of the mapping file — is in
+[docs/configuration.md](docs/configuration.md).
 
 ## Development
 
@@ -100,6 +98,34 @@ make typecheck        # mypy
 make check-quality    # lint + typecheck + architecture boundaries
 make ci-full          # full CI pipeline — run before opening a PR
 ```
+
+### OpenAPI schemas (`resources/`)
+
+The `resources/` directory contains the generated OpenAPI schemas for both APIs:
+
+- `ers-openapi-schema.json` — ERS REST API
+- `curation-openapi-schema.json` — Curation API
+
+Generate or refresh them with:
+
+```bash
+make openapi
+```
+
+These files are committed to the repository. The [entity-resolution-service-webapp](https://github.com/OP-TED/entity-resolution-service-webapp) fetches them from this repo at build time to generate its API client.
+
+### ERSys black-box tests
+
+A separate suite of black-box tests targets the full running stack (ERS + ERE + Webapp)
+and lives in `test/ersys/`:
+
+```bash
+make test-ersys-smoke   # stack reachability checks (requires make up)
+make test-ersys-e2e     # full black-box e2e suite (requires full ERSys stack)
+make test-ersys-all     # smoke + e2e
+```
+
+See [docs/testing-ersys.md](docs/testing-ersys.md) for setup instructions, required env files, and which components each suite needs.
 
 Pre-commit hooks (format + lint on every commit):
 

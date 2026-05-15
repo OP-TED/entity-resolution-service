@@ -71,13 +71,14 @@ _NAMESPACES = {
     "locn": "http://www.w3.org/ns/locn#",
 }
 
-_ORG_FIELDS_6 = {
+_ORG_FIELDS_7 = {
     "legal_name": "epo:hasLegalName",
     "country_code": "cccev:registeredAddress/epo:hasCountryCode",
     "nuts_code": "cccev:registeredAddress/epo:hasNutsCode",
     "post_code": "cccev:registeredAddress/locn:postCode",
     "post_name": "cccev:registeredAddress/locn:postName",
     "thoroughfare": "cccev:registeredAddress/locn:thoroughfare",
+    "full_address": "cccev:registeredAddress/locn:fullAddress",
 }
 
 _TURTLE_PREFIXES = """\
@@ -88,8 +89,8 @@ _TURTLE_PREFIXES = """\
 @prefix ex: <http://example.org/> .
 """
 
-# Canonical 6-field Organisation Turtle
-_ORG_6_FIELDS_TTL = (
+# Canonical 7-field Organisation Turtle
+_ORG_7_FIELDS_TTL = (
     _TURTLE_PREFIXES
     + """
 ex:org1 a org:Organization ;
@@ -100,7 +101,8 @@ ex:addr1 a locn:Address ;
     epo:hasNutsCode <http://data.europa.eu/nuts/code/DE1> ;
     locn:postCode "10115" ;
     locn:postName "Berlin" ;
-    locn:thoroughfare "Unter den Linden 1" .
+    locn:thoroughfare "Unter den Linden 1" ;
+    locn:fullAddress "Unter den Linden 1, 10115 Berlin" .
 """
 )
 
@@ -125,7 +127,7 @@ ex:org1 a org:Organization ;
 """
 )
 
-# 6 configured fields + 3 extra triples not in the configuration
+# 7 configured fields + 3 extra triples not in the configuration
 _ORG_WITH_EXTRAS_TTL = (
     _TURTLE_PREFIXES
     + """
@@ -140,6 +142,7 @@ ex:addr1 a locn:Address ;
     locn:postCode "10115" ;
     locn:postName "Berlin" ;
     locn:thoroughfare "Unter den Linden 1" ;
+    locn:fullAddress "Unter den Linden 1, 10115 Berlin" ;
     locn:adminUnitL1 "DE" .
 """
 )
@@ -176,8 +179,8 @@ ex:org1 a org:Organization ;
 """
 )
 
-# RDF/XML equivalent of _ORG_6_FIELDS_TTL (minus the address, for simplicity)
-_ORG_6_FIELDS_RDFXML = """\
+# RDF/XML equivalent of _ORG_7_FIELDS_TTL
+_ORG_7_FIELDS_RDFXML = """\
 <?xml version="1.0"?>
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
          xmlns:org="http://www.w3.org/ns/org#"
@@ -193,6 +196,7 @@ _ORG_6_FIELDS_RDFXML = """\
         <locn:postCode>10115</locn:postCode>
         <locn:postName>Berlin</locn:postName>
         <locn:thoroughfare>Unter den Linden 1</locn:thoroughfare>
+        <locn:fullAddress>Unter den Linden 1, 10115 Berlin</locn:fullAddress>
       </locn:Address>
     </cccev:registeredAddress>
   </org:Organization>
@@ -222,7 +226,7 @@ def ctx():
 # ---------------------------------------------------------------------------
 
 
-@given("the parser is configured for ORGANISATION with 6 field mappings")
+@given("the parser is configured for ORGANISATION with 7 field mappings")
 def parser_configured(ctx, sample_rdf_mapping):
     config = RDFConfigReader.from_string(sample_rdf_mapping)
     adapter = RDFParserAdapter()
@@ -240,7 +244,7 @@ def default_entity_type(ctx, entity_type):
 # ---------------------------------------------------------------------------
 
 _CONTENT_BY_COUNT = {
-    6: {"text/turtle": _ORG_6_FIELDS_TTL, "application/rdf+xml": _ORG_6_FIELDS_RDFXML},
+    7: {"text/turtle": _ORG_7_FIELDS_TTL, "application/rdf+xml": _ORG_7_FIELDS_RDFXML},
     2: {"text/turtle": _ORG_2_FIELDS_TTL},
     1: {"text/turtle": _ORG_1_FIELD_TTL},
 }
@@ -249,7 +253,7 @@ _CONTENT_BY_COUNT = {
 @given(
     parsers.parse(
         'an RDF payload in "{content_type}" format describing an Organisation '
-        "with {present_count:d} of 6 configured fields present"
+        "with {present_count:d} of 7 configured fields present"
     )
 )
 def rdf_payload_with_n_fields(ctx, content_type, present_count):
@@ -259,7 +263,7 @@ def rdf_payload_with_n_fields(ctx, content_type, present_count):
 
 
 @given(
-    "an RDF Turtle payload describing an Organisation with all 6 configured "
+    "an RDF Turtle payload describing an Organisation with all 7 configured "
     "fields and 3 additional properties not in the configuration"
 )
 def rdf_payload_with_extra_triples(ctx):
@@ -306,7 +310,7 @@ def invalid_rdf_input(ctx, invalid_input):
         ctx["content"] = "@prefix : <> . :s :p"  # truncated triple
     elif "Person, not an Organisation" in invalid_input:
         ctx["content"] = _PERSON_TTL
-    elif "none of the 6 configured fields" in invalid_input:
+    elif "none of the 7 configured fields" in invalid_input:
         ctx["content"] = _ORG_NO_CONFIGURED_FIELDS_TTL
     elif "valid RDF Turtle payload describing an Organisation" in invalid_input:
         ctx["content"] = _ORG_1_FIELD_TTL  # valid org, but entity_type_uri will be wrong

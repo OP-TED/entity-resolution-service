@@ -93,7 +93,7 @@ class LookupService:
                         identified_by=ident,
                         error=ErrorResponse(
                             error_code=ErrorCode.MENTION_NOT_FOUND,
-                            detail=f"Mention ({ident.source_id}, {ident.request_id}, "
+                            message=f"Mention ({ident.source_id}, {ident.request_id}, "
                             f"{ident.entity_type}) not found",
                         ),
                     )
@@ -104,7 +104,7 @@ class LookupService:
                         identified_by=ident,
                         error=ErrorResponse(
                             error_code=ErrorCode.SERVICE_ERROR,
-                            detail=f"Failed to look up mention ({ident.source_id}, "
+                            message=f"Failed to look up mention ({ident.source_id}, "
                             f"{ident.request_id}, {ident.entity_type})",
                         ),
                     )

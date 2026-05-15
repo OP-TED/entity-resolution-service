@@ -7,7 +7,10 @@ import pytest
 from pydantic import ValidationError
 
 from ers.rdf_mention_parser.domain.exceptions import UnsupportedEntityTypeError
-from ers.rdf_mention_parser.domain.rdf_mapping_config import EntityTypeConfig, RDFMappingConfig
+from ers.rdf_mention_parser.domain.rdf_mapping_config import (
+    EntityTypeConfig,
+    RDFMappingConfig,
+)
 
 # ---------------------------------------------------------------------------
 # Minimal valid fixtures
@@ -27,12 +30,17 @@ ORGANISATION_FIELDS = {
     "post_code": "cccev:registeredAddress/locn:postCode",
     "post_name": "cccev:registeredAddress/locn:postName",
     "thoroughfare": "cccev:registeredAddress/locn:thoroughfare",
+    "full_address": "cccev:registeredAddress/locn:fullAddress",
 }
 
 
 def minimal_config(extra_types: dict | None = None) -> dict:
     entity_types = {
-        "ORGANISATION": {"rdf_type": "org:Organization", "fields": dict(ORGANISATION_FIELDS)}
+        "ORGANISATION": {
+            "rdf_type": "org:Organization",
+            "entity_label_field": "legal_name",
+            "fields": dict(ORGANISATION_FIELDS),
+        }
     }
     if extra_types:
         entity_types.update(extra_types)
@@ -45,17 +53,18 @@ def minimal_config(extra_types: dict | None = None) -> dict:
 
 
 class TestRDFMappingConfigValid:
-    def test_loads_single_entity_type_with_six_fields(self):
+    def test_loads_single_entity_type_with_seven_fields(self):
         config = RDFMappingConfig(**minimal_config())
 
         assert len(config.namespaces) == 4
         assert len(config.entity_types) == 1
-        assert len(config.entity_types["ORGANISATION"].fields) == 6
+        assert len(config.entity_types["ORGANISATION"].fields) == 7
 
     def test_loads_two_entity_types(self):
         extra = {
             "PROCEDURE": {
                 "rdf_type": "epo:Procedure",
+                "entity_label_field": "title",
                 "fields": {"title": "epo:hasTitle"},
             }
         }
@@ -81,7 +90,7 @@ class TestRDFMappingConfigValid:
 
         assert "ORGANISATION" in config.entity_types
         assert "PROCEDURE" in config.entity_types
-        assert len(config.entity_types["ORGANISATION"].fields) == 6
+        assert len(config.entity_types["ORGANISATION"].fields) == 7
         assert len(config.entity_types["PROCEDURE"].fields) == 7
 
 
@@ -107,7 +116,9 @@ class TestRDFMappingConfigUndeclaredPrefix:
 
     def test_undeclared_prefix_in_second_segment_of_multi_hop_path(self):
         data = minimal_config()
-        data["entity_types"]["ORGANISATION"]["fields"]["bad"] = "epo:address/unk:postCode"
+        data["entity_types"]["ORGANISATION"]["fields"]["bad"] = (
+            "epo:address/unk:postCode"
+        )
 
         with pytest.raises(ValidationError, match="unk"):
             RDFMappingConfig(**data)
@@ -128,7 +139,11 @@ class TestRDFMappingConfigStructural:
     def test_rejects_missing_namespaces(self):
         data = {
             "entity_types": {
-                "ORGANISATION": {"rdf_type": "org:Organization", "fields": ORGANISATION_FIELDS}
+                "ORGANISATION": {
+                    "rdf_type": "org:Organization",
+                    "entity_label_field": "legal_name",
+                    "fields": ORGANISATION_FIELDS,
+                }
             }
         }
 
@@ -215,9 +230,17 @@ class TestRDFMappingConfigResolveEntityType:
         assert "http://example.org/unknown#PersonEntity" in exc_info.value.message
 
     def test_resolves_second_entity_type_when_two_configured(self):
-        extra = {"PROCEDURE": {"rdf_type": "epo:Procedure", "fields": {"title": "epo:hasTitle"}}}
+        extra = {
+            "PROCEDURE": {
+                "rdf_type": "epo:Procedure",
+                "entity_label_field": "title",
+                "fields": {"title": "epo:hasTitle"},
+            }
+        }
         config = RDFMappingConfig(**minimal_config(extra_types=extra))
 
-        result = config.resolve_entity_type("http://data.europa.eu/a4g/ontology#Procedure")
+        result = config.resolve_entity_type(
+            "http://data.europa.eu/a4g/ontology#Procedure"
+        )
 
         assert result.rdf_type == "epo:Procedure"

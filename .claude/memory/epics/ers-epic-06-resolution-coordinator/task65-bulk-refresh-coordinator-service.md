@@ -79,7 +79,9 @@ Step-by-step:
 2. GET LAST SNAPSHOT
    lookup_state = await registry_service.get_lookup_state(source_id)
    updated_since = lookup_state.last_snapshot if lookup_state else None
-   # None means first-time lookup — return all decisions for this source
+   # None means first-time lookup — return only decisions whose placement has
+   # been corrected at least once (ERS1-214: cold-start filters updated_at != null;
+   # decisions never touched after creation are not deltas).
 
 3. QUERY DELTA
    page = await decision_store_service.query_decisions_delta(
@@ -190,7 +192,7 @@ All tests mock both `RequestRegistryService` and `DecisionStoreService` with `As
 | Test | Scenario | Key assertion |
 |------|----------|---------------|
 | `test_returns_delta_with_prior_snapshot` | Lookup state exists with `last_snapshot=t0` | `query_decisions_delta` called with `updated_since=t0`; snapshot advanced |
-| `test_returns_all_on_first_lookup` | `get_lookup_state` returns None | `query_decisions_delta` called with `updated_since=None` |
+| `test_returns_only_changed_on_first_lookup` | `get_lookup_state` returns None | `query_decisions_delta` called with `updated_since=None`; only decisions with non-null `updated_at` returned (ERS1-214 cold-start) |
 | `test_empty_delta_still_advances_snapshot` | Delta page is empty | `advance_snapshot` still called; empty page returned |
 | `test_unknown_source_raises` | `source_has_requests` returns False | `SourceNotFoundException` raised; `query_decisions_delta` NOT called |
 | `test_decision_store_unavailable` | `query_decisions_delta` raises `RepositoryConnectionError` | `RepositoryConnectionError` propagates; `advance_snapshot` NOT called |

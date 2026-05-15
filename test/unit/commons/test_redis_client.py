@@ -75,8 +75,8 @@ async def mock_ere_service(redis_client: aioredis.Redis, dummy_response: EntityM
     _settings = config
 
     async def _serve():
-        await redis_client.brpop(_settings.ERE_REQUEST_CHANNEL)
-        await redis_client.lpush(_settings.ERE_RESPONSE_CHANNEL, dummy_response.model_dump_json())
+        await redis_client.brpop(_settings.ERSYS_REQUEST_QUEUE)
+        await redis_client.lpush(_settings.ERSYS_RESPONSE_QUEUE, dummy_response.model_dump_json())
 
     task = asyncio.create_task(_serve())
     yield
@@ -106,7 +106,7 @@ class TestPullResponse:
     async def test_raises_timeout_when_no_message(self, redis_client: aioredis.Redis):
         client = RedisEREClient(config_or_client=redis_client, timeout=0.1)
 
-        with pytest.raises(TimeoutError, match=config.ERE_RESPONSE_CHANNEL):
+        with pytest.raises(TimeoutError, match=config.ERSYS_RESPONSE_QUEUE):
             await client.pull_response()
 
     async def test_raises_on_connection_error(self, redis_ere_client: RedisEREClient):
@@ -149,6 +149,70 @@ class TestClose:
 
         assert "failed to close connection cleanly" in caplog.text
         assert not caplog.records[-1].exc_info  # exception was not re-raised
+
+
+class TestPublishNotification:
+    async def test_calls_redis_publish_with_correct_args(self):
+        mock_redis = AsyncMock(spec=aioredis.Redis)
+        mock_redis.connection_pool = MagicMock()
+        mock_redis.connection_pool.connection_kwargs = {}
+        mock_redis.publish = AsyncMock()
+        client = RedisEREClient(config_or_client=mock_redis)
+
+        await client.publish_notification("ers_notifications", "SRCIDrequestidORGANISATION")
+
+        mock_redis.publish.assert_awaited_once_with("ers_notifications", "SRCIDrequestidORGANISATION")
+
+    async def test_wraps_connection_error(self):
+        mock_redis = AsyncMock(spec=aioredis.Redis)
+        mock_redis.connection_pool = MagicMock()
+        mock_redis.connection_pool.connection_kwargs = {}
+        mock_redis.publish.side_effect = RedisConnectionError("boom")
+        client = RedisEREClient(config_or_client=mock_redis)
+
+        with pytest.raises(ConnectionError):
+            await client.publish_notification("ers_notifications", "SRCIDrequestidORGANISATION")
+
+    async def test_wraps_redis_timeout_error(self):
+        """A redis.exceptions.TimeoutError must be translated to ConnectionError.
+
+        Otherwise a network timeout during a Redis failover bubbles up as a
+        redis.exceptions.* type that no caller catches, killing the integrator
+        worker and silently losing the cross-instance signal.
+        """
+        from redis.exceptions import TimeoutError as RedisTimeoutError
+        mock_redis = AsyncMock(spec=aioredis.Redis)
+        mock_redis.connection_pool = MagicMock()
+        mock_redis.connection_pool.connection_kwargs = {}
+        mock_redis.publish.side_effect = RedisTimeoutError("timed out")
+        client = RedisEREClient(config_or_client=mock_redis)
+
+        with pytest.raises(ConnectionError):
+            await client.publish_notification("ers_notifications", "k")
+
+
+class TestRedisConnectionConfig:
+    def test_ssl_defaults_to_false_in_kwargs(self):
+        cfg = RedisConnectionConfig(host="localhost", port=6379, db=0)
+        assert cfg.to_redis_kwargs()["ssl"] is False
+
+    def test_ssl_true_propagated_to_kwargs(self):
+        cfg = RedisConnectionConfig(host="localhost", port=6379, db=0, ssl=True)
+        assert cfg.to_redis_kwargs()["ssl"] is True
+
+    def test_from_settings_reads_redis_tls(self):
+        mock_settings = MagicMock()
+        mock_settings.REDIS_HOST = "redis.example.com"
+        mock_settings.REDIS_PORT = 6380
+        mock_settings.REDIS_DB = 1
+        mock_settings.REDIS_PASSWORD = None
+        mock_settings.REDIS_SOCKET_CONNECT_TIMEOUT = 5.0
+        mock_settings.REDIS_TLS = True
+
+        cfg = RedisConnectionConfig.from_settings(mock_settings)
+
+        assert cfg.ssl is True
+        assert cfg.to_redis_kwargs()["ssl"] is True
 
 
 class TestContextManager:
