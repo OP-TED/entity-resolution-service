@@ -30,7 +30,6 @@ from export_notice_execution_matrix_postgres import (
     write_matrix_csv,
 )
 
-
 DEFAULT_HTML_PATH = Path("test/test_data/ers_time_performance/2023-8-10-old-code.html")
 
 

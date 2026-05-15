@@ -14,24 +14,21 @@ It measures three shapes of traffic:
 
 import argparse
 import csv
-import hashlib
-import json
 import os
 import platform
 import random
 import socket
 import statistics
 import time
+from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import urljoin
 
 import rdflib
 import requests
 from rdflib.namespace import RDF
-
 
 DEFAULT_INPUT_DIR = Path("test/test_data/organisations")
 DEFAULT_OUTPUT_PATH = Path("test/test_data/ers_time_performance/ers_resolution_performance_report.csv")
@@ -56,7 +53,7 @@ class RequestResult:
     parallel_workers: int
     mention_count: int
     duration_seconds: float
-    status_code: Optional[int]
+    status_code: int | None
     success: bool
     error: str
 
@@ -175,7 +172,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def endpoint_urls(ers_url: str, resolve_url: Optional[str], bulk_url: Optional[str]) -> Tuple[str, str]:
+def endpoint_urls(ers_url: str, resolve_url: str | None, bulk_url: str | None) -> tuple[str, str]:
     cleaned = ers_url.rstrip("/") + "/"
     if ers_url.rstrip("/").endswith("/api/v1/resolve-bulk"):
         default_bulk_url = ers_url.rstrip("/")
@@ -186,14 +183,14 @@ def endpoint_urls(ers_url: str, resolve_url: Optional[str], bulk_url: Optional[s
     return resolve_url or default_resolve_url, bulk_url or default_bulk_url
 
 
-def parse_int_list(value: str) -> List[int]:
+def parse_int_list(value: str) -> list[int]:
     numbers = [int(item.strip()) for item in value.split(",") if item.strip()]
     if not numbers:
         raise ValueError("At least one batch size is required.")
     return numbers
 
 
-def parse_headers(header_values: Sequence[str]) -> Dict[str, str]:
+def parse_headers(header_values: Sequence[str]) -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
     for header in header_values:
         if "=" not in header:
@@ -210,7 +207,7 @@ def notice_id_from_file(path: Path) -> str:
     return path.stem
 
 
-def ttl_files(input_dir: Path, limit: int) -> List[Path]:
+def ttl_files(input_dir: Path, limit: int) -> list[Path]:
     files = sorted(input_dir.glob("*.ttl"))
     if limit > 0:
         files = files[:limit]
@@ -250,7 +247,7 @@ def build_mention(entity_uri: str, notice_id: str, content: str) -> dict:
     }
 
 
-def load_mentions(input_dir: Path, limit: int, identifier_suffix: Optional[str] = None) -> List[MentionRecord]:
+def load_mentions(input_dir: Path, limit: int, identifier_suffix: str | None = None) -> list[MentionRecord]:
     mentions = []
     for index, path in enumerate(ttl_files(input_dir=input_dir, limit=limit), start=1):
         content = path.read_text(encoding="utf-8").strip()
@@ -271,7 +268,7 @@ def load_mentions(input_dir: Path, limit: int, identifier_suffix: Optional[str] 
     return mentions
 
 
-def chunks(items: Sequence[MentionRecord], size: int) -> Iterable[List[MentionRecord]]:
+def chunks(items: Sequence[MentionRecord], size: int) -> Iterable[list[MentionRecord]]:
     for start in range(0, len(items), size):
         yield list(items[start:start + size])
 
@@ -282,7 +279,7 @@ def make_parallel_batches(
     batch_min: int,
     batch_max: int,
     seed: int,
-) -> List[List[MentionRecord]]:
+) -> list[list[MentionRecord]]:
     if batch_min <= 0 or batch_max < batch_min:
         raise ValueError("Parallel batch min/max values are invalid.")
 
@@ -305,7 +302,7 @@ def post_batch(
     session: requests.Session,
     resolve_url: str,
     bulk_url: str,
-    headers: Dict[str, str],
+    headers: dict[str, str],
     batch: Sequence[MentionRecord],
     timeout: float,
     scenario: str,
@@ -351,7 +348,7 @@ def dry_run_results(
     batches: Sequence[Sequence[MentionRecord]],
     batch_size: int,
     parallel_workers: int,
-) -> Tuple[float, List[RequestResult]]:
+) -> tuple[float, list[RequestResult]]:
     results = [
         RequestResult(
             scenario=scenario,
@@ -372,12 +369,12 @@ def dry_run_results(
 def run_sequential_scenario(
     resolve_url: str,
     bulk_url: str,
-    headers: Dict[str, str],
+    headers: dict[str, str],
     mentions: Sequence[MentionRecord],
     batch_size: int,
     timeout: float,
     dry_run: bool,
-) -> Tuple[float, List[RequestResult]]:
+) -> tuple[float, list[RequestResult]]:
     mode = "individual" if batch_size == 1 else "sequential_batch"
     scenario = "individual" if batch_size == 1 else f"batch_{batch_size}"
     scenario_batches = list(chunks(mentions, batch_size))
@@ -414,7 +411,7 @@ def run_sequential_scenario(
 def run_parallel_scenario(
     resolve_url: str,
     bulk_url: str,
-    headers: Dict[str, str],
+    headers: dict[str, str],
     mentions: Sequence[MentionRecord],
     request_count: int,
     batch_min: int,
@@ -423,7 +420,7 @@ def run_parallel_scenario(
     timeout: float,
     seed: int,
     dry_run: bool,
-) -> Tuple[float, List[RequestResult]]:
+) -> tuple[float, list[RequestResult]]:
     scenario_batches = make_parallel_batches(
         mentions=mentions,
         request_count=request_count,

@@ -7,11 +7,10 @@ import json
 import random
 import shutil
 from pathlib import Path
-from typing import List, TextIO, Tuple
+from typing import TextIO
 
 import rdflib
 from rdflib.namespace import RDF
-
 
 ORG_TYPE_URI = rdflib.URIRef("http://www.w3.org/ns/org#Organization")
 ERS_SOURCE_ID = "TEDSWS"
@@ -57,7 +56,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def iter_notice_files(input_dir: Path, seed: int) -> List[Path]:
+def iter_notice_files(input_dir: Path, seed: int) -> list[Path]:
     notice_files = sorted(input_dir.rglob("*.ttl"))
     random.Random(seed).shuffle(notice_files)
     return notice_files
@@ -80,7 +79,7 @@ def load_graph(path: Path) -> rdflib.Graph:
     return graph
 
 
-def organisation_subjects(graph: rdflib.Graph) -> List[rdflib.URIRef]:
+def organisation_subjects(graph: rdflib.Graph) -> list[rdflib.URIRef]:
     subjects = {
         subject
         for subject in graph.subjects(RDF.type, ORG_TYPE_URI)
@@ -144,7 +143,7 @@ def extract_organisations(
     output_dir: Path,
     limit: int,
     seed: int,
-) -> Tuple[int, int, int, int]:
+) -> tuple[int, int, int, int]:
     notice_files = iter_notice_files(input_dir=input_dir, seed=seed)
     written = 0
     notices_with_organisations = 0
@@ -161,7 +160,7 @@ def extract_organisations(
 
             try:
                 graph = load_graph(notice_file)
-            except Exception as exc:  # noqa: BLE001 - report and continue over large fixture sets
+            except Exception as exc:
                 parse_errors += 1
                 write_manifest_record(
                     manifest,

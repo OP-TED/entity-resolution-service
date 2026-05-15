@@ -9,7 +9,6 @@ sequence that includes URI and entity resolution instead of distillation.
 import argparse
 import csv
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from export_notice_execution_matrix_postgres import (
     DEFAULT_DAG_ID,
@@ -19,7 +18,6 @@ from export_notice_execution_matrix_postgres import (
     fetch_task_durations,
     write_mapping_csv,
 )
-
 
 DEFAULT_OUTPUT_PATH = Path("test/test_data/ers_time_performance/new_code.csv")
 DEFAULT_MAPPING_PATH = Path("test/test_data/ers_time_performance/current_airflow_ers_run_mapping.csv")
@@ -62,9 +60,9 @@ def parse_args() -> argparse.Namespace:
 def write_ers_matrix_csv(
     output_path: Path,
     dag_id: str,
-    run_ids: List[str],
-    durations: Dict[str, Dict[str, Optional[float]]],
-) -> Tuple[int, float]:
+    run_ids: list[str],
+    durations: dict[str, dict[str, float | None]],
+) -> tuple[int, float]:
     labels = [f"run_{index}" for index in range(1, len(run_ids) + 1)]
     run_totals = {run_id: 0.0 for run_id in run_ids}
     grand_total = 0.0

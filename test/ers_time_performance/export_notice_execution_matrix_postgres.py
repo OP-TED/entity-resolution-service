@@ -18,9 +18,8 @@ import pickle
 import shlex
 import subprocess
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
-
 
 DEFAULT_DAG_ID = "notice_processing_pipeline"
 DEFAULT_NUM_RUNS = 100
@@ -65,7 +64,7 @@ def sql_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def run_psql(psql_command: str, query: str) -> List[List[str]]:
+def run_psql(psql_command: str, query: str) -> list[list[str]]:
     command = [*shlex.split(psql_command), "-AtF", "\t", "-c", query]
     result = subprocess.run(
         command,
@@ -143,7 +142,7 @@ def parse_notice_ids(conf_text: str) -> str:
     return " ".join(str(notice_id) for notice_id in notice_ids)
 
 
-def fetch_runs(psql_command: str, dag_id: str, num_runs: int) -> Tuple[List[str], Dict[str, str], Dict[str, str]]:
+def fetch_runs(psql_command: str, dag_id: str, num_runs: int) -> tuple[list[str], dict[str, str], dict[str, str]]:
     rows = run_psql(
         psql_command=psql_command,
         query=selected_runs_sql(dag_id=dag_id, num_runs=num_runs),
@@ -161,12 +160,12 @@ def fetch_runs(psql_command: str, dag_id: str, num_runs: int) -> Tuple[List[str]
     return run_ids, timestamps_by_run, notice_ids_by_run
 
 
-def fetch_task_durations(psql_command: str, dag_id: str, run_ids: List[str]) -> Dict[str, Dict[str, Optional[float]]]:
+def fetch_task_durations(psql_command: str, dag_id: str, run_ids: list[str]) -> dict[str, dict[str, float | None]]:
     rows = run_psql(
         psql_command=psql_command,
         query=task_durations_sql(dag_id=dag_id, run_ids=run_ids),
     )
-    durations: Dict[str, Dict[str, Optional[float]]] = defaultdict(dict)
+    durations: dict[str, dict[str, float | None]] = defaultdict(dict)
     for run_id, task_id, duration in rows:
         durations[task_id][run_id] = float(duration or 0)
     return durations
@@ -175,9 +174,9 @@ def fetch_task_durations(psql_command: str, dag_id: str, run_ids: List[str]) -> 
 def write_matrix_csv(
     output_path: Path,
     dag_id: str,
-    run_ids: List[str],
-    durations: Dict[str, Dict[str, Optional[float]]],
-) -> Tuple[int, float]:
+    run_ids: list[str],
+    durations: dict[str, dict[str, float | None]],
+) -> tuple[int, float]:
     labels = [f"run_{index}" for index in range(1, len(run_ids) + 1)]
     run_totals = {run_id: 0.0 for run_id in run_ids}
     grand_total = 0.0
@@ -217,16 +216,16 @@ def write_matrix_csv(
 
 def write_mapping_csv(
     mapping_path: Path,
-    run_ids: List[str],
-    timestamps_by_run: Dict[str, str],
-    notice_ids_by_run: Dict[str, str],
+    run_ids: list[str],
+    timestamps_by_run: dict[str, str],
+    notice_ids_by_run: dict[str, str],
 ) -> None:
     labels = [f"run_{index}" for index in range(1, len(run_ids) + 1)]
     mapping_path.parent.mkdir(parents=True, exist_ok=True)
     with mapping_path.open("w", newline="", encoding="utf-8") as csv_file:
         writer = csv.writer(csv_file)
         writer.writerow(["column", "airflow_run_id", "timestamp", "notice_ids"])
-        for label, run_id in zip(labels, run_ids):
+        for label, run_id in zip(labels, run_ids, strict=False):
             writer.writerow([
                 label,
                 run_id,

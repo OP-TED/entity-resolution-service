@@ -11,11 +11,9 @@ import os
 import re
 from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import requests
-
 from export_ers_notice_execution_matrix_postgres import (
     DEFAULT_MAPPING_PATH,
     DEFAULT_OUTPUT_PATH,
@@ -25,7 +23,6 @@ from export_notice_execution_matrix_postgres import (
     DEFAULT_DAG_ID,
     write_mapping_csv,
 )
-
 
 DEFAULT_HTML_PATH = Path("test/test_data/ers_time_performance/02-12-2025-ers-enabled.html")
 DEFAULT_GRID_URL = (
@@ -88,7 +85,7 @@ def airflow_base_url(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, "", "", "")).rstrip("/")
 
 
-def dag_id_from_grid_url(url: str) -> Optional[str]:
+def dag_id_from_grid_url(url: str) -> str | None:
     parts = urlsplit(url)
     match = re.search(r"/dags/([^/]+)/grid", parts.path)
     return match.group(1) if match else None
@@ -114,8 +111,8 @@ def extract_dag_id(html: str) -> str:
     return match.group(1) if match else DEFAULT_DAG_ID
 
 
-def extract_run_ids(html: str) -> List[str]:
-    ordered_run_ids: Dict[str, None] = OrderedDict()
+def extract_run_ids(html: str) -> list[str]:
+    ordered_run_ids: dict[str, None] = OrderedDict()
     for match in RUN_CLASS_PATTERN.finditer(html):
         run_id = match.group(1)
         if run_id.startswith(("manual__", "scheduled__", "backfill__", "dataset_triggered__")):
@@ -123,7 +120,7 @@ def extract_run_ids(html: str) -> List[str]:
     return list(ordered_run_ids)
 
 
-def timestamps_by_run_id(run_ids: List[str]) -> Dict[str, str]:
+def timestamps_by_run_id(run_ids: list[str]) -> dict[str, str]:
     return {
         run_id: run_id.replace("manual__", "", 1) if run_id.startswith("manual__") else run_id
         for run_id in run_ids
@@ -157,9 +154,9 @@ def fetch_task_durations_from_airflow_api(
     session: requests.Session,
     base_url: str,
     dag_id: str,
-    run_ids: List[str],
-) -> Dict[str, Dict[str, Optional[float]]]:
-    durations: Dict[str, Dict[str, Optional[float]]] = {}
+    run_ids: list[str],
+) -> dict[str, dict[str, float | None]]:
+    durations: dict[str, dict[str, float | None]] = {}
     for run_id in run_ids:
         response = session.get(task_instances_url(base_url=base_url, dag_id=dag_id, run_id=run_id), timeout=30)
         response.raise_for_status()
@@ -177,9 +174,9 @@ def fetch_notice_ids_from_airflow_api(
     session: requests.Session,
     base_url: str,
     dag_id: str,
-    run_ids: List[str],
-) -> Dict[str, str]:
-    notice_ids_by_run: Dict[str, str] = {}
+    run_ids: list[str],
+) -> dict[str, str]:
+    notice_ids_by_run: dict[str, str] = {}
     for run_id in run_ids:
         response = session.get(dag_run_url(base_url=base_url, dag_id=dag_id, run_id=run_id), timeout=30)
         response.raise_for_status()
@@ -194,7 +191,7 @@ def fetch_notice_ids_from_airflow_api(
     return notice_ids_by_run
 
 
-def load_grid_html(args: argparse.Namespace, session: requests.Session) -> Tuple[str, str]:
+def load_grid_html(args: argparse.Namespace, session: requests.Session) -> tuple[str, str]:
     if args.prefer_grid_url or not args.html.exists():
         return fetch_grid_html(session=session, grid_url=args.grid_url), args.grid_url
     return args.html.read_text(encoding="utf-8"), str(args.html)
