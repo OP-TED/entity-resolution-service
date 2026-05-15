@@ -12,6 +12,10 @@ The system is engine-authoritative: the ERE determines canonical identity, ERS n
 
 ## Getting Started
 
+**To set up the complete ERSys stack** (ERS + ERE + Webapp), see the [Installation Guide](INSTALL.md).
+
+The instructions below cover running ERS on its own.
+
 ### Prerequisites
 
 - Python 3.12+
@@ -71,8 +75,7 @@ Without ERE running and connected to the **same Redis instance**, entity mention
 
 To skip ERE submission entirely and receive provisional identifiers immediately (no Redis required), set both `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0` and `ERS_COORDINATOR_BULK_REQUEST_TIME_BUDGET=0`. This is useful for environments where ERE is not deployed and provisional IDs are the intended steady-state output.
 
-- To add ERE: follow the Getting Started section in [entity-resolution-engine-basic](https://github.com/OP-TED/entity-resolution-engine-basic#getting-started).
-- To add the web UI: follow the Getting Started section in [entity-resolution-service-webapp](https://github.com/OP-TED/entity-resolution-service-webapp#getting-started).
+- To add ERE and the web UI: see the [Installation Guide](INSTALL.md) for the full ERSys stack setup.
 
 ---
 
