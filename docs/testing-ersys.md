@@ -25,7 +25,7 @@ Which components you need depends on which test suite you want to run:
 | `e2e/full_cycle/` | ERS **+ ERE worker** |
 | All (`make test-ersys-all`) | ERS + ERE + Webapp |
 
-See the [Installation Guide](INSTALL.md) for step-by-step instructions to set up
+See the [Installation Guide](../INSTALL.md) for step-by-step instructions to set up
 the full ERSys stack (ERS + ERE + Webapp). All three components must join the
 same Docker network (`ersys-local`).
 
