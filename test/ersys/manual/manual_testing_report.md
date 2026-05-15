@@ -1,6 +1,6 @@
 # Manual Testing Report
 
-**Last updated:** 2026-04-13
+**Last updated:** 2026-05-15
 
 ## Testing progress
 ### resolution_cycle.http
