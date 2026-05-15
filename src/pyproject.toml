@@ -1,6 +1,6 @@
 [project]
 name = "ers-core"
-version = "1.0.0"
+version = "1.1.0"
 description = "Core Python backend service for entity resolution — REST API, decision persistence, and ERE orchestration via Redis."
 authors = [
     { name = "Meaningfy", email = "hi@meaningfy.ws" }
