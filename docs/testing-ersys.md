@@ -25,13 +25,9 @@ Which components you need depends on which test suite you want to run:
 | `e2e/full_cycle/` | ERS **+ ERE worker** |
 | All (`make test-ersys-all`) | ERS + ERE + Webapp |
 
-Follow the Getting Started section in each component repo's README:
-
-1. **ERS** — `entity-resolution-service`: `make up` starts ERS API + Curation API + Redis + FerretDB
-2. **ERE** — `entity-resolution-engine-basic`: follow its README to connect it to the shared Redis
-3. **Webapp** — `entity-resolution-service-webapp`: follow its README
-
-All three components must join the same Docker network (`ersys-local`).
+See the [Installation Guide](INSTALL.md) for step-by-step instructions to set up
+the full ERSys stack (ERS + ERE + Webapp). All three components must join the
+same Docker network (`ersys-local`).
 
 
 ## Environment Configuration
