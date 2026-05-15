@@ -489,14 +489,14 @@ or an error (error present), never both.
 | 
 | X
 | <<ClusterReference,ClusterReference>>
-| 
+| Current canonical cluster assignment for the mention.
 |     
 
 | last_updated
 | 
 | X
 |  `Date`
-| 
+| Timestamp of the most recent assignment update.
 | date-time    
 
 | context
@@ -510,7 +510,7 @@ or an error (error present), never both.
 | 
 | X
 | <<ErrorResponse,ErrorResponse>>
-| 
+| Error response with a code and description.
 |     
 
 |===
@@ -619,7 +619,7 @@ It contains the entity data, along with metadata like type and format.
 | 
 | X
 |  `String`
-| 
+| Optional descriptive text for the model instance.
 |     
 
 | identifiedBy
@@ -647,14 +647,14 @@ It contains the entity data, along with metadata like type and format.
 | 
 | X
 |  `String`
-| 
+| JSON representation of the parsed entity data. 
 |     
 
 | context
 | 
 | X
 |  `String`
-| 
+| Optional context reference (e.g. notice or document ID). 
 |     
 
 |===
@@ -682,7 +682,7 @@ in this hereby ERE service schema) can be built from an entity that is initially
 | 
 | X
 |  `String`
-| 
+| Optional descriptive text for the model instance.
 |     
 
 | source_id
@@ -806,21 +806,21 @@ dedicated internal model at that point.
 | 
 | X
 |  `String`
-| 
+| Cluster identifier assigned to the mention.
 |     
 
 | status
 | 
 | X
 | <<ResolutionOutcome,ResolutionOutcome>>
-| 
+| Whether the resolution is canonical or provisional.
 |    CANONICAL, PROVISIONAL,  
 
 | error
 | 
 | X
 | <<ErrorResponse,ErrorResponse>>
-| 
+| Error response with a code a description.
 |     
 
 |===
@@ -917,7 +917,7 @@ before the middleware ran or by handlers that do not need correlation.
 | 
 | X
 |  `String`
-| 
+| ERS business request UUID for log/trace correlation. Populated by handlers that run after the request-id middleware.
 |     
 
 |===
@@ -1087,7 +1087,7 @@ Request body for POST /refreshBulk.
 | 
 | X
 |  `String`
-| 
+| Opaque cursor returned by a previous response for pagination.
 |     
 
 |===
@@ -1123,7 +1123,7 @@ Response body for POST /refreshBulk.
 | 
 | X
 |  `String`
-| 
+| Cursor to pass in the next request to retrieve the next page.
 |     
 
 |===
