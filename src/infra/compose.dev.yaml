@@ -111,6 +111,7 @@ services:
   
   jaeger:
     image: cr.jaegertracing.io/jaegertracing/jaeger:2.18.0
+    restart: unless-stopped
     container_name: jaeger
     profiles: ["dev-tools"]
     ports:
