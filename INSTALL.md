@@ -120,9 +120,10 @@ curl http://localhost:8001/health    # ERS REST API
 
 ## Running ERS in multi-node mode
 
-ERS supports running multiple replicas of `curation-api` and `ers-api` behind a
-load balancer. This is useful when you need horizontal scaling or high
-availability.
+This section is independent of the step-by-step guide above. It describes how
+to run multiple replicas of `curation-api` and `ers-api` behind a load balancer
+for horizontal scaling or high availability. You can apply this pattern whether
+you are running ERS standalone or as part of the full ERSys stack.
 
 ### How cross-replica coordination works
 
@@ -145,7 +146,9 @@ the load balancer may route requests before the channel is up (not recommended).
 
 ### Environment variables for multi-replica deployments
 
-Set these on every `curation-api` and `ers-api` replica:
+All three variables have safe defaults and do not need to be set explicitly
+unless you want to override them. Set them on every `curation-api` and `ers-api`
+replica, and ensure the values are identical across all replicas.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -168,12 +171,16 @@ causes conflicts and duplicate data.
 
 The correct pattern is a dedicated one-shot seed container that runs once before
 the API replicas start, completes successfully, and exits. The API replicas then
-start only after the seed container has finished. In Docker Compose this looks
-like:
+start only after the seed container has finished. In a `compose.override.yaml`
+this looks like:
 
 ```yaml
 seed:
-  image: your-ers-image
+  build:
+    context: .
+    dockerfile: src/infra/Dockerfile
+    args:
+      ENVIRONMENT: development
   entrypoint: ["python", "/app/scripts/seed_db.py"]
   restart: no
   depends_on:
@@ -181,7 +188,6 @@ seed:
       condition: service_healthy
 
 curation-api:
-  # ...
   environment:
     SEED_DB: "false"
   depends_on:
@@ -195,34 +201,56 @@ ERS does not include a load balancer — you bring your own. Both `curation-api`
 (port 8000) and `ers-api` (port 8001) are stateless HTTP services and work with
 any HTTP load balancer.
 
-In a multi-replica compose setup, remove the host port mappings from the API
-services and let the load balancer own those ports instead.
+Place your load balancer configuration in a `compose.override.yaml` file
+alongside `src/infra/compose.dev.yaml`. Docker Compose merges override files
+automatically when you run `docker compose up`, so you do not need to pass `-f`
+flags. In the override file, remove the host port mappings from the API services
+and let the load balancer own those ports instead.
 
 #### Traefik
 
-Add these labels to each API service. Traefik discovers the replicas
-automatically via the Docker provider:
+Traefik must be attached to the same Docker network as the API containers
+(`ersys-local`). Add these to your `compose.override.yaml`:
 
 ```yaml
-# curation-api replicas
-curation-api:
-  deploy:
-    replicas: 2
-  labels:
-    - "traefik.enable=true"
-    - "traefik.http.routers.curation.entrypoints=curation"
-    - "traefik.http.routers.curation.rule=PathPrefix(`/`)"
-    - "traefik.http.services.curation.loadbalancer.server.port=8000"
+services:
+  traefik:
+    image: traefik:v3.7
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=ersys-local"
+      - "--entrypoints.curation.address=:8000"
+      - "--entrypoints.ers.address=:8001"
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ersys-local
 
-# ers-api replicas
-ers-api:
-  deploy:
-    replicas: 2
-  labels:
-    - "traefik.enable=true"
-    - "traefik.http.routers.ers.entrypoints=ers"
-    - "traefik.http.routers.ers.rule=PathPrefix(`/`)"
-    - "traefik.http.services.ers.loadbalancer.server.port=8001"
+  curation-api:
+    container_name: !reset null
+    ports: !reset []
+    deploy:
+      replicas: 2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.curation.entrypoints=curation"
+      - "traefik.http.routers.curation.rule=PathPrefix(`/`)"
+      - "traefik.http.services.curation.loadbalancer.server.port=8000"
+
+  ers-api:
+    container_name: !reset null
+    ports: !reset []
+    deploy:
+      replicas: 2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ers.entrypoints=ers"
+      - "traefik.http.routers.ers.rule=PathPrefix(`/`)"
+      - "traefik.http.services.ers.loadbalancer.server.port=8001"
 ```
 
 See the [Traefik Docker provider docs](https://doc.traefik.io/traefik/providers/docker/)
@@ -230,7 +258,12 @@ for the full Traefik setup.
 
 #### nginx
 
-Define an upstream block for each API and proxy to it:
+nginx must be able to resolve the container names of your replicas. Since Docker
+Compose does not assign predictable names to scaled containers, use the service
+DNS name (e.g. `curation-api`) and let Docker's internal DNS round-robin across
+replicas, or assign explicit container names per replica.
+
+Define an upstream block for each API in your nginx configuration:
 
 ```nginx
 upstream curation_api {
@@ -262,6 +295,36 @@ Replace `curation-api-1`, `curation-api-2`, etc. with the actual container
 names or DNS names of your replicas. See the
 [nginx upstream docs](https://nginx.org/en/docs/http/ngx_http_upstream_module.html)
 for the full configuration reference.
+
+### Verify
+
+Once the stack is running with multiple replicas, confirm everything is working:
+
+```bash
+# Health endpoints — both should return {"status": "ok"}
+curl http://localhost:8000/health    # Curation API (via load balancer)
+curl http://localhost:8001/health    # ERS REST API (via load balancer)
+
+# Confirm multiple replicas are running
+docker ps --filter name=curation-api --format "{{.Names}}\t{{.Status}}"
+docker ps --filter name=ers-api --format "{{.Names}}\t{{.Status}}"
+```
+
+You should see two (or more) containers listed for each API service, all with
+status `healthy` or `Up`.
+
+To confirm the load balancer is distributing traffic, check its logs:
+
+```bash
+# Traefik
+docker logs ersys-traefik
+
+# nginx (adjust container name as needed)
+docker logs ersys-nginx
+```
+
+Look for requests being routed to different upstream containers across successive
+calls.
 
 ---
 
