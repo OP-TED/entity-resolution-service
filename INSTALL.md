@@ -118,6 +118,221 @@ curl http://localhost:8001/health    # ERS REST API
 
 ---
 
+## Running ERS in multi-node mode
+
+This section is independent of the step-by-step guide above. It describes how
+to run multiple replicas of `curation-api` and `ers-api` behind a load balancer
+for horizontal scaling or high availability. You can apply this pattern whether
+you are running ERS standalone or as part of the full ERSys stack.
+
+### How cross-replica coordination works
+
+Each ERS API instance subscribes to a Redis pub/sub channel at startup. When one
+replica completes a resolution request, it publishes the result on that channel
+so that all other replicas — including the one that is holding the HTTP
+connection open for the client — can pick it up. Without this mechanism, a
+request routed to replica A could be answered by replica B's ERE response, and
+replica A would never see it.
+
+This means two things must be true before a replica starts accepting traffic:
+
+1. Redis must be reachable.
+2. The pub/sub subscription must be established.
+
+The `ERS_SUBSCRIBER_READY_TIMEOUT` variable enforces point 2 — the replica
+waits up to that many seconds for the subscription handshake to complete before
+the process is considered ready. If you set it to `0`, the gate is disabled and
+the load balancer may route requests before the channel is up (not recommended).
+
+### Environment variables for multi-replica deployments
+
+All three variables have safe defaults and do not need to be set explicitly
+unless you want to override them. Set them on every `curation-api` and `ers-api`
+replica, and ensure the values are identical across all replicas.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ERS_NOTIFICATIONS_CHANNEL` | `ers_notifications` | Redis pub/sub channel for cross-replica notifications. Coordinates delivery of an ERE response to the replica that originated the request. |
+| `ERS_SUBSCRIBER_READY_TIMEOUT` | `5.0` | Seconds to wait for the pub/sub subscription to be established at startup. Set to `0` to disable (not recommended in multi-replica deployments). |
+| `REDIS_SOCKET_CONNECT_TIMEOUT` | `5.0` | Seconds to wait for the TCP handshake when connecting to Redis. Applies to all Redis connections. Prevents indefinite blocking if Redis is unreachable. |
+
+### Worker count
+
+In a multi-replica deployment, set `UVICORN_WORKERS=1` on each container and
+let the load balancer distribute traffic across replicas. Running multiple
+Uvicorn workers per container alongside a load balancer complicates instance
+identity and offers no benefit over adding more replicas.
+
+### Database seeding
+
+**Set `SEED_DB=false` on every replica.** If multiple replicas start with
+`SEED_DB=true`, each one will attempt to seed the database concurrently, which
+causes conflicts and duplicate data.
+
+The correct pattern is a dedicated one-shot seed container that runs once before
+the API replicas start, completes successfully, and exits. The API replicas then
+start only after the seed container has finished. In a `compose.override.yaml`
+this looks like:
+
+```yaml
+seed:
+  build:
+    context: .
+    dockerfile: src/infra/Dockerfile
+    args:
+      ENVIRONMENT: development
+  entrypoint: ["python", "/app/scripts/seed_db.py"]
+  restart: no
+  depends_on:
+    ferretdb:
+      condition: service_healthy
+
+curation-api:
+  environment:
+    SEED_DB: "false"
+  depends_on:
+    seed:
+      condition: service_completed_successfully
+```
+
+### Load balancer configuration
+
+ERS does not include a load balancer — you bring your own. Both `curation-api`
+(port 8000) and `ers-api` (port 8001) are stateless HTTP services and work with
+any HTTP load balancer. The following are examples of one possible way to
+configure a load balancer — adapt them to your own setup.
+
+Place your load balancer configuration in a `compose.override.yaml` file
+alongside `src/infra/compose.dev.yaml`. Docker Compose merges override files
+automatically when you run `docker compose up`, so you do not need to pass `-f`
+flags. In the override file, remove the host port mappings from the API services
+and let the load balancer own those ports instead.
+
+#### Traefik
+
+Traefik must be attached to the same Docker network as the API containers
+(`ersys-local`). Add these to your `compose.override.yaml`:
+
+```yaml
+services:
+  traefik:
+    image: traefik:v3.7
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=ersys-local"
+      - "--entrypoints.curation.address=:8000"
+      - "--entrypoints.ers.address=:8001"
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ersys-local
+
+  curation-api:
+    container_name: !reset null
+    ports: !reset []
+    deploy:
+      replicas: 2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.curation.entrypoints=curation"
+      - "traefik.http.routers.curation.rule=PathPrefix(`/`)"
+      - "traefik.http.services.curation.loadbalancer.server.port=8000"
+
+  ers-api:
+    container_name: !reset null
+    ports: !reset []
+    deploy:
+      replicas: 2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ers.entrypoints=ers"
+      - "traefik.http.routers.ers.rule=PathPrefix(`/`)"
+      - "traefik.http.services.ers.loadbalancer.server.port=8001"
+```
+
+See the [Traefik Docker provider docs](https://doc.traefik.io/traefik/providers/docker/)
+for the full Traefik setup.
+
+#### nginx
+
+nginx is not included in the ERSys stack; the snippet below assumes you are
+running nginx as a separate container or service on the same Docker network as
+the API containers.
+
+nginx must be able to resolve the container names of your replicas. Since Docker
+Compose does not assign predictable names to scaled containers, use the service
+DNS name (e.g. `curation-api`) and let Docker's internal DNS round-robin across
+replicas, or assign explicit container names per replica.
+
+Define an upstream block for each API in your nginx configuration:
+
+```nginx
+upstream curation_api {
+    server curation-api-1:8000;
+    server curation-api-2:8000;
+}
+
+upstream ers_api {
+    server ers-api-1:8001;
+    server ers-api-2:8001;
+}
+
+server {
+    listen 8000;
+    location / {
+        proxy_pass http://curation_api;
+    }
+}
+
+server {
+    listen 8001;
+    location / {
+        proxy_pass http://ers_api;
+    }
+}
+```
+
+Replace `curation-api-1`, `curation-api-2`, etc. with the actual container
+names or DNS names of your replicas. See the
+[nginx upstream docs](https://nginx.org/en/docs/http/ngx_http_upstream_module.html)
+for the full configuration reference.
+
+### Verify
+
+Once the stack is running with multiple replicas, confirm everything is working:
+
+```bash
+# Health endpoints — both should return {"status": "ok"}
+curl http://localhost:8000/health    # Curation API (via load balancer)
+curl http://localhost:8001/health    # ERS REST API (via load balancer)
+
+# Confirm multiple replicas are running
+docker ps --filter name=curation-api --format "{{.Names}}\t{{.Status}}"
+docker ps --filter name=ers-api --format "{{.Names}}\t{{.Status}}"
+```
+
+You should see two (or more) containers listed for each API service, all with
+status `healthy` or `Up`.
+
+To confirm the load balancer is distributing traffic, check its logs:
+
+```bash
+# Traefik
+docker logs ersys-traefik
+
+# nginx (adjust container name as needed)
+docker logs ersys-nginx
+```
+
+Look for requests being routed to different upstream containers across successive
+calls.
+
+---
+
 ## Step 3: Start ERE
 
 ERE is the background processing engine. It connects to the Redis instance

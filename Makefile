@@ -75,7 +75,9 @@ help: ## Display available targets
 	@ echo ""
 	@ echo -e "  $(BUILD_PRINT)Docker:$(END_BUILD_PRINT)"
 	@ echo "    up                   - Start services (docker compose up -d)"
+	@ echo "    up-with-dev-tools    - Start services + dev-tools profile (Jaeger UI on :16686)"
 	@ echo "    down                 - Stop services (docker compose down)"
+	@ echo "    down-with-dev-tools  - Stop services including dev-tools profile"
 	@ echo "    down-volumes         - Stop services and remove volumes"
 	@ echo "    rebuild              - Rebuild and start services"
 	@ echo "    rebuild-clean        - Rebuild from scratch (no cache)"
@@ -323,7 +325,7 @@ clean-code: ## Xenon threshold checks
 #-----------------------------------------------------------------------------
 # Docker
 #-----------------------------------------------------------------------------
-.PHONY: check-env up down down-volumes rebuild rebuild-clean logs watch
+.PHONY: check-env up up-with-dev-tools down down-with-dev-tools down-volumes rebuild rebuild-clean logs watch
 
 check-env:
 	@ test -f $(ENV_FILE) || (echo -e "$(BUILD_PRINT)$(ICON_ERROR) Missing $(ENV_FILE). Run: cp src/infra/.env.example src/infra/.env$(END_BUILD_PRINT)" && exit 1)
@@ -334,9 +336,20 @@ up: check-env ## Start services (docker compose up -d)
 	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) up -d
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services started$(END_BUILD_PRINT)"
 
+up-with-dev-tools: check-env ## Start services including dev-tools (docker dev-tools profile)
+	@ docker network create ersys-local || true
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Starting services (incl. dev-tools)$(END_BUILD_PRINT)"
+	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) --profile dev-tools up -d
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services started$(END_BUILD_PRINT)"
+
 down: check-env ## Stop services (docker compose down)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Stopping services$(END_BUILD_PRINT)"
 	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) down
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services stopped$(END_BUILD_PRINT)"
+
+down-with-dev-tools: check-env ## Stop services including dev-tools (docker dev-tools profile)
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Stopping services (incl. dev-tools)$(END_BUILD_PRINT)"
+	@ docker compose -f $(COMPOSE_FILE) --env-file $(ENV_FILE) --profile dev-tools down
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Services stopped$(END_BUILD_PRINT)"
 
 down-volumes: check-env ## Stop services and remove volumes
