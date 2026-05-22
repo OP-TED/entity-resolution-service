@@ -747,7 +747,7 @@ idna = ">=2.0.0"
 
 [[package]]
 name = "ers-spec"
-version = "1.0.0"
+version = "1.1.0"
 description = "  The core components for the Entity Resolution System (ERS) components.\n\n  The ERS is a pluggable entity resolution system for data transformation pipelines.\n"
 optional = false
 python-versions = ">=3.12,<4.0"
@@ -761,8 +761,8 @@ pydantic = ">=2.10.6,<3.0.0"
 [package.source]
 type = "git"
 url = "https://github.com/OP-TED/entity-resolution-spec.git"
-reference = "release/1.0.0"
-resolved_reference = "457ae516cb1894a3f0ea3786ae05b355785c2f12"
+reference = "release/1.1.0"
+resolved_reference = "0565b2ddf3d5a11851128a80abed08f4de950080"
 subdirectory = "src"
 
 [[package]]
@@ -4186,4 +4186,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.15"
-content-hash = "690ec30e82dfce1176845d8915405814eee2c4f4f51f0adec264e04ae4dc2c8f"
+content-hash = "74ff68ee393fb737ea3f3c38f10bbca54d49b6b7a42efa090cca6fbead9ef34c"
