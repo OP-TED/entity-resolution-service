@@ -152,7 +152,7 @@ replica, and ensure the values are identical across all replicas.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `ERS_NOTIFICATIONS_CHANNEL` | `ers_notifications` | Redis pub/sub channel used for cross-replica result delivery. Must be identical across all replicas. |
+| `ERS_NOTIFICATIONS_CHANNEL` | `ers_notifications` | Redis pub/sub channel for cross-replica notifications. Coordinates delivery of an ERE response to the replica that originated the request. |
 | `ERS_SUBSCRIBER_READY_TIMEOUT` | `5.0` | Seconds to wait for the pub/sub subscription to be established at startup. Set to `0` to disable (not recommended in multi-replica deployments). |
 | `REDIS_SOCKET_CONNECT_TIMEOUT` | `5.0` | Seconds to wait for the TCP handshake when connecting to Redis. Applies to all Redis connections. Prevents indefinite blocking if Redis is unreachable. |
 
@@ -199,7 +199,8 @@ curation-api:
 
 ERS does not include a load balancer — you bring your own. Both `curation-api`
 (port 8000) and `ers-api` (port 8001) are stateless HTTP services and work with
-any HTTP load balancer.
+any HTTP load balancer. The following are examples of one possible way to
+configure a load balancer — adapt them to your own setup.
 
 Place your load balancer configuration in a `compose.override.yaml` file
 alongside `src/infra/compose.dev.yaml`. Docker Compose merges override files
@@ -257,6 +258,10 @@ See the [Traefik Docker provider docs](https://doc.traefik.io/traefik/providers/
 for the full Traefik setup.
 
 #### nginx
+
+nginx is not included in the ERSys stack; the snippet below assumes you are
+running nginx as a separate container or service on the same Docker network as
+the API containers.
 
 nginx must be able to resolve the container names of your replicas. Since Docker
 Compose does not assign predictable names to scaled containers, use the service
