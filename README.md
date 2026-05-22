@@ -127,6 +127,15 @@ make test-ersys-all     # smoke + e2e
 
 See [docs/testing-ersys.md](docs/testing-ersys.md) for setup instructions, required env files, and which components each suite needs.
 
+### Observability (optional)
+
+```bash
+make up-with-dev-tools    # start stack + Jaeger tracing UI (http://localhost:16686)
+make down-with-dev-tools  # stop stack + Jaeger
+```
+
+See [docs/telemetry.md](docs/telemetry.md) for configuration and usage.
+
 Pre-commit hooks (format + lint on every commit):
 
 ```bash
