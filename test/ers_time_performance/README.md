@@ -48,7 +48,7 @@ Use this variant when:
 ```bash
 python test/test_data/ers_time_performance/export_ers_notice_execution_matrix_from_html.py \
   --html test/test_data/ers_time_performance/02-12-2025-ers-enabled.html \
-  --grid-url "https://airflow.tedsws-testing.meaningfy.ws/dags/notice_processing_pipeline/grid?num_runs=365" \
+  --grid-url "https://<your-airflow-host>/dags/notice_processing_pipeline/grid?num_runs=365" \
   --username admin \
   --password "YOUR_AIRFLOW_PASSWORD" \
   --output test/test_data/ers_time_performance/new_code.csv \
@@ -111,7 +111,7 @@ This variant mirrors the ERS HTML/API exporter but uses old pipeline task steps.
 ```bash
 python test/test_data/ers_time_performance/export_notice_execution_matrix.py \
   --html test/test_data/ers_time_performance/2023-8-10-old-code.html \
-  --grid-url "https://airflow.tedsws-testing.meaningfy.ws/dags/notice_processing_pipeline/grid?num_runs=365" \
+  --grid-url "https://<your-airflow-host>/dags/notice_processing_pipeline/grid?num_runs=365" \
   --username admin \
   --password "YOUR_AIRFLOW_PASSWORD" \
   --output test/test_data/ers_time_performance/old_code.csv \
@@ -179,7 +179,7 @@ Scenarios covered by default:
 
 ```bash
 python test/test_data/ers_time_performance/benchmark_ers_resolution.py \
-  --ers-url "https://ers-api.ersys.meaningfy.ws" \
+  --ers-url "https://<your-ers-host>" \
   --input-dir test/test_data/organisations \
   --limit 5000 \
   --batch-sizes "10,30,100,300" \
