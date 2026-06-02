@@ -593,20 +593,15 @@ class MongoDecisionRepository(
         key_to_id: dict[tuple[Any, Any, Any], str] = {}
         for decision in decisions:
             since = decision.updated_at or decision.created_at
-            # mode="python" mirrors how user_actions persist the triad (see
-            # UserActionCurationRepository); the key uses the JSON-safe form so
-            # an enum entity_type compares equal to its stored string value.
+            # Dump the triad once and use it for both the query clause and the
+            # result key. Because the query matches the whole subdocument by
+            # equality, any returned user_action's triad equals this exact dump,
+            # so the keys map back deterministically (no serialization drift).
+            triad = decision.about_entity_mention.model_dump(mode="python")
             or_clauses.append(
-                {
-                    _FIELD_ABOUT_ENTITY_MENTION: decision.about_entity_mention.model_dump(
-                        mode="python"
-                    ),
-                    _FIELD_CREATED_AT: {"$gt": since},
-                }
+                {_FIELD_ABOUT_ENTITY_MENTION: triad, _FIELD_CREATED_AT: {"$gt": since}}
             )
-            key_to_id[self._triad_key(decision.about_entity_mention.model_dump(mode="json"))] = (
-                decision.id
-            )
+            key_to_id[self._triad_key(triad)] = decision.id
 
         user_actions = self._collection.database[_COLLECTION_USER_ACTIONS]
         cursor = user_actions.find(
@@ -681,9 +676,10 @@ class MongoDecisionRepository(
                 query[_FIELD_ABOUT_ENTITY_MENTION] = {"$in": id_docs}
 
             if ever_reviewed is not None:
-                # "$not $gt 0" matches a missing/None counter as never-reviewed.
+                # ``$in: [0, None]`` treats a missing/null counter as never-reviewed
+                # and avoids ``$not`` for DocumentDB / FerretDB portability.
                 query[_FIELD_PREVIOUS_REVIEW_COUNT] = (
-                    {"$gt": 0} if ever_reviewed else {"$not": {"$gt": 0}}
+                    {"$gt": 0} if ever_reviewed else {"$in": [0, None]}
                 )
 
             count = await self._collection.count_documents(query)
@@ -850,8 +846,8 @@ class MongoDecisionRepository(
                         "$match": {
                             "$expr": {
                                 "$and": [
-                                    {"$eq": ["$about_entity_mention", "$$triad"]},
-                                    {"$gt": ["$created_at", "$$since"]},
+                                    {"$eq": [f"${_FIELD_ABOUT_ENTITY_MENTION}", "$$triad"]},
+                                    {"$gt": [f"${_FIELD_CREATED_AT}", "$$since"]},
                                 ]
                             }
                         }

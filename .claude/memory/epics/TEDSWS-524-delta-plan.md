@@ -180,6 +180,33 @@ folds into either. Coordinate the D1 API-contract change with the curation webap
 - **Backfill** — `previous_review_count` is already maintained; confirm whether a
   one-off backfill ran for pre-existing `user_actions`, or schedule it.
 
+## Follow-ups from code review (not blocking the hotfix)
+
+Three parallel reviews (correctness / architecture / tests) found no critical bug and
+confirmed the objectives are met. The cheap items were applied (engine-safe
+`ever_reviewed=False` via `$in:[0,None]`; single-dump triad mapping; field constants in
+the lookup; `ever_reviewed=False` + combined-filter + never-reviewed-row tests). The
+following are named for a follow-up ticket:
+
+- **Cross-module data coupling (design smell).** `previous_review_count` lives on the
+  `decisions` document (owned by `resolution_decision_store`) but is written by
+  `curation`'s `user_action_service`; `find_reviewed_since_placement` reads the
+  `user_actions` collection (owned by `curation`) from inside the decision-store adapter.
+  Contract-legal (import-linter passes) but encodes one module's schema in the other.
+  Consider a read-port abstraction or moving the review-state read to the curation side.
+- **Real-DB (FerretDB/DocumentDB) integration coverage.** The new `$in:[0,None]` counter
+  match and the `$or`-of-subdocuments in `find_reviewed_since_placement` are only
+  exercised against mocks. Add integration tests against the FerretDB testcontainer.
+- **`CursorPage.count` ignores the `reviewed_since_placement` filter** (pre-existing for
+  the old `reviewed` flag): `count_documents(query)` runs before the user_actions lookup,
+  so totals over-report when that filter is set.
+- **Concurrent page reads.** `list_decisions` issues `find_by_identifiers`,
+  `find_review_counts`, and `find_reviewed_since_placement` sequentially with no data
+  dependency — candidates for `asyncio.gather`; the latter two could merge into one port.
+- **`$gt` vs `$gte` boundary** for "action since placement" differs between
+  `find_reviewed_since_placement`/lookup (`$gt`) and `user_action_repository.has_current_action`
+  (`$gte`). Harmless today (an action cannot equal the placement instant); align to prevent a future foot-gun.
+
 ## Test commands
 
 ```bash

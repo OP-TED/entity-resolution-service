@@ -126,6 +126,31 @@ class TestListDecisions:
         assert summary.previous_review_count == 2
         assert summary.reviewed_since_placement is True
 
+    async def test_list_decisions_never_reviewed_row_is_distinct_from_needs_revisit(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+    ) -> None:
+        decision = DecisionFactory.build()
+        decision_repository.find_with_filters.return_value = CursorPage(
+            results=[decision], next_cursor=None
+        )
+        # Never reviewed: count 0 AND no action since placement — the fourth state,
+        # distinct from "needs revisit" (count > 0, same flag value).
+        decision_repository.find_review_counts.return_value = {decision.id: 0}
+        decision_repository.find_reviewed_since_placement.return_value = {decision.id: False}
+        entity_mention_repository.find_by_identifiers.return_value = []
+
+        summary = (
+            await service.list_decisions(
+                filters=DecisionFilters(), cursor_params=CursorParams()
+            )
+        ).results[0]
+
+        assert summary.previous_review_count == 0
+        assert summary.reviewed_since_placement is False
+
     async def test_list_decisions_forwards_review_filters(
         self,
         service: DecisionCurationService,

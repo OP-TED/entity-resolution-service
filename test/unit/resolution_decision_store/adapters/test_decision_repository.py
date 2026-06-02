@@ -731,6 +731,60 @@ async def test_ever_reviewed_filter_adds_previous_review_count_match(repo, mock_
 
 
 @pytest.mark.asyncio
+async def test_ever_reviewed_false_matches_never_reviewed(repo, mock_collection):
+    """ever_reviewed=False matches a missing/None/0 counter via $in (no $not, engine-safe)."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters
+
+    captured: dict = {}
+
+    def _find(query, *args, **kwargs):
+        captured["query"] = query
+        return _make_async_cursor([])
+
+    mock_collection.find = MagicMock(side_effect=_find)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+    mock_collection.aggregate = AsyncMock()
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(),
+        cursor_params=CursorParams(cursor=None, limit=10),
+        ever_reviewed=False,
+    )
+
+    mock_collection.aggregate.assert_not_called()
+    assert captured["query"].get("previous_review_count") == {"$in": [0, None]}
+
+
+@pytest.mark.asyncio
+async def test_review_filters_combine_counter_match_into_aggregation(repo, mock_collection):
+    """ever_reviewed + reviewed_since_placement together: the counter $match survives
+    into the aggregation that applies the user_actions review filter."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(),
+        cursor_params=CursorParams(cursor=None, limit=10),
+        ever_reviewed=True,
+        reviewed_since_placement=False,
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    first_match = next(s["$match"] for s in pipeline if "$match" in s)
+    assert first_match.get("previous_review_count") == {"$gt": 0}, (
+        "the ever_reviewed counter predicate must carry into the aggregation $match"
+    )
+
+
+@pytest.mark.asyncio
 async def test_find_reviewed_since_placement_maps_matches(repo, mock_collection):
     """Returns True only for decisions whose triad has a user_action since placement."""
     now = datetime.now(UTC)
