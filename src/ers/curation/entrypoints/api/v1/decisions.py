@@ -1,6 +1,6 @@
 from typing import Annotated, cast
 
-from fastapi import APIRouter, Depends, Path, Response, status
+from fastapi import APIRouter, Depends, Path, Query, Response, status
 
 from ers.commons.domain.data_transfer_objects import CursorPage, PaginatedResult
 from ers.curation.domain.data_transfer_objects import (
@@ -46,9 +46,32 @@ async def list_decisions(
     cursor_params: CursorPagination,
     user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
+    reviewed: Annotated[
+        bool | None,
+        Query(
+            description=(
+                "Filter by review state. true = decisions with a user_action recorded "
+                "after the current placement (Reviewed). false = decisions with no such "
+                "action (Pending). Omit to return all decisions regardless of review state."
+            )
+        ),
+    ] = None,
 ) -> CursorPage[DecisionSummary]:
-    """Retrieve cursor-paginated list of decisions with optional filtering."""
-    return await service.list_decisions(filters=filters, cursor_params=cursor_params)
+    """Retrieve cursor-paginated list of decisions with optional filtering.
+
+    Args:
+        filters: Field-level filter criteria (entity type, confidence, etc.).
+        cursor_params: Cursor-based pagination parameters.
+        user: Authenticated and verified curator.
+        service: Decision curation service (injected).
+        reviewed: Optional review-state filter.  ``true`` returns only Reviewed
+            decisions; ``false`` returns only Pending ones; omitted returns all.
+    """
+    return await service.list_decisions(
+        filters=filters,
+        cursor_params=cursor_params,
+        reviewed=reviewed,
+    )
 
 
 @router.get(

@@ -91,7 +91,10 @@ class TestServiceProviders:
         mock_repo = MagicMock()
         mock_entity_repo = MagicMock()
         mock_user_repo = MagicMock()
-        result = await get_user_action_service(mock_repo, mock_entity_repo, mock_user_repo)
+        mock_decision_repo = MagicMock()
+        result = await get_user_action_service(
+            mock_repo, mock_entity_repo, mock_user_repo, mock_decision_repo
+        )
         assert isinstance(result, UserActionService)
 
     async def test_get_decision_curation_service(self):
@@ -107,7 +110,8 @@ class TestServiceProviders:
     async def test_get_canonical_entity_service(self):
         mock_decision_repo = MagicMock()
         mock_entity_repo = MagicMock()
-        result = await get_canonical_entity_service(mock_decision_repo, mock_entity_repo)
+        mock_db = MagicMock()
+        result = await get_canonical_entity_service(mock_decision_repo, mock_entity_repo, mock_db)
         assert isinstance(result, CanonicalEntityService)
 
     async def test_get_entity_service(self):

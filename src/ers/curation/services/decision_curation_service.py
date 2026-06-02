@@ -96,8 +96,17 @@ class DecisionCurationService:
         self,
         filters: DecisionFilters,
         cursor_params: CursorParams,
+        *,
+        reviewed: bool | None = None,
     ) -> CursorPage[DecisionSummary]:
         """List decisions with filtering, cursor pagination, and embedded entity data.
+
+        Args:
+            filters: Field-level filter criteria (entity type, confidence, etc.).
+            cursor_params: Cursor-based pagination parameters.
+            reviewed: When True, return only decisions where a user_action exists
+                after the current placement timestamp.  When False, return only
+                decisions with no such action (Pending).  None disables the filter.
 
         Raises:
             ServiceUnavailableError: If MongoDB is unreachable for any of the
@@ -117,6 +126,7 @@ class DecisionCurationService:
             filters=filters,
             cursor_params=cursor_params,
             mention_identifiers=mention_identifiers,
+            reviewed=reviewed,
         )
 
         identifiers = [d.about_entity_mention for d in page.results]
@@ -126,8 +136,12 @@ class DecisionCurationService:
 
         mention_map = self._index_by_identifier(entity_mentions)
 
+        decision_ids = [d.id for d in page.results]
+        review_counts = await self._decision_repository.find_review_counts(decision_ids)
+
         decision_summaries = [
-            self._to_decision_summary(decision, mention_map) for decision in page.results
+            self._to_decision_summary(decision, mention_map, review_counts)
+            for decision in page.results
         ]
 
         return CursorPage(
@@ -264,10 +278,23 @@ class DecisionCurationService:
     def _to_decision_summary(
         decision: Decision,
         mention_map: dict[tuple[str, str, str], EntityMention],
+        review_counts: dict[str, int] | None = None,
     ) -> DecisionSummary:
+        """Build a DecisionSummary from a Decision and its related data.
+
+        Args:
+            decision: The decision to summarise.
+            mention_map: Index of EntityMention objects keyed by (source_id, request_id, entity_type).
+            review_counts: Optional mapping of decision_id → previous_review_count.
+                Defaults to 0 for missing keys.
+
+        Returns:
+            A DecisionSummary with all fields populated.
+        """
         emi = decision.about_entity_mention
         key = (emi.source_id, emi.request_id, emi.entity_type)
         mention = mention_map.get(key)
+        count = (review_counts or {}).get(decision.id, 0)
 
         return DecisionSummary(
             id=decision.id,
@@ -278,6 +305,7 @@ class DecisionCurationService:
             current_placement=decision.current_placement,
             created_at=decision.created_at,
             updated_at=decision.updated_at,
+            previous_review_count=count,
         )
 
 

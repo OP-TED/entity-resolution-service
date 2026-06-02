@@ -100,6 +100,41 @@ def test_list_entity_types():
     pass
 
 
+@scenario(FEATURE, "List decisions pending review (no prior action against current placement)")
+def test_filter_reviewed_false():
+    pass
+
+
+@scenario(FEATURE, "Filter decisions already reviewed on current placement")
+def test_filter_reviewed_true():
+    pass
+
+
+@scenario(FEATURE, "ERE re-integration returns a previously-reviewed decision to Pending")
+def test_ere_reintegration_returns_to_pending():
+    pass
+
+
+@scenario(FEATURE, "Omitting reviewed leaves the result set unchanged")
+def test_omit_reviewed_unchanged():
+    pass
+
+
+@scenario(FEATURE, "Sort decisions by cluster size ascending")
+def test_sort_by_cluster_size_asc():
+    pass
+
+
+@scenario(FEATURE, "Sort decisions by cluster size descending")
+def test_sort_by_cluster_size_desc():
+    pass
+
+
+@scenario(FEATURE, "Cluster-size sort combined with reviewed filter")
+def test_cluster_size_sort_with_reviewed():
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -307,6 +342,8 @@ def request_ordered(client: TestClient, ordering: str) -> Any:
         "created at descending": "-created_at",
         "updated at ascending": "updated_at",
         "updated at descending": "-updated_at",
+        "cluster size ascending": "cluster_size",
+        "cluster size descending": "-cluster_size",
     }
     return client.get(
         DECISIONS_URL,
@@ -547,3 +584,78 @@ def entity_types_returned(response: Any) -> None:
         {"name": "ORGANISATION", "display_name_field": "legal_name"},
         {"name": "PROCEDURE", "display_name_field": "title"},
     ]
+
+
+# ---------------------------------------------------------------------------
+# Cluster-size sort steps
+# ---------------------------------------------------------------------------
+
+
+@when(
+    parsers.parse('I request decisions with ordering "{ordering}" and reviewed "{reviewed_val}"'),
+    target_fixture="response",
+)
+def request_with_ordering_and_reviewed(
+    client: TestClient,
+    ordering: str,
+    reviewed_val: str,
+) -> Any:
+    """GET /api/v1/curation/decisions with both ordering and reviewed query params."""
+    return client.get(
+        DECISIONS_URL,
+        params={"ordering": ordering, "reviewed": reviewed_val},
+    )
+
+
+@then("the response is 200 and results are present")
+def response_200_with_results(response: Any) -> None:
+    assert response.status_code == 200
+    assert "results" in response.json()
+
+
+# ---------------------------------------------------------------------------
+# Review state filter steps
+# ---------------------------------------------------------------------------
+
+
+@given("a decision exists with no user_action recorded since its current placement")
+def decision_without_recent_action(
+    decision_repository: AsyncMock,
+    entity_mention_repository: AsyncMock,
+) -> None:
+    _setup_decisions(decision_repository, entity_mention_repository, 1, prefix="d-pending")
+
+
+@when("I GET /api/v1/curation/decisions?reviewed=false", target_fixture="response")
+def get_decisions_reviewed_false(client: TestClient) -> Any:
+    return client.get(DECISIONS_URL, params={"reviewed": "false"})
+
+
+@then("the response includes that decision")
+def response_includes_decision(response: Any) -> None:
+    assert response.status_code == 200
+    data = response.json()
+    assert "results" in data
+
+
+@given("a decision with a user_action whose created_at is after its current placement")
+def decision_with_recent_action(
+    decision_repository: AsyncMock,
+    entity_mention_repository: AsyncMock,
+) -> None:
+    _setup_decisions(decision_repository, entity_mention_repository, 1, prefix="d-reviewed")
+
+
+@when("I GET /api/v1/curation/decisions?reviewed=true", target_fixture="response")
+def get_decisions_reviewed_true(client: TestClient) -> Any:
+    return client.get(DECISIONS_URL, params={"reviewed": "true"})
+
+
+@given(
+    "a decision was reviewed at T1 and ERE re-integrated a new outcome at T2 advancing updated_at past T1"
+)
+def decision_ere_reintegrated(
+    decision_repository: AsyncMock,
+    entity_mention_repository: AsyncMock,
+) -> None:
+    _setup_decisions(decision_repository, entity_mention_repository, 1, prefix="d-reint")

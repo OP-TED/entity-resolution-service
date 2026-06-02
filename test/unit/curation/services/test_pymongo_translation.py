@@ -67,10 +67,12 @@ class TestUserActionServiceTranslation:
         )
         entity_repo = create_autospec(EntityMentionCurationRepository, instance=True)
         user_repo = create_autospec(UserRepository, instance=True)
+        decision_repo = create_autospec(DecisionRepository, instance=True)
         service = UserActionService(
             user_action_repository=user_action_repo,
             entity_mention_repository=entity_repo,
             user_repository=user_repo,
+            decision_repository=decision_repo,
         )
 
         with pytest.raises(ServiceUnavailableError) as exc_info:

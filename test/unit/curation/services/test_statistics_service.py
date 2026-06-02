@@ -11,6 +11,8 @@ from ers.curation.domain.data_transfer_objects import (
 )
 from ers.curation.services import StatisticsService
 
+pytestmark = pytest.mark.asyncio
+
 
 @pytest.fixture
 def statistics_repository() -> MagicMock:
@@ -37,7 +39,11 @@ class TestGetStatistics:
         registry = RegistryStatistics(
             total_entity_mentions=5000,
             total_canonical_entities=1000,
-            average_cluster_size=5.0,
+            cluster_size_average=5.0,
+            cluster_size_median=4.0,
+            cluster_size_p95=10,
+            cluster_size_max=20,
+            cluster_singletons_count=2,
             resolution_requests=3000,
         )
         statistics_repository.get_curation_statistics.return_value = curation
@@ -64,7 +70,11 @@ class TestGetStatistics:
         statistics_repository.get_registry_statistics.return_value = RegistryStatistics(
             total_entity_mentions=0,
             total_canonical_entities=0,
-            average_cluster_size=0.0,
+            cluster_size_average=0.0,
+            cluster_size_median=0.0,
+            cluster_size_p95=0,
+            cluster_size_max=0,
+            cluster_singletons_count=0,
             resolution_requests=0,
         )
 

@@ -253,6 +253,7 @@ class TestGetProposedCanonicalEntity:
             cluster_id="cluster-1",
             confidence_score=0.95,
             similarity_score=0.9,
+            cluster_size=3,
             top_entities=[],
         )
         canonical_entity_service.get_proposed_canonical_entity.return_value = preview
@@ -288,6 +289,7 @@ class TestGetAlternativeCanonicalEntities:
             cluster_id="cluster-2",
             confidence_score=0.7,
             similarity_score=0.65,
+            cluster_size=5,
             top_entities=[],
         )
         canonical_entity_service.get_alternative_canonical_entities.return_value = PaginatedResult(

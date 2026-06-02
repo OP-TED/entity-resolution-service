@@ -112,10 +112,13 @@ def _build_service(
     user_action_repository: MagicMock,
     ere_adapter: MagicMock,
 ) -> tuple[DecisionCurationService, EREPublishService]:
+    decision_repository.increment_review_count = AsyncMock()
+    decision_repository.find_review_counts = AsyncMock(return_value={})
     user_action_service = UserActionService(
         user_action_repository=user_action_repository,
         entity_mention_repository=entity_mention_repository,
         user_repository=MagicMock(),
+        decision_repository=decision_repository,
     )
     ere_publish_service = EREPublishService(adapter=ere_adapter)
     service = DecisionCurationService(

@@ -496,3 +496,489 @@ async def test_average_cluster_size_returns_zero_when_no_decisions(repo, mock_co
 
     result = await repo.average_cluster_size()
     assert result == 0.0
+
+
+# ── increment_review_count ────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_increment_review_count_issues_inc_operation(repo, mock_collection):
+    """increment_review_count calls update_one with $inc: {previous_review_count: 1}."""
+    mock_collection.update_one = AsyncMock()
+
+    await repo.increment_review_count("decision-abc")
+
+    mock_collection.update_one.assert_called_once_with(
+        {"_id": "decision-abc"},
+        {"$inc": {"previous_review_count": 1}},
+    )
+
+
+@pytest.mark.asyncio
+async def test_increment_review_count_no_upsert(repo, mock_collection):
+    """increment_review_count must NOT use upsert — missing doc is a no-op."""
+    mock_collection.update_one = AsyncMock()
+
+    await repo.increment_review_count("decision-xyz")
+
+    call_kwargs = mock_collection.update_one.call_args.kwargs
+    assert call_kwargs.get("upsert", False) is False
+
+
+# ── find_with_filters: reviewed filter ───────────────────────────────────────
+
+
+def _make_async_cursor(docs):
+    """Build a mock cursor that yields docs asynchronously."""
+    async def _gen():
+        for doc in docs:
+            yield doc
+
+    cursor_mock = MagicMock()
+    cursor_mock.sort.return_value = cursor_mock
+    cursor_mock.limit.return_value = cursor_mock
+    cursor_mock.__aiter__ = lambda self: _gen()
+    return cursor_mock
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_reviewed_none_does_not_contain_lookup(repo, mock_collection):
+    """reviewed=None: pipeline uses find(), NOT aggregate() — no $lookup against user_actions."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters
+
+    mock_collection.find = MagicMock(return_value=_make_async_cursor([]))
+    mock_collection.count_documents = AsyncMock(return_value=0)
+    mock_collection.aggregate = AsyncMock()
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(),
+        cursor_params=CursorParams(cursor=None, limit=10),
+        reviewed=None,
+    )
+
+    mock_collection.aggregate.assert_not_called()
+    mock_collection.find.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_reviewed_true_uses_lookup_and_matches_non_empty(repo, mock_collection):
+    """reviewed=True: pipeline contains $lookup and $match for non-empty _has_recent_action."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters
+
+    agg_cursor = AsyncMock()
+    agg_cursor.__aiter__ = AsyncMock(return_value=iter([]))
+    agg_cursor.to_list = AsyncMock(return_value=[])
+
+    async def _aiter(self):
+        return
+        yield  # noqa: unreachable – makes this an async generator
+
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+    mock_collection.find = MagicMock()
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(),
+        cursor_params=CursorParams(cursor=None, limit=10),
+        reviewed=True,
+    )
+
+    mock_collection.aggregate.assert_called_once()
+    pipeline = mock_collection.aggregate.call_args[0][0]
+
+    stage_types = [list(s.keys())[0] for s in pipeline]
+    assert "$lookup" in stage_types, "Pipeline must contain a $lookup stage"
+
+    lookup_stage = next(s["$lookup"] for s in pipeline if "$lookup" in s)
+    assert lookup_stage["from"] == "user_actions"
+    assert lookup_stage["as"] == "_has_recent_action"
+    assert "let" in lookup_stage
+    assert "pipeline" in lookup_stage
+
+    # The $match after lookup for reviewed=True must require non-empty array
+    post_lookup_idx = stage_types.index("$lookup") + 1
+    match_stages = [s for s in pipeline[post_lookup_idx:] if "$match" in s]
+    assert match_stages, "Pipeline must have a $match after $lookup"
+    match_expr = str(match_stages[0])
+    assert "$ne" in match_expr or "ne" in match_expr, (
+        "reviewed=True must match non-empty _has_recent_action"
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_reviewed_false_uses_lookup_and_matches_empty(repo, mock_collection):
+    """reviewed=False: pipeline contains $lookup and $match for empty _has_recent_action."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+    mock_collection.find = MagicMock()
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(),
+        cursor_params=CursorParams(cursor=None, limit=10),
+        reviewed=False,
+    )
+
+    mock_collection.aggregate.assert_called_once()
+    pipeline = mock_collection.aggregate.call_args[0][0]
+
+    stage_types = [list(s.keys())[0] for s in pipeline]
+    assert "$lookup" in stage_types
+
+    post_lookup_idx = stage_types.index("$lookup") + 1
+    match_stages = [s for s in pipeline[post_lookup_idx:] if "$match" in s]
+    assert match_stages, "Pipeline must have a $match after $lookup"
+    match_expr = str(match_stages[0])
+    assert "$eq" in match_expr or "eq" in match_expr, (
+        "reviewed=False must match empty _has_recent_action"
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_reviewed_pipeline_excludes_has_recent_action_field(repo, mock_collection):
+    """Pipeline must project out _has_recent_action so it is not returned in results."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(),
+        cursor_params=CursorParams(cursor=None, limit=10),
+        reviewed=True,
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    project_stages = [s for s in pipeline if "$project" in s]
+    assert project_stages, "Pipeline must contain a $project stage to remove _has_recent_action"
+    # The field must be excluded (value 0 or absent from projection)
+    project = project_stages[-1]["$project"]
+    assert project.get("_has_recent_action", 1) == 0, (
+        "$project must exclude _has_recent_action"
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_unfiltered_bulk_sync_reviewed_none_unchanged(repo, mock_collection):
+    """Bulk-sync caller (filters=None, no reviewed kwarg) must use find(), not aggregate()."""
+    mock_collection.find = MagicMock(return_value=_make_async_cursor([]))
+    mock_collection.aggregate = AsyncMock()
+
+    # Simulate the bulk-sync call pattern: no reviewed kwarg at all
+    await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor=None, limit=10))
+
+    mock_collection.aggregate.assert_not_called()
+    mock_collection.find.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_upsert_does_not_overwrite_previous_review_count(repo, mock_collection):
+    """Integration write ($set / $setOnInsert) must NOT include previous_review_count.
+
+    If previous_review_count appears in $set, ERE re-integration would reset
+    the counter. This test verifies the built update docs stay clean.
+    """
+    now = datetime.now(UTC)
+    identifier = make_identifier()
+    current = make_cluster()
+
+    # Insert path
+    insert_doc = repo._build_insert_doc(identifier, current, [], now)
+    assert "previous_review_count" not in insert_doc.get("$setOnInsert", {}), (
+        "Insert doc must not touch previous_review_count"
+    )
+
+    # Update path
+    update_doc = repo._build_update_doc(identifier, current, [], now)
+    assert "previous_review_count" not in update_doc.get("$set", {}), (
+        "Update doc must not touch previous_review_count"
+    )
+
+
+# ── find_with_filters: cluster-size sort ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_cluster_size_asc_uses_aggregation(repo, mock_collection):
+    """cluster_size ordering must use aggregation (find() cannot sort on a derived field)."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+    mock_collection.find = MagicMock()
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_ASC),
+        cursor_params=CursorParams(cursor=None, limit=10),
+    )
+
+    mock_collection.aggregate.assert_called_once()
+    mock_collection.find.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_cluster_size_desc_uses_aggregation(repo, mock_collection):
+    """cluster_size descending also routes through aggregation."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+    mock_collection.find = MagicMock()
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_DESC),
+        cursor_params=CursorParams(cursor=None, limit=10),
+    )
+
+    mock_collection.aggregate.assert_called_once()
+    mock_collection.find.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_cluster_size_pipeline_contains_lookup(repo, mock_collection):
+    """Pipeline for cluster_size sort must contain a $lookup against cluster_sizes."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_ASC),
+        cursor_params=CursorParams(cursor=None, limit=10),
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    stage_types = [list(s.keys())[0] for s in pipeline]
+    assert "$lookup" in stage_types, "Cluster-size pipeline must contain $lookup"
+
+    lookup = next(s["$lookup"] for s in pipeline if "$lookup" in s)
+    assert lookup["from"] == "cluster_sizes", "$lookup must target cluster_sizes collection"
+    assert lookup["localField"] == "current_placement.cluster_id"
+    assert lookup["foreignField"] == "_id"
+    assert lookup["as"] == "_cluster_meta"
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_cluster_size_pipeline_adds_cluster_size_field(repo, mock_collection):
+    """Pipeline must $addFields cluster_size from the joined _cluster_meta array."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_DESC),
+        cursor_params=CursorParams(cursor=None, limit=10),
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    add_fields = [s.get("$addFields") for s in pipeline if "$addFields" in s]
+    assert add_fields, "Pipeline must contain an $addFields stage"
+    assert any("cluster_size" in f for f in add_fields), (
+        "$addFields must define cluster_size"
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_cluster_size_pipeline_projects_out_meta(repo, mock_collection):
+    """Pipeline must $project _cluster_meta out so _from_document receives clean docs."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_ASC),
+        cursor_params=CursorParams(cursor=None, limit=10),
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    project_stages = [s["$project"] for s in pipeline if "$project" in s]
+    assert project_stages, "Pipeline must contain $project"
+    # _cluster_meta must be removed (value 0)
+    assert any(p.get("_cluster_meta", 1) == 0 for p in project_stages), (
+        "$project must exclude _cluster_meta"
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_cluster_size_pipeline_match_before_lookup(repo, mock_collection):
+    """$match (filters) must appear before $lookup so Mongo can use indexes."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_ASC),
+        cursor_params=CursorParams(cursor=None, limit=10),
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    stage_types = [list(s.keys())[0] for s in pipeline]
+    match_idx = stage_types.index("$match")
+    lookup_idx = stage_types.index("$lookup")
+    assert match_idx < lookup_idx, "$match must appear before $lookup"
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_cluster_size_sort_uses_cluster_size_and_id(repo, mock_collection):
+    """$sort must sort by cluster_size (asc) + _id (asc) for ascending ordering."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_ASC),
+        cursor_params=CursorParams(cursor=None, limit=10),
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    sort_stages = [s["$sort"] for s in pipeline if "$sort" in s]
+    assert sort_stages, "Pipeline must contain $sort"
+    sort = sort_stages[-1]  # the final sort stage
+    assert sort.get("cluster_size") == 1, "Ascending: cluster_size direction must be 1"
+    assert sort.get("_id") == 1, "Ascending: _id tiebreaker direction must match"
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_cluster_size_desc_sort_direction(repo, mock_collection):
+    """$sort for descending cluster_size must have cluster_size: -1, _id: -1."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_DESC),
+        cursor_params=CursorParams(cursor=None, limit=10),
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    sort_stages = [s["$sort"] for s in pipeline if "$sort" in s]
+    assert sort_stages
+    sort = sort_stages[-1]
+    assert sort.get("cluster_size") == -1, "Descending: cluster_size direction must be -1"
+    assert sort.get("_id") == -1, "Descending: _id tiebreaker direction must match"
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_legacy_orderings_still_use_find(repo, mock_collection):
+    """Legacy orderings (confidence_score, created_at, updated_at) must NOT use aggregate()."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+
+    for ordering in [
+        DecisionOrdering.CONFIDENCE_ASC,
+        DecisionOrdering.CONFIDENCE_DESC,
+        DecisionOrdering.CREATED_AT_ASC,
+        DecisionOrdering.CREATED_AT_DESC,
+        DecisionOrdering.UPDATED_AT_ASC,
+        DecisionOrdering.UPDATED_AT_DESC,
+    ]:
+        mock_collection.aggregate = AsyncMock()
+        mock_collection.count_documents = AsyncMock(return_value=0)
+        mock_collection.find = MagicMock(return_value=_make_async_cursor([]))
+
+        await repo.find_with_filters(
+            filters=DecisionFilters(ordering=ordering),
+            cursor_params=CursorParams(cursor=None, limit=10),
+        )
+
+        mock_collection.aggregate.assert_not_called(), (
+            f"Legacy ordering {ordering!r} must not trigger aggregation"
+        )
+
+
+@pytest.mark.asyncio
+async def test_find_with_filters_cluster_size_with_reviewed_filter_includes_both_lookups(
+    repo, mock_collection
+):
+    """cluster_size + reviewed=True: pipeline must contain two $lookup stages."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_DESC),
+        cursor_params=CursorParams(cursor=None, limit=10),
+        reviewed=True,
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    lookup_stages = [s["$lookup"] for s in pipeline if "$lookup" in s]
+    assert len(lookup_stages) == 2, (
+        "cluster_size + reviewed pipeline must contain two $lookup stages"
+    )
+    sources = {s["from"] for s in lookup_stages}
+    assert "cluster_sizes" in sources
+    assert "user_actions" in sources

@@ -113,10 +113,13 @@ def _build_service_with_decisions(
     ere_adapter.push_request = AsyncMock(return_value=1)
     ere_adapter.request_channel_id = "ere_requests"
 
+    decision_repo.increment_review_count = AsyncMock()
+    decision_repo.find_review_counts = AsyncMock(return_value={})
     user_action_service = UserActionService(
         user_action_repository=user_action_repo,
         entity_mention_repository=entity_mention_repo,
         user_repository=MagicMock(),
+        decision_repository=decision_repo,
     )
     ere_publish_service = EREPublishService(adapter=ere_adapter)
     service = DecisionCurationService(

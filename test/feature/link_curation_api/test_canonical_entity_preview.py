@@ -19,6 +19,9 @@ from test.unit.factories import (
     EntityMentionIdentifierFactory,
 )
 
+# Cluster size constants used in the "known sizes" scenario
+_CLUSTER_SIZES: dict[str, int] = {}
+
 FEATURE = str(Path(__file__).resolve().parent / "canonical_entity_preview.feature")
 
 DECISIONS_URL = "/api/v1/curation/decisions"
@@ -61,6 +64,21 @@ def test_alternatives_not_found():
 
 @scenario(FEATURE, "Canonical entity preview with mentions lacking parsed representations")
 def test_preview_missing_representations():
+    pass
+
+
+@scenario(FEATURE, "Proposed canonical entity preview includes cluster size")
+def test_proposed_includes_cluster_size():
+    pass
+
+
+@scenario(FEATURE, "Alternative canonical entities each carry their own cluster size")
+def test_alternatives_carry_cluster_size():
+    pass
+
+
+@scenario(FEATURE, "Cluster size of an unknown cluster defaults to 0")
+def test_unknown_cluster_size_defaults_to_zero():
     pass
 
 
@@ -346,3 +364,63 @@ def preview_shows_identifiers_only(response: Any) -> None:
     for entity in data.get("top_entities", []):
         assert "identified_by" in entity
         assert entity["parsed_representation"] is None
+
+
+# --- Cluster size ---
+
+
+@given(
+    parsers.parse('cluster "{cluster_id}" has {count:d} decisions assigned to it in the projection'),
+)
+def cluster_has_projection_size(
+    ctx: dict[str, Any],
+    cluster_id: str,
+    count: int,
+    cluster_size_index: AsyncMock,
+) -> None:
+    cluster_size_index.get_size.return_value = count
+    ctx["expected_cluster_size"] = count
+
+
+@given("a decision exists with 3 candidate clusters with known sizes")
+def decision_with_3_known_size_candidates(
+    ctx: dict[str, Any],
+    decision_repository: AsyncMock,
+    entity_mention_repository: AsyncMock,
+    cluster_size_index: AsyncMock,
+) -> None:
+    current = ClusterReferenceFactory.build(cluster_id="known-cluster-0")
+    alt1 = ClusterReferenceFactory.build(cluster_id="known-cluster-1")
+    alt2 = ClusterReferenceFactory.build(cluster_id="known-cluster-2")
+    decision = DecisionFactory.build(
+        id="decision-1",
+        current_placement=current,
+        candidates=[current, alt1, alt2],
+    )
+    decision_repository.find_by_id.return_value = decision
+    _setup_cluster_mentions(decision_repository, entity_mention_repository)
+    ctx["decision_id"] = "decision-1"
+    # Wire known sizes: alt1 -> 4, alt2 -> 11
+    size_map = {alt1.cluster_id: 4, alt2.cluster_id: 11}
+    cluster_size_index.get_size.side_effect = lambda cid: size_map.get(cid, 0)
+    ctx["expected_sizes"] = size_map
+    ctx["alt_ids"] = [alt1.cluster_id, alt2.cluster_id]
+
+
+@then(parsers.parse('the preview includes "cluster_size" equal to {count:d}'))
+def preview_includes_cluster_size(response: Any, count: int) -> None:
+    assert response.status_code == 200
+    assert response.json()["cluster_size"] == count
+
+
+@then("each alternative preview carries its own cluster_size from the projection")
+def alternatives_carry_distinct_cluster_sizes(
+    response: Any,
+    ctx: dict[str, Any],
+) -> None:
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert len(results) == 2
+    returned_sizes = {r["cluster_id"]: r["cluster_size"] for r in results}
+    for cluster_id, expected_size in ctx["expected_sizes"].items():
+        assert returned_sizes[cluster_id] == expected_size

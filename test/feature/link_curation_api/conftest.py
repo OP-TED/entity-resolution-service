@@ -50,6 +50,7 @@ from ers.rdf_mention_parser.domain.rdf_mapping_config import (
 from ers.resolution_decision_store.adapters.decision_repository import (
     DecisionRepository,
 )
+from ers.resolution_decision_store.domain.cluster_size_index import ClusterSizeIndex
 from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.data_transfer_objects import UserContext
 from ers.users.services import AuthService, UserManagementService
@@ -98,7 +99,10 @@ def ctx() -> dict[str, Any]:
 
 @pytest.fixture
 def decision_repository() -> AsyncMock:
-    return create_autospec(DecisionRepository, instance=True)
+    mock = create_autospec(DecisionRepository, instance=True)
+    # Default: no review counts — callers default to 0 for missing keys.
+    mock.find_review_counts.return_value = {}
+    return mock
 
 
 @pytest.fixture
@@ -148,11 +152,13 @@ def user_action_service(
     user_action_repository: AsyncMock,
     entity_mention_repository: AsyncMock,
     user_repository: AsyncMock,
+    decision_repository: AsyncMock,
 ) -> UserActionService:
     return UserActionService(
         user_action_repository=user_action_repository,
         entity_mention_repository=entity_mention_repository,
         user_repository=user_repository,
+        decision_repository=decision_repository,
     )
 
 
@@ -177,13 +183,23 @@ def decision_curation_service(
 
 
 @pytest.fixture
+def cluster_size_index() -> AsyncMock:
+    """Mock ClusterSizeIndex — defaults to size 0 for all clusters."""
+    mock = create_autospec(ClusterSizeIndex, instance=True)
+    mock.get_size.return_value = 0
+    return mock
+
+
+@pytest.fixture
 def canonical_entity_service(
     decision_repository: AsyncMock,
     entity_mention_repository: AsyncMock,
+    cluster_size_index: AsyncMock,
 ) -> CanonicalEntityService:
     return CanonicalEntityService(
         decision_repository=decision_repository,
         entity_mention_repository=entity_mention_repository,
+        cluster_size_index=cluster_size_index,
     )
 
 

@@ -25,6 +25,7 @@ from ers.curation.services import (
 )
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
 from ers.rdf_mention_parser.domain.rdf_mapping_config import RDFMappingConfig
+from ers.resolution_decision_store.adapters.cluster_size_index import MongoClusterSizeIndex
 from ers.users.adapters import MongoUserRepository, UserRepository
 from ers.users.services import AuthService, UserManagementService
 from ers.users.services.token_service import JWTTokenService, TokenService
@@ -105,11 +106,13 @@ async def get_user_action_service(
     repo: Annotated[UserActionCurationRepository, Depends(get_user_action_repository)],
     entity_repo: Annotated[EntityMentionCurationRepository, Depends(get_entity_mention_repository)],
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+    decision_repo: Annotated[DecisionRepository, Depends(get_decision_repository)],
 ) -> UserActionService:
     return UserActionService(
         user_action_repository=repo,
         entity_mention_repository=entity_repo,
         user_repository=user_repo,
+        decision_repository=decision_repo,
     )
 
 
@@ -130,10 +133,12 @@ async def get_decision_curation_service(
 async def get_canonical_entity_service(
     decision_repo: Annotated[DecisionRepository, Depends(get_decision_repository)],
     entity_repo: Annotated[EntityMentionCurationRepository, Depends(get_entity_mention_repository)],
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> CanonicalEntityService:
     return CanonicalEntityService(
         decision_repository=decision_repo,
         entity_mention_repository=entity_repo,
+        cluster_size_index=MongoClusterSizeIndex(db),
     )
 
 

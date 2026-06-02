@@ -50,16 +50,29 @@ async def list_user_actions(
     ordering: Annotated[
         BaseOrdering | None, Query(description="Sort order for the returned actions.")
     ] = None,
+    decision_id: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Filter by the decision identifier.  Returns only user actions recorded "
+                "against this decision (matched via the entity mention triad)."
+            )
+        ),
+    ] = None,
 ) -> CursorPage[UserActionSummary]:
     """List cursor-paginated user actions with optional filtering."""
     filters = None
-    if any(v is not None for v in (action_type, actor, time_range_start, time_range_end, ordering)):
+    if any(
+        v is not None
+        for v in (action_type, actor, time_range_start, time_range_end, ordering, decision_id)
+    ):
         filters = UserActionFilters(
             action_type=action_type,
             actor=actor,
             time_range_start=time_range_start,
             time_range_end=time_range_end,
             ordering=ordering,
+            decision_id=decision_id,
         )
     return await service.list_user_actions(cursor_params, filters)
 

@@ -36,6 +36,9 @@ _FIELD_CLUSTER_ID = "current_placement.cluster_id"
 _FIELD_ABOUT_ENTITY_MENTION = "about_entity_mention"
 _FIELD_CREATED_AT = "created_at"
 _FIELD_UPDATED_AT = "updated_at"
+# Derived field added by the cluster-size aggregation pipeline branch.
+# Not stored on decision documents; computed via $lookup + $addFields.
+_FIELD_CLUSTER_SIZE = "cluster_size"
 
 
 class DecisionRepository(BaseDecisionRepository):
@@ -47,6 +50,8 @@ class DecisionRepository(BaseDecisionRepository):
         filters: DecisionFilters | None = None,
         cursor_params: CursorParams | None = None,
         mention_identifiers: list[EntityMentionIdentifier] | None = None,
+        *,
+        reviewed: bool | None = None,
     ) -> CursorPage[Decision]:
         """Find decisions with optional filtering and cursor-based pagination.
 
@@ -59,6 +64,12 @@ class DecisionRepository(BaseDecisionRepository):
             mention_identifiers: When provided, restricts results to decisions
                 whose ``about_entity_mention`` is in this list (used for
                 full-text search pre-filtering).
+            reviewed: When True, return only decisions where a user_action
+                exists with ``created_at`` after the decision's current
+                placement timestamp (``updated_at`` or ``created_at``).
+                When False, return only decisions with no such action (Pending).
+                When None (default), no review-state filter is applied and the
+                pipeline is identical to the pre-existing behaviour.
         """
 
     @abstractmethod
@@ -96,6 +107,34 @@ class DecisionRepository(BaseDecisionRepository):
             ``count`` is always 0 — no total-count query is performed.
         """
 
+    @abstractmethod
+    async def increment_review_count(self, decision_id: str) -> None:
+        """Atomically increment the previous_review_count field on the given decision.
+
+        No-op if the document is missing — the action save is the canonical write,
+        the counter is a denormalised mirror (see spec §3.1 R8).
+
+        Args:
+            decision_id: The ``_id`` of the decision document to increment.
+        """
+
+    @abstractmethod
+    async def find_review_counts(self, decision_ids: list[str]) -> dict[str, int]:
+        """Return previous_review_count values for the given decision IDs.
+
+        Used by the curation service to attach counts to ``DecisionSummary`` rows
+        without changing the ``find_with_filters`` signature (which is shared with
+        the Decision Store sync path).  Missing documents or documents without the
+        field are treated as 0.
+
+        Args:
+            decision_ids: List of decision ``_id`` values to look up.
+
+        Returns:
+            Mapping of ``{decision_id: count}``.  IDs absent from the collection
+            are omitted (callers should default-to-0 on missing keys).
+        """
+
 
 class MongoDecisionRepository(
     BaseMongoDecisionRepository,
@@ -110,7 +149,15 @@ class MongoDecisionRepository(
         DecisionOrdering.CREATED_AT_DESC: (_FIELD_CREATED_AT, False),
         DecisionOrdering.UPDATED_AT_ASC: (_FIELD_UPDATED_AT, True),
         DecisionOrdering.UPDATED_AT_DESC: (_FIELD_UPDATED_AT, False),
+        DecisionOrdering.CLUSTER_SIZE_ASC: (_FIELD_CLUSTER_SIZE, True),
+        DecisionOrdering.CLUSTER_SIZE_DESC: (_FIELD_CLUSTER_SIZE, False),
     }
+
+    # Orderings that require an aggregation pipeline because the sort field is
+    # derived (not stored on the decision document itself).
+    _AGGREGATION_ORDERINGS: frozenset[DecisionOrdering] = frozenset(
+        {DecisionOrdering.CLUSTER_SIZE_ASC, DecisionOrdering.CLUSTER_SIZE_DESC}
+    )
 
     def _build_query(self, filters: DecisionFilters) -> dict[str, Any]:
         query: dict[str, Any] = {}
@@ -149,6 +196,18 @@ class MongoDecisionRepository(
         return [(field, direction), ("_id", direction)]
 
     def _extract_sort_value(self, decision: Decision, sort_field: str) -> float | datetime | None:
+        """Return the sort key value from a Decision domain object.
+
+        Args:
+            decision: The decision to inspect.
+            sort_field: MongoDB field name used as the primary sort key.
+
+        Returns:
+            The field value, or ``None`` for unknown or derived fields.
+            Derived fields (e.g. ``cluster_size``) cannot be extracted from the
+            domain object — callers that need those values must capture them
+            directly from the raw aggregation document before conversion.
+        """
         if sort_field == _FIELD_CONFIDENCE:
             return decision.current_placement.confidence_score
         if sort_field == _FIELD_CREATED_AT:
@@ -433,11 +492,53 @@ class MongoDecisionRepository(
         triad_hash = derive_provisional_cluster_id(identifier)
         return await self.find_by_id(triad_hash)
 
+    async def increment_review_count(self, decision_id: str) -> None:
+        """Atomically increment the previous_review_count field on the given decision.
+
+        Uses ``$inc`` so the field is initialised from zero on the first call even
+        when the field is absent from legacy documents.  No upsert is performed —
+        a missing document is silently ignored (the action save is the canonical
+        write; this counter is a denormalised mirror).
+
+        Args:
+            decision_id: The ``_id`` of the decision document to increment.
+        """
+        await self._collection.update_one(
+            {"_id": decision_id},
+            {"$inc": {"previous_review_count": 1}},
+        )
+
+    async def find_review_counts(self, decision_ids: list[str]) -> dict[str, int]:
+        """Return previous_review_count values for the given decision IDs.
+
+        Fetches only the ``_id`` and ``previous_review_count`` fields in a single
+        ``find`` query.  Documents where the field is absent are treated as 0.
+
+        Args:
+            decision_ids: List of decision ``_id`` values to look up.
+
+        Returns:
+            Mapping of ``{decision_id: count}`` for all found documents.
+        """
+        if not decision_ids:
+            return {}
+
+        cursor = self._collection.find(
+            {"_id": {"$in": decision_ids}},
+            projection={"previous_review_count": 1},
+        )
+        result: dict[str, int] = {}
+        async for doc in cursor:
+            result[doc["_id"]] = doc.get("previous_review_count", 0)
+        return result
+
     async def find_with_filters(
         self,
         filters: DecisionFilters | None = None,
         cursor_params: CursorParams | None = None,
         mention_identifiers: list[EntityMentionIdentifier] | None = None,
+        *,
+        reviewed: bool | None = None,
     ) -> CursorPage[Decision]:
         """Cursor-paginated query over decisions with optional filtering.
 
@@ -446,12 +547,19 @@ class MongoDecisionRepository(
         2. Decision Store bulk sync use case: no filters, fixed (updated_at ASC, _id ASC)
 
         When ``filters`` is None, performs unfiltered traversal in Decision Store mode.
+        When ``reviewed`` is not None, the curation path switches to an aggregation
+        pipeline that performs a ``$lookup`` against ``user_actions`` to apply the
+        review-state predicate.  The bulk-sync path (``filters=None``) always uses
+        ``find()`` regardless of ``reviewed`` (it does not set this flag).
 
         Args:
             filters: Optional filter criteria. None for unfiltered traversal.
             cursor_params: Pagination params (cursor, limit). If None, uses default limit.
             mention_identifiers: When provided, restricts results to decisions whose
                 ``about_entity_mention`` is in this list.
+            reviewed: When True, include only decisions with a matching user_action
+                created after the current placement timestamp.  When False, include
+                only decisions with no such action.  None disables the filter.
 
         Returns:
             A ``CursorPage`` containing results and an optional ``next_cursor``.
@@ -461,7 +569,7 @@ class MongoDecisionRepository(
 
         count = 0
 
-        # Unfiltered bulk sync mode (Decision Store)
+        # Unfiltered bulk sync mode (Decision Store) — reviewed flag is ignored here.
         if filters is None:
             query: dict[str, Any] = {}
             sort_field = _FIELD_UPDATED_AT
@@ -498,22 +606,247 @@ class MongoDecisionRepository(
 
         # Fetch page_size + 1 to detect if there are more results
         fetch_limit = cursor_params.limit + 1
-        cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
-        results = [self._from_document(doc) async for doc in cursor]
+
+        # --- Execution path selection ---
+        # Cluster-size orderings require aggregation because the sort field is
+        # derived via $lookup + $addFields and is not stored on the decision doc.
+        # ``last_sort_raw_value`` captures the cluster_size integer for cursor
+        # encoding when this path is active; it stays None for all other paths.
+        last_sort_raw_value: Any = None
+
+        is_cluster_size_ordering = (
+            filters is not None
+            and filters.ordering in self._AGGREGATION_ORDERINGS
+        )
+
+        if is_cluster_size_ordering:
+            results, last_sort_raw_value = await self._fetch_with_cluster_size_sort(
+                query=query,
+                sort=sort,
+                fetch_limit=fetch_limit,
+                reviewed=reviewed,
+            )
+        elif reviewed is not None and filters is not None:
+            results = await self._fetch_with_review_filter(
+                query=query,
+                sort=sort,
+                fetch_limit=fetch_limit,
+                reviewed=reviewed,
+            )
+        else:
+            cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
+            results = [self._from_document(doc) async for doc in cursor]
 
         # Encode next cursor if there are more results
         next_cursor = None
         if len(results) > cursor_params.limit:
             results = results[: cursor_params.limit]
             last = results[-1]
-            sort_value = (
-                self._extract_sort_value(last, sort_field)
-                if filters is not None
-                else last.updated_at
-            )
+            if is_cluster_size_ordering:
+                # Use the raw cluster_size captured from the aggregation document.
+                sort_value = last_sort_raw_value
+            elif filters is not None:
+                sort_value = self._extract_sort_value(last, sort_field)
+            else:
+                sort_value = last.updated_at
             next_cursor = encode_cursor(sort_value, last.id)
 
         return CursorPage(results=results, count=count, next_cursor=next_cursor)
+
+    async def _fetch_with_review_filter(
+        self,
+        query: dict[str, Any],
+        sort: list[tuple[str, int]],
+        fetch_limit: int,
+        reviewed: bool,
+    ) -> list[Decision]:
+        """Execute an aggregation pipeline that joins user_actions to filter by review state.
+
+        A decision is considered *reviewed* when there exists at least one user_action
+        whose ``about_entity_mention`` triad matches the decision's triad and whose
+        ``created_at`` is strictly after the decision's current-placement timestamp
+        (``updated_at`` if non-null, else ``created_at``).
+
+        The pipeline:
+
+        1. ``$match`` — apply the pre-built filter query (same predicates as ``find()``).
+        2. ``$sort``  — apply the requested ordering so cursor pagination is stable.
+        3. ``$limit`` — limit to ``fetch_limit`` before the expensive join.
+        4. ``$lookup`` — correlated sub-pipeline against ``user_actions`` joining on
+           the embedded ``about_entity_mention`` triad and the temporal predicate.
+        5. ``$match`` — keep only documents where ``_has_recent_action`` is non-empty
+           (``reviewed=True``) or empty (``reviewed=False``).
+        6. ``$project`` — remove the temporary ``_has_recent_action`` array so that
+           ``_from_document`` receives clean decision documents.
+
+        Args:
+            query: Pre-built MongoDB match expression (may include cursor condition).
+            sort: Sort specification as a list of ``(field, direction)`` pairs.
+            fetch_limit: Number of documents to fetch (page size + 1).
+            reviewed: True to keep reviewed decisions; False to keep pending ones.
+
+        Returns:
+            List of ``Decision`` domain objects.
+        """
+        sort_stage = {field: direction for field, direction in sort}
+
+        review_match: dict[str, Any] = (
+            {"_has_recent_action": {"$ne": []}}
+            if reviewed
+            else {"_has_recent_action": {"$eq": []}}
+        )
+
+        pipeline: list[dict[str, Any]] = [
+            {"$match": query} if query else {"$match": {}},
+            {"$sort": sort_stage},
+            {"$limit": fetch_limit},
+            {
+                "$lookup": {
+                    "from": "user_actions",
+                    "let": {
+                        "triad": f"${_FIELD_ABOUT_ENTITY_MENTION}",
+                        "since": {"$ifNull": [f"${_FIELD_UPDATED_AT}", f"${_FIELD_CREATED_AT}"]},
+                    },
+                    "pipeline": [
+                        {
+                            "$match": {
+                                "$expr": {
+                                    "$and": [
+                                        {"$eq": ["$about_entity_mention", "$$triad"]},
+                                        {"$gt": ["$created_at", "$$since"]},
+                                    ]
+                                }
+                            }
+                        },
+                        {"$limit": 1},
+                        {"$project": {"_id": 1}},
+                    ],
+                    "as": "_has_recent_action",
+                }
+            },
+            {"$match": review_match},
+            {"$project": {"_has_recent_action": 0}},
+        ]
+
+        # Remove the empty $match if query was empty (keep pipeline clean)
+        if not query:
+            pipeline[0] = {"$match": {}}
+
+        agg_cursor = self._collection.aggregate(pipeline)
+        return [self._from_document(doc) async for doc in agg_cursor]  # type: ignore[attr-defined]
+
+    async def _fetch_with_cluster_size_sort(
+        self,
+        query: dict[str, Any],
+        sort: list[tuple[str, int]],
+        fetch_limit: int,
+        reviewed: bool | None,
+    ) -> tuple[list[Decision], int | None]:
+        """Execute an aggregation pipeline that joins cluster_sizes and sorts by cluster size.
+
+        The pipeline:
+
+        1. ``$match``     — apply the pre-built filter query (indexes apply here).
+        2. ``$lookup``    — join ``cluster_sizes`` on ``current_placement.cluster_id == _id``.
+        3. ``$addFields`` — derive ``cluster_size`` as the first element of the joined array,
+                            defaulting to 0 for decisions whose cluster has no size record.
+        4. ``$project``   — remove the ``_cluster_meta`` helper array.
+        5. ``$lookup``    — (conditional) join ``user_actions`` when ``reviewed`` is not None.
+        6. ``$match``     — (conditional) filter by review state.
+        7. ``$project``   — (conditional) remove ``_has_recent_action``.
+        8. ``$sort``      — sort by ``cluster_size`` (±1) with ``_id`` tiebreaker.
+        9. ``$limit``     — limit to ``fetch_limit`` documents.
+
+        The raw document still contains ``cluster_size`` after the pipeline so that
+        ``_from_document`` receives a clean decision doc after stripping it.
+
+        Args:
+            query: Pre-built MongoDB match expression (may include cursor condition).
+            sort: Sort specification — should be ``[(cluster_size, ±1), (_id, ±1)]``.
+            fetch_limit: Number of documents to fetch (page size + 1).
+            reviewed: When not None, adds the user_actions join and review-state
+                match; True keeps reviewed decisions, False keeps pending ones.
+
+        Returns:
+            A tuple of ``(decisions, last_cluster_size)`` where ``last_cluster_size``
+            is the ``cluster_size`` value of the final document returned (used as the
+            cursor sort value for the next page), or ``None`` when the result is empty.
+        """
+        sort_stage = {field: direction for field, direction in sort}
+
+        pipeline: list[dict[str, Any]] = [
+            {"$match": query if query else {}},
+            {
+                "$lookup": {
+                    "from": "cluster_sizes",
+                    "localField": _FIELD_CLUSTER_ID,
+                    "foreignField": "_id",
+                    "as": "_cluster_meta",
+                }
+            },
+            {
+                "$addFields": {
+                    _FIELD_CLUSTER_SIZE: {
+                        "$ifNull": [{"$arrayElemAt": ["$_cluster_meta.size", 0]}, 0]
+                    }
+                }
+            },
+            {"$project": {"_cluster_meta": 0}},
+        ]
+
+        if reviewed is not None:
+            review_match: dict[str, Any] = (
+                {"_has_recent_action": {"$ne": []}}
+                if reviewed
+                else {"_has_recent_action": {"$eq": []}}
+            )
+            pipeline += [
+                {
+                    "$lookup": {
+                        "from": "user_actions",
+                        "let": {
+                            "triad": f"${_FIELD_ABOUT_ENTITY_MENTION}",
+                            "since": {
+                                "$ifNull": [f"${_FIELD_UPDATED_AT}", f"${_FIELD_CREATED_AT}"]
+                            },
+                        },
+                        "pipeline": [
+                            {
+                                "$match": {
+                                    "$expr": {
+                                        "$and": [
+                                            {"$eq": ["$about_entity_mention", "$$triad"]},
+                                            {"$gt": ["$created_at", "$$since"]},
+                                        ]
+                                    }
+                                }
+                            },
+                            {"$limit": 1},
+                            {"$project": {"_id": 1}},
+                        ],
+                        "as": "_has_recent_action",
+                    }
+                },
+                {"$match": review_match},
+                {"$project": {"_has_recent_action": 0}},
+            ]
+
+        pipeline += [
+            {"$sort": sort_stage},
+            {"$limit": fetch_limit},
+        ]
+
+        raw_docs: list[dict[str, Any]] = []
+        agg_cursor = self._collection.aggregate(pipeline)
+        async for doc in agg_cursor:  # type: ignore[attr-defined]
+            raw_docs.append(doc)
+
+        last_cluster_size: int | None = raw_docs[-1].get(_FIELD_CLUSTER_SIZE) if raw_docs else None
+
+        # Strip the derived cluster_size field before handing to _from_document.
+        decisions = [self._from_document({k: v for k, v in doc.items() if k != _FIELD_CLUSTER_SIZE})
+                     for doc in raw_docs]
+        return decisions, last_cluster_size
 
     async def find_delta_for_source(
         self,

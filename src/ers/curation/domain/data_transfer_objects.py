@@ -36,13 +36,29 @@ class StatisticsFilters(FrozenDTO):
 
 
 class UserActionFilters(FrozenDTO):
-    """Filtering criteria for user action queries."""
+    """Filtering criteria for user action queries.
+
+    ``decision_id`` is a public API field accepted from entrypoints.  The
+    service resolves it to ``about_entity_mention`` (the stored field on
+    ``UserAction`` documents) before passing the filter to the repository.
+    The repository uses ``about_entity_mention`` directly; it never reads
+    ``decision_id``.
+    """
 
     action_type: UserActionType | None = None
     actor: str | None = None
     time_range_start: datetime | None = None
     time_range_end: datetime | None = None
     ordering: BaseOrdering | None = None
+    decision_id: str | None = None
+    about_entity_mention: EntityMentionIdentifier | None = Field(
+        default=None,
+        description=(
+            "Internal filter set by the service after resolving decision_id. "
+            "Matches user_action documents whose about_entity_mention equals "
+            "the entity mention of the requested decision."
+        ),
+    )
 
 
 class EntityTypeDescriptor(FrozenDTO):
@@ -74,6 +90,13 @@ class DecisionSummary(FrozenDTO):
     created_at: datetime = Field(description="Timestamp when the decision was created.")
     updated_at: datetime | None = Field(
         default=None, description="Timestamp of the last update to this decision."
+    )
+    previous_review_count: int = Field(
+        default=0,
+        description=(
+            "Lifetime count of curator actions ever recorded against this decision. "
+            "Persists across ERE re-integrations. Drives the UI 'previously reviewed' indicator."
+        ),
     )
 
 
@@ -111,6 +134,12 @@ class CanonicalEntityPreview(FrozenDTO):
     similarity_score: float = Field(
         description="Similarity score between the entity mention and the cluster."
     )
+    cluster_size: int = Field(
+        description=(
+            "Total number of decisions (entity mentions) assigned to this cluster,"
+            " sourced from the cluster_sizes projection."
+        ),
+    )
     top_entities: list[EntityMentionPreview] = Field(
         description="Representative entity mentions from this cluster."
     )
@@ -138,8 +167,20 @@ class RegistryStatistics(FrozenDTO):
     total_canonical_entities: int = Field(
         description="Total number of distinct canonical entity clusters."
     )
-    average_cluster_size: float = Field(
-        description="Average number of entity mentions per canonical entity cluster."
+    cluster_size_average: float = Field(
+        description="Average decisions per cluster."
+    )
+    cluster_size_median: float = Field(
+        description="Median (p50) cluster size."
+    )
+    cluster_size_p95: int = Field(
+        description="95th-percentile cluster size — surfaces long-tail outliers."
+    )
+    cluster_size_max: int = Field(
+        description="Largest cluster size."
+    )
+    cluster_singletons_count: int = Field(
+        description="Number of clusters of size 1."
     )
     resolution_requests: int = Field(
         description="Total number of entity resolution requests processed."

@@ -9,6 +9,7 @@ from ers import config
 from ers.commons.adapters.tracing import trace_function
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
+from ers.resolution_decision_store.domain.cluster_size_index import ClusterSizeIndex
 
 _log = logging.getLogger(__name__)
 
@@ -16,8 +17,21 @@ _log = logging.getLogger(__name__)
 class DecisionStoreService:
     """Application service for the Resolution Decision Store use cases."""
 
-    def __init__(self, repository: MongoDecisionRepository) -> None:
+    def __init__(
+        self,
+        repository: MongoDecisionRepository,
+        cluster_size_index: ClusterSizeIndex | None = None,
+    ) -> None:
+        """Initialise the service with its mandatory repository and optional index.
+
+        Args:
+            repository: The decision repository for persistence and queries.
+            cluster_size_index: Optional per-cluster cardinality projection.
+                When provided, ``store_decision`` maintains the index on every
+                placement change.  ``None`` disables the hook (backward compat).
+        """
         self._repository = repository
+        self._cluster_size_index = cluster_size_index
 
     async def store_decision(
             self,
@@ -63,13 +77,22 @@ class DecisionStoreService:
             )
         # Pass existing so the repository skips its own pre-read (N2).
         # existing=None → insert path; existing=Decision → update path (R2 stale filter).
-        return await self._repository.upsert_decision(
+        decision = await self._repository.upsert_decision(
             identifier=identifier,
             current=current,
             candidates=candidates[:max_candidates],
             updated_at=updated_at,
             existing=existing,
         )
+
+        if self._cluster_size_index is not None:
+            from_cluster = existing.current_placement.cluster_id if existing is not None else None
+            await self._cluster_size_index.shift(
+                from_cluster=from_cluster,
+                to_cluster=current.cluster_id,
+            )
+
+        return decision
 
     async def get_decision_by_triad(
             self, identifier: EntityMentionIdentifier

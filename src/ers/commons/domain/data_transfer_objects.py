@@ -13,6 +13,8 @@ class DecisionOrdering(StrEnum):
     CREATED_AT_DESC = "-created_at"
     UPDATED_AT_ASC = "updated_at"
     UPDATED_AT_DESC = "-updated_at"
+    CLUSTER_SIZE_ASC = "cluster_size"
+    CLUSTER_SIZE_DESC = "-cluster_size"
 
 
 # FIXME: the below values need to be reconciled with the pagination limits in

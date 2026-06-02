@@ -51,3 +51,13 @@ class MongoClientManager:
             [("identifiedBy.source_id", 1), ("received_at", 1)],
             name="resolution_requests_source_received_at",
         )
+
+        await db["user_actions"].create_index(
+            "about_entity_mention",
+            name="user_actions_about_entity_mention",
+        )
+
+        await db["cluster_sizes"].create_index(
+            "size",
+            name="idx_cluster_sizes_size",
+        )

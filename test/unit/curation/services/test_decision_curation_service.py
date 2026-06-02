@@ -29,7 +29,10 @@ from test.unit.factories import (
 
 @pytest.fixture
 def decision_repository() -> MagicMock:
-    return create_autospec(DecisionRepository, instance=True)
+    mock = create_autospec(DecisionRepository, instance=True)
+    # Default: no review counts — list_decisions defaults to 0 for missing keys.
+    mock.find_review_counts.return_value = {}
+    return mock
 
 
 @pytest.fixture
@@ -146,6 +149,7 @@ class TestListDecisions:
             filters=DecisionFilters(search="example"),
             cursor_params=CursorParams(),
             mention_identifiers=identifiers,
+            reviewed=None,
         )
         assert len(result.results) == 1
 
@@ -188,6 +192,7 @@ class TestListDecisions:
             filters=DecisionFilters(),
             cursor_params=CursorParams(),
             mention_identifiers=None,
+            reviewed=None,
         )
 
     async def test_list_decisions_translates_mongo_outage_to_service_unavailable(

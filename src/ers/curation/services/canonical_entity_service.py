@@ -11,6 +11,7 @@ from ers.curation.domain.data_transfer_objects import (
 )
 from ers.curation.services._pymongo_translation import translate_mongo_errors
 from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
+from ers.resolution_decision_store.domain.cluster_size_index import ClusterSizeIndex
 
 
 class CanonicalEntityService:
@@ -22,9 +23,11 @@ class CanonicalEntityService:
         self,
         decision_repository: DecisionRepository,
         entity_mention_repository: EntityMentionCurationRepository,
+        cluster_size_index: ClusterSizeIndex | None = None,
     ) -> None:
         self._decision_repository = decision_repository
         self._entity_mention_repository = entity_mention_repository
+        self._cluster_size_index = cluster_size_index
 
     @translate_mongo_errors
     async def get_proposed_canonical_entity(
@@ -91,6 +94,18 @@ class CanonicalEntityService:
         confidence_score: float,
         similarity_score: float,
     ) -> CanonicalEntityPreview:
+        """Build a canonical entity preview for a given cluster.
+
+        Args:
+            cluster_id: Identifier of the cluster to preview.
+            confidence_score: Model confidence score for the cluster placement.
+            similarity_score: Similarity score between the entity mention and the cluster.
+
+        Returns:
+            A ``CanonicalEntityPreview`` populated with the top entity mentions and
+            the cluster cardinality sourced from the ``ClusterSizeIndex`` projection.
+            When no ``ClusterSizeIndex`` was injected, ``cluster_size`` defaults to 0.
+        """
         mention_ids = await self._decision_repository.find_mention_ids_by_cluster(
             cluster_id,
             limit=self.DEFAULT_TOP_ENTITIES_LIMIT,
@@ -101,10 +116,17 @@ class CanonicalEntityService:
             limit=self.DEFAULT_TOP_ENTITIES_LIMIT,
         )
 
+        cluster_size = (
+            await self._cluster_size_index.get_size(cluster_id)
+            if self._cluster_size_index is not None
+            else 0
+        )
+
         return CanonicalEntityPreview(
             cluster_id=cluster_id,
             confidence_score=confidence_score,
             similarity_score=similarity_score,
+            cluster_size=cluster_size,
             top_entities=self._to_entity_mention_previews(entity_mentions),
         )
 

@@ -144,6 +144,7 @@ class TestGetSelectedCluster:
             cluster_id="cluster-1",
             confidence_score=0.95,
             similarity_score=0.9,
+            cluster_size=4,
             top_entities=[],
         )
         user_action_service.get_selected_cluster_preview.return_value = preview
@@ -237,6 +238,7 @@ class TestGetCandidates:
             cluster_id="cluster-2",
             confidence_score=0.7,
             similarity_score=0.65,
+            cluster_size=6,
             top_entities=[],
         )
         user_action_service.get_candidate_previews.return_value = PaginatedResult(

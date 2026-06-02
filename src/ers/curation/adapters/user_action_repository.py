@@ -113,6 +113,14 @@ class MongoUserActionCurationRepository(
 
     @staticmethod
     def _build_filter_query(filters: UserActionFilters | None) -> dict:
+        """Build a MongoDB query document from the given filter criteria.
+
+        Args:
+            filters: The filter criteria to apply.  ``None`` means no filter.
+
+        Returns:
+            A MongoDB query document suitable for ``collection.find()``.
+        """
         if filters is None:
             return {}
         query: dict = {}
@@ -127,4 +135,6 @@ class MongoUserActionCurationRepository(
             time_constraint["$lte"] = filters.time_range_end
         if time_constraint:
             query["created_at"] = time_constraint
+        if filters.about_entity_mention is not None:
+            query["about_entity_mention"] = filters.about_entity_mention.model_dump(mode="python")
         return query

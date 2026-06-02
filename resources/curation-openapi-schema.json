@@ -2362,10 +2362,30 @@
             "title": "Total Canonical Entities",
             "description": "Total number of distinct canonical entity clusters."
           },
-          "average_cluster_size": {
+          "cluster_size_average": {
             "type": "number",
-            "title": "Average Cluster Size",
-            "description": "Average number of entity mentions per canonical entity cluster."
+            "title": "Cluster Size Average",
+            "description": "Average decisions per cluster."
+          },
+          "cluster_size_median": {
+            "type": "number",
+            "title": "Cluster Size Median",
+            "description": "Median (p50) cluster size."
+          },
+          "cluster_size_p95": {
+            "type": "integer",
+            "title": "Cluster Size P95",
+            "description": "95th-percentile cluster size — surfaces long-tail outliers."
+          },
+          "cluster_size_max": {
+            "type": "integer",
+            "title": "Cluster Size Max",
+            "description": "Largest cluster size."
+          },
+          "cluster_singletons_count": {
+            "type": "integer",
+            "title": "Cluster Singletons Count",
+            "description": "Number of clusters of size 1."
           },
           "resolution_requests": {
             "type": "integer",
@@ -2377,7 +2397,11 @@
         "required": [
           "total_entity_mentions",
           "total_canonical_entities",
-          "average_cluster_size",
+          "cluster_size_average",
+          "cluster_size_median",
+          "cluster_size_p95",
+          "cluster_size_max",
+          "cluster_singletons_count",
           "resolution_requests"
         ],
         "title": "RegistryStatistics",
