@@ -10,6 +10,7 @@ from ers.commons.adapters.tracing import trace_function
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 from ers.resolution_decision_store.domain.cluster_size_index import ClusterSizeIndex
+from ers.resolution_decision_store.domain.outcome import is_same_outcome
 
 _log = logging.getLogger(__name__)
 
@@ -40,11 +41,15 @@ class DecisionStoreService:
             candidates: list[ClusterReference],
             updated_at: datetime,
     ) -> Decision:
-        """Store or atomically replace a decision, short-circuiting on unchanged placement.
+        """Store or atomically replace a decision, short-circuiting on an unchanged outcome.
 
-        If the stored ``current_placement.cluster_id`` already matches ``current.cluster_id``,
-        the write is skipped and the existing Decision is returned unchanged (R1).
-        ``updated_at`` is bumped only when the placement actually changes.
+        The write is skipped (and the existing Decision returned unchanged) only
+        when the incoming *outcome* is identical to the stored one — same
+        ``current_placement`` **and** same (truncated) ``candidates``.  Any
+        material change (cluster id, confidence, similarity, or candidate
+        ordering) writes through and bumps ``updated_at`` so the decision
+        re-surfaces for curator review.  A same-cluster confidence change is
+        therefore *not* a no-op.
 
         Args:
             identifier: Entity mention triad for this decision.
@@ -61,13 +66,6 @@ class DecisionStoreService:
             RepositoryOperationError: On unexpected MongoDB error.
         """
         existing = await self._repository.find_by_triad(identifier)
-        if existing is not None and existing.current_placement.cluster_id == current.cluster_id:
-            _log.debug(
-                "Placement unchanged — short-circuiting write",
-                extra={"cluster_id": current.cluster_id},
-            )
-            trace.get_current_span().set_attribute("decision_store.placement_unchanged", True)
-            return existing
 
         max_candidates = config.DECISION_STORE_MAX_CANDIDATES
         if len(candidates) > max_candidates:
@@ -75,12 +73,22 @@ class DecisionStoreService:
                 "Candidate list truncated",
                 extra={"original": len(candidates), "max": max_candidates},
             )
+        truncated_candidates = candidates[:max_candidates]
+
+        if existing is not None and is_same_outcome(existing, current, truncated_candidates):
+            _log.debug(
+                "Outcome unchanged — short-circuiting write",
+                extra={"cluster_id": current.cluster_id},
+            )
+            trace.get_current_span().set_attribute("decision_store.placement_unchanged", True)
+            return existing
+
         # Pass existing so the repository skips its own pre-read (N2).
         # existing=None → insert path; existing=Decision → update path (R2 stale filter).
         decision = await self._repository.upsert_decision(
             identifier=identifier,
             current=current,
-            candidates=candidates[:max_candidates],
+            candidates=truncated_candidates,
             updated_at=updated_at,
             existing=existing,
         )
