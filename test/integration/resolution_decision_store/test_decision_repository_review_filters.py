@@ -12,6 +12,7 @@ import pytest
 from erspec.models.core import ClusterReference, EntityMentionIdentifier
 
 from ers.commons.domain.data_transfer_objects import CursorParams
+from ers.curation.adapters.review_state_reader import MongoReviewStateReader
 from ers.curation.domain.data_transfer_objects import DecisionFilters
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 
@@ -112,3 +113,39 @@ async def test_needs_revisit_combined_filter(repo, seeded):
     assert await _ids(repo, ever_reviewed=True, reviewed_since_placement=False) == {
         seeded["revisit"]
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_find_by_id_returns_reviewed_decision_without_counter(repo, seeded):
+    """The previous_review_count strip (``_from_document``) must also hold on the
+    single-document read path — reading a counter-bearing decision must validate."""
+    decision = await repo.find_by_id(seeded["rev"])
+    assert decision is not None
+    assert decision.id == seeded["rev"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_reintegration_preserves_counter_and_flips_reviewed(repo, mongo_db):
+    """B5 acceptance: a material ERE re-integration preserves the review counter,
+    advances ``updated_at``, and flips ``reviewed_since_placement`` back to False
+    (the prior action now predates the new placement)."""
+    reader = MongoReviewStateReader(mongo_db)
+    t1 = _T0 + timedelta(seconds=5)
+    t2 = _T0 + timedelta(seconds=10)
+
+    decision = await repo.upsert_decision(_ident("s-re"), _cluster("A"), [], _T0)
+    await repo.increment_review_count(decision.id)
+    await _insert_action(mongo_db, "s-re", t1)
+
+    reloaded = await repo.find_by_id(decision.id)
+    assert await reader.reviewed_since_placement([reloaded]) == {decision.id: True}
+
+    # ERE re-integration moves the placement (material change) at a later instant.
+    updated = await repo.upsert_decision(_ident("s-re"), _cluster("B"), [], t2)
+
+    assert (await repo.find_review_counts([decision.id])).get(decision.id) == 1
+    assert updated.current_placement.cluster_id == "B"
+    assert updated.updated_at == t2
+    assert await reader.reviewed_since_placement([updated]) == {decision.id: False}

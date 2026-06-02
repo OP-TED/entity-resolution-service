@@ -166,14 +166,22 @@ class MongoDecisionRepository(
     )
 
     def _from_document(self, doc: dict[str, Any]) -> Decision:
-        """Strip the denormalised ``previous_review_count`` before validation.
+        """Strip derived/denormalised fields before ``Decision`` validation.
 
-        ``previous_review_count`` is a denormalised counter stored on the decision
-        document (written by ``increment_review_count``), but the ``Decision``
-        domain model forbids extra fields. It is read separately via
-        ``find_review_counts`` and must not reach ``model_validate`` here.
+        The ``Decision`` domain model forbids extra fields, but decision documents
+        (or aggregation outputs) may carry adapter-only fields that are surfaced
+        through other channels:
+
+        - ``previous_review_count`` — a denormalised counter written by
+          ``increment_review_count`` and read via ``find_review_counts``;
+        - ``cluster_size`` — a value derived by the cluster-size ordering
+          aggregation (``$lookup`` on ``cluster_sizes``).
+
+        Stripping both here is the single funnel for every read path, so callers
+        never hand a polluted document to ``model_validate``.
         """
         doc.pop(_FIELD_PREVIOUS_REVIEW_COUNT, None)
+        doc.pop(_FIELD_CLUSTER_SIZE, None)
         return super()._from_document(doc)
 
     def _build_query(self, filters: DecisionFilters) -> dict[str, Any]:
@@ -884,11 +892,11 @@ class MongoDecisionRepository(
         async for doc in agg_cursor:
             raw_docs.append(doc)
 
+        # Capture the derived cluster_size for cursor encoding *before* the
+        # documents are converted (``_from_document`` strips derived fields).
         last_cluster_size: int | None = raw_docs[-1].get(_FIELD_CLUSTER_SIZE) if raw_docs else None
 
-        # Strip the derived cluster_size field before handing to _from_document.
-        decisions = [self._from_document({k: v for k, v in doc.items() if k != _FIELD_CLUSTER_SIZE})
-                     for doc in raw_docs]
+        decisions = [self._from_document(doc) for doc in raw_docs]
         return decisions, last_cluster_size
 
     async def find_delta_for_source(

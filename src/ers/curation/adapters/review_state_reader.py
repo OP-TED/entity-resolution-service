@@ -1,9 +1,15 @@
 """Curation-owned read of review-state derived from the user_actions log.
 
-Computes ``reviewed_since_placement`` for a page of decisions by reading the
-``user_actions`` collection — which curation owns. Keeping this read on the
-curation side (rather than inside the decision-store adapter) preserves the
-single-owner-per-collection boundary of ADR-D1N / ADR-B2N (A1).
+Computes the per-row ``reviewed_since_placement`` flag for a page of decisions by
+reading the ``user_actions`` collection — which curation owns. Moving this
+*flag-attachment* read out of the decision-store adapter (A1) restores the
+single-owner-per-collection boundary of ADR-D1N / ADR-B2N for the projection path.
+
+Scope note: the ``reviewed_since_placement`` *filter* (the ``$lookup`` joining
+``user_actions`` inside the paginated decision aggregation) still lives in the
+decision-store adapter, because it must run at the database level to keep keyset
+pagination correct. That remaining cross-collection join is an intentional,
+documented exception, not covered by this reader.
 """
 from typing import Any, Protocol
 

@@ -196,8 +196,8 @@ class DecisionCurationService:
     async def accept_decision(self, decision_id: str, actor: str) -> None:
         """Accept the top candidate for a decision.
 
-        After recording the user action, forwards a resolveConsideringRecommendation
-        request to ERE for re-evaluation with the current placement as the proposed cluster.
+        After recording the user action, forwards an ERE re-evaluation request
+        carrying ``proposed_cluster_ids=[current placement]`` (re-confirm).
 
         Raises:
             NotFoundError: If the decision does not exist.
@@ -214,8 +214,9 @@ class DecisionCurationService:
     async def reject_decision(self, decision_id: str, actor: str) -> None:
         """Reject all candidates for a decision.
 
-        After recording the user action, forwards a resolveWithExclusions
-        request to ERE for re-evaluation excluding all current candidates.
+        After recording the user action, forwards an ERE re-evaluation request
+        carrying ``excluded_cluster_ids`` covering the current placement **and**
+        all candidates (deduplicated) — see ``_reject_exclusion_ids``.
 
         Raises:
             NotFoundError: If the decision does not exist.
@@ -232,8 +233,8 @@ class DecisionCurationService:
     async def assign_decision(self, decision_id: str, cluster_id: str, actor: str) -> None:
         """Assign a decision to an alternative cluster.
 
-        After recording the user action, forwards a resolveConsideringRecommendation
-        request to ERE for re-evaluation with the assigned cluster as the proposed cluster.
+        After recording the user action, forwards an ERE re-evaluation request
+        carrying ``proposed_cluster_ids=[chosen cluster]``.
 
         Raises:
             NotFoundError: If the decision does not exist.

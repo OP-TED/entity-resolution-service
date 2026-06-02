@@ -742,6 +742,30 @@ class TestRejectDecisionPublishesERE:
         assert excluded.count(placement.cluster_id) == 1
         assert set(excluded) == {placement.cluster_id, other.cluster_id}
 
+    async def test_reject_with_no_candidates_still_excludes_the_placement(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+        user_action_service: MagicMock,
+        ere_publish_service: MagicMock,
+    ) -> None:
+        """C4#2: even when the decision has no candidates, the exclusion set is
+        non-empty — it still carries the current placement."""
+        decision = DecisionFactory.build(candidates=[])
+        entity_mention = EntityMentionFactory.build(
+            identifiedBy=decision.about_entity_mention
+        )
+        decision_repository.find_by_id.return_value = decision
+        entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
+
+        await service.reject_decision(decision.id, actor="curator")
+
+        request: EntityMentionResolutionRequest = (
+            ere_publish_service.publish_request.call_args[0][0]
+        )
+        assert request.excluded_cluster_ids == [decision.current_placement.cluster_id]
+
     async def test_reject_swallows_ere_publish_error(
         self,
         service: DecisionCurationService,
@@ -759,8 +783,13 @@ class TestRejectDecisionPublishesERE:
         entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
         ere_publish_service.publish_request.side_effect = ConnectionError("Redis down")
 
-        # Must not raise
+        # Must not raise — and the curation action itself still succeeds:
+        # the user action is recorded even though the ERE publish failed.
         await service.reject_decision(decision.id, actor="curator")
+
+        user_action_service.record_reject.assert_awaited_once_with(
+            actor="curator", decision=decision
+        )
 
 
 class TestReevaluationAuditLog:
