@@ -97,6 +97,8 @@ class DecisionCurationService:
         filters: DecisionFilters,
         cursor_params: CursorParams,
         *,
+        ever_reviewed: bool | None = None,
+        reviewed_since_placement: bool | None = None,
         reviewed: bool | None = None,
     ) -> CursorPage[DecisionSummary]:
         """List decisions with filtering, cursor pagination, and embedded entity data.
@@ -104,16 +106,25 @@ class DecisionCurationService:
         Args:
             filters: Field-level filter criteria (entity type, confidence, etc.).
             cursor_params: Cursor-based pagination parameters.
-            reviewed: When True, return only decisions where a user_action exists
-                after the current placement timestamp.  When False, return only
-                decisions with no such action (Pending).  None disables the filter.
+            ever_reviewed: When True/False, filter on whether any curator action has
+                ever been recorded against the decision. None disables it.
+            reviewed_since_placement: When True/False, filter on whether a curator
+                action exists since the current placement. None disables it.
+            reviewed: Deprecated alias of ``reviewed_since_placement`` kept for
+                backward compatibility; ignored when ``reviewed_since_placement``
+                is set.
 
         Raises:
             ServiceUnavailableError: If MongoDB is unreachable for any of the
-                three repository reads (entity-mention search, decision
-                pagination, entity-mention batch fetch). The curation API
-                exception handler maps this to HTTP 503.
+                repository reads. The curation API exception handler maps this to
+                HTTP 503.
         """
+        # Backward-compat: the legacy ``reviewed`` boolean maps to the
+        # "since current placement" primitive.
+        effective_reviewed_since_placement = (
+            reviewed_since_placement if reviewed_since_placement is not None else reviewed
+        )
+
         mention_identifiers = None
         if filters.search is not None:
             mention_identifiers = await self._entity_mention_repository.search_identifiers(
@@ -126,7 +137,8 @@ class DecisionCurationService:
             filters=filters,
             cursor_params=cursor_params,
             mention_identifiers=mention_identifiers,
-            reviewed=reviewed,
+            ever_reviewed=ever_reviewed,
+            reviewed_since_placement=effective_reviewed_since_placement,
         )
 
         identifiers = [d.about_entity_mention for d in page.results]
@@ -138,9 +150,12 @@ class DecisionCurationService:
 
         decision_ids = [d.id for d in page.results]
         review_counts = await self._decision_repository.find_review_counts(decision_ids)
+        review_states = await self._decision_repository.find_reviewed_since_placement(
+            page.results
+        )
 
         decision_summaries = [
-            self._to_decision_summary(decision, mention_map, review_counts)
+            self._to_decision_summary(decision, mention_map, review_counts, review_states)
             for decision in page.results
         ]
 
@@ -279,6 +294,7 @@ class DecisionCurationService:
         decision: Decision,
         mention_map: dict[tuple[str, str, str], EntityMention],
         review_counts: dict[str, int] | None = None,
+        review_states: dict[str, bool] | None = None,
     ) -> DecisionSummary:
         """Build a DecisionSummary from a Decision and its related data.
 
@@ -287,6 +303,8 @@ class DecisionCurationService:
             mention_map: Index of EntityMention objects keyed by (source_id, request_id, entity_type).
             review_counts: Optional mapping of decision_id → previous_review_count.
                 Defaults to 0 for missing keys.
+            review_states: Optional mapping of decision_id → reviewed_since_placement.
+                Defaults to False for missing keys.
 
         Returns:
             A DecisionSummary with all fields populated.
@@ -295,6 +313,7 @@ class DecisionCurationService:
         key = (emi.source_id, emi.request_id, emi.entity_type)
         mention = mention_map.get(key)
         count = (review_counts or {}).get(decision.id, 0)
+        reviewed_since_placement = (review_states or {}).get(decision.id, False)
 
         return DecisionSummary(
             id=decision.id,
@@ -306,6 +325,7 @@ class DecisionCurationService:
             created_at=decision.created_at,
             updated_at=decision.updated_at,
             previous_review_count=count,
+            reviewed_since_placement=reviewed_since_placement,
         )
 
 

@@ -30,8 +30,9 @@ from test.unit.factories import (
 @pytest.fixture
 def decision_repository() -> MagicMock:
     mock = create_autospec(DecisionRepository, instance=True)
-    # Default: no review counts — list_decisions defaults to 0 for missing keys.
+    # Default: no review counts / states — list_decisions defaults to 0 / False.
     mock.find_review_counts.return_value = {}
+    mock.find_reviewed_since_placement.return_value = {}
     return mock
 
 
@@ -102,6 +103,73 @@ class TestListDecisions:
             entity_mention.parsed_representation
         )
 
+    async def test_list_decisions_sets_reviewed_since_placement_from_states(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+    ) -> None:
+        decision = DecisionFactory.build()
+        decision_repository.find_with_filters.return_value = CursorPage(
+            results=[decision], next_cursor=None
+        )
+        decision_repository.find_review_counts.return_value = {decision.id: 2}
+        decision_repository.find_reviewed_since_placement.return_value = {decision.id: True}
+        entity_mention_repository.find_by_identifiers.return_value = []
+
+        result = await service.list_decisions(
+            filters=DecisionFilters(), cursor_params=CursorParams()
+        )
+
+        summary = result.results[0]
+        # The two primitives that the UI composes into the four states.
+        assert summary.previous_review_count == 2
+        assert summary.reviewed_since_placement is True
+
+    async def test_list_decisions_forwards_review_filters(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+    ) -> None:
+        decision_repository.find_with_filters.return_value = CursorPage(
+            results=[], next_cursor=None
+        )
+        entity_mention_repository.find_by_identifiers.return_value = []
+
+        # "Needs revisit" filter = ever_reviewed True + reviewed_since_placement False.
+        await service.list_decisions(
+            filters=DecisionFilters(),
+            cursor_params=CursorParams(),
+            ever_reviewed=True,
+            reviewed_since_placement=False,
+        )
+
+        _, kwargs = decision_repository.find_with_filters.call_args
+        assert kwargs["ever_reviewed"] is True
+        assert kwargs["reviewed_since_placement"] is False
+
+    async def test_list_decisions_legacy_reviewed_maps_to_since_placement(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+    ) -> None:
+        decision_repository.find_with_filters.return_value = CursorPage(
+            results=[], next_cursor=None
+        )
+        entity_mention_repository.find_by_identifiers.return_value = []
+
+        # Deprecated reviewed=True is honoured when reviewed_since_placement is unset.
+        await service.list_decisions(
+            filters=DecisionFilters(),
+            cursor_params=CursorParams(),
+            reviewed=True,
+        )
+
+        _, kwargs = decision_repository.find_with_filters.call_args
+        assert kwargs["reviewed_since_placement"] is True
+
     async def test_list_decisions_empty_results(
         self,
         service: DecisionCurationService,
@@ -149,7 +217,8 @@ class TestListDecisions:
             filters=DecisionFilters(search="example"),
             cursor_params=CursorParams(),
             mention_identifiers=identifiers,
-            reviewed=None,
+            ever_reviewed=None,
+            reviewed_since_placement=None,
         )
         assert len(result.results) == 1
 
@@ -192,7 +261,8 @@ class TestListDecisions:
             filters=DecisionFilters(),
             cursor_params=CursorParams(),
             mention_identifiers=None,
-            reviewed=None,
+            ever_reviewed=None,
+            reviewed_since_placement=None,
         )
 
     async def test_list_decisions_translates_mongo_outage_to_service_unavailable(

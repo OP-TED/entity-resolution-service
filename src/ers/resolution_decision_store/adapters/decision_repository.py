@@ -36,6 +36,8 @@ _FIELD_CLUSTER_ID = "current_placement.cluster_id"
 _FIELD_ABOUT_ENTITY_MENTION = "about_entity_mention"
 _FIELD_CREATED_AT = "created_at"
 _FIELD_UPDATED_AT = "updated_at"
+_FIELD_PREVIOUS_REVIEW_COUNT = "previous_review_count"
+_COLLECTION_USER_ACTIONS = "user_actions"
 # Derived field added by the cluster-size aggregation pipeline branch.
 # Not stored on decision documents; computed via $lookup + $addFields.
 _FIELD_CLUSTER_SIZE = "cluster_size"
@@ -51,7 +53,8 @@ class DecisionRepository(BaseDecisionRepository):
         cursor_params: CursorParams | None = None,
         mention_identifiers: list[EntityMentionIdentifier] | None = None,
         *,
-        reviewed: bool | None = None,
+        ever_reviewed: bool | None = None,
+        reviewed_since_placement: bool | None = None,
     ) -> CursorPage[Decision]:
         """Find decisions with optional filtering and cursor-based pagination.
 
@@ -64,12 +67,16 @@ class DecisionRepository(BaseDecisionRepository):
             mention_identifiers: When provided, restricts results to decisions
                 whose ``about_entity_mention`` is in this list (used for
                 full-text search pre-filtering).
-            reviewed: When True, return only decisions where a user_action
-                exists with ``created_at`` after the decision's current
-                placement timestamp (``updated_at`` or ``created_at``).
-                When False, return only decisions with no such action (Pending).
-                When None (default), no review-state filter is applied and the
-                pipeline is identical to the pre-existing behaviour.
+            ever_reviewed: When True, return only decisions with at least one
+                recorded curator action (``previous_review_count > 0``); when
+                False, only decisions never reviewed. None disables the filter.
+            reviewed_since_placement: When True, return only decisions where a
+                user_action exists with ``created_at`` after the decision's
+                current placement timestamp (``updated_at`` or ``created_at``);
+                when False, only decisions with no such action. None disables
+                the filter. The two flags are orthogonal: combine
+                ``ever_reviewed=True`` with ``reviewed_since_placement=False`` to
+                select decisions that need re-visiting after an ERE update.
         """
 
     @abstractmethod
@@ -133,6 +140,27 @@ class DecisionRepository(BaseDecisionRepository):
         Returns:
             Mapping of ``{decision_id: count}``.  IDs absent from the collection
             are omitted (callers should default-to-0 on missing keys).
+        """
+
+    @abstractmethod
+    async def find_reviewed_since_placement(
+        self, decisions: list[Decision]
+    ) -> dict[str, bool]:
+        """Return, per decision, whether a curator action exists since its placement.
+
+        Mirrors ``find_review_counts``: a single batched read used by the curation
+        service to attach the ``reviewed_since_placement`` flag to
+        ``DecisionSummary`` rows, without changing the shared ``find_with_filters``
+        return type.  "Since the current placement" means a user_action whose
+        ``created_at`` is after ``updated_at`` (or ``created_at`` when never
+        re-placed).
+
+        Args:
+            decisions: The page of decisions to evaluate.
+
+        Returns:
+            Mapping of ``{decision.id: bool}`` for every decision in the input
+            (decisions with no recent action map to ``False``).
         """
 
 
@@ -532,13 +560,73 @@ class MongoDecisionRepository(
             result[doc["_id"]] = doc.get("previous_review_count", 0)
         return result
 
+    @staticmethod
+    def _triad_key(mention: dict[str, Any]) -> tuple[Any, Any, Any]:
+        """Stable identity key for an ``about_entity_mention`` subdocument."""
+        return (
+            mention.get("source_id"),
+            mention.get("request_id"),
+            mention.get("entity_type"),
+        )
+
+    async def find_reviewed_since_placement(
+        self, decisions: list[Decision]
+    ) -> dict[str, bool]:
+        """Return, per decision, whether a curator action exists since its placement.
+
+        One indexed read over ``user_actions``: an ``$or`` of per-decision
+        ``{about_entity_mention, created_at > since}`` clauses (``since`` is the
+        decision's ``updated_at`` or, when never re-placed, its ``created_at``).
+        The page is bounded by the page size, so the disjunction is small.
+
+        Args:
+            decisions: The page of decisions to evaluate.
+
+        Returns:
+            ``{decision.id: bool}`` for every input decision.
+        """
+        result: dict[str, bool] = {d.id: False for d in decisions}
+        if not decisions:
+            return result
+
+        or_clauses: list[dict[str, Any]] = []
+        key_to_id: dict[tuple[Any, Any, Any], str] = {}
+        for decision in decisions:
+            since = decision.updated_at or decision.created_at
+            # mode="python" mirrors how user_actions persist the triad (see
+            # UserActionCurationRepository); the key uses the JSON-safe form so
+            # an enum entity_type compares equal to its stored string value.
+            or_clauses.append(
+                {
+                    _FIELD_ABOUT_ENTITY_MENTION: decision.about_entity_mention.model_dump(
+                        mode="python"
+                    ),
+                    _FIELD_CREATED_AT: {"$gt": since},
+                }
+            )
+            key_to_id[self._triad_key(decision.about_entity_mention.model_dump(mode="json"))] = (
+                decision.id
+            )
+
+        user_actions = self._collection.database[_COLLECTION_USER_ACTIONS]
+        cursor = user_actions.find(
+            {"$or": or_clauses},
+            projection={_FIELD_ABOUT_ENTITY_MENTION: 1, "_id": 0},
+        )
+        async for doc in cursor:
+            decision_id = key_to_id.get(self._triad_key(doc.get(_FIELD_ABOUT_ENTITY_MENTION, {})))
+            if decision_id is not None:
+                result[decision_id] = True
+        return result
+
     async def find_with_filters(
         self,
         filters: DecisionFilters | None = None,
         cursor_params: CursorParams | None = None,
         mention_identifiers: list[EntityMentionIdentifier] | None = None,
         *,
-        reviewed: bool | None = None,
+        ever_reviewed: bool | None = None,
+        reviewed_since_placement: bool | None = None,
     ) -> CursorPage[Decision]:
         """Cursor-paginated query over decisions with optional filtering.
 
@@ -547,19 +635,21 @@ class MongoDecisionRepository(
         2. Decision Store bulk sync use case: no filters, fixed (updated_at ASC, _id ASC)
 
         When ``filters`` is None, performs unfiltered traversal in Decision Store mode.
-        When ``reviewed`` is not None, the curation path switches to an aggregation
-        pipeline that performs a ``$lookup`` against ``user_actions`` to apply the
-        review-state predicate.  The bulk-sync path (``filters=None``) always uses
-        ``find()`` regardless of ``reviewed`` (it does not set this flag).
+        ``ever_reviewed`` is a plain ``$match`` on the stored ``previous_review_count``.
+        When ``reviewed_since_placement`` is not None, the curation path switches to an
+        aggregation that ``$lookup``s ``user_actions`` and applies the review-state
+        predicate *before* sort/limit (so pagination never under-fills).  The bulk-sync
+        path (``filters=None``) ignores both flags.
 
         Args:
             filters: Optional filter criteria. None for unfiltered traversal.
             cursor_params: Pagination params (cursor, limit). If None, uses default limit.
             mention_identifiers: When provided, restricts results to decisions whose
                 ``about_entity_mention`` is in this list.
-            reviewed: When True, include only decisions with a matching user_action
-                created after the current placement timestamp.  When False, include
-                only decisions with no such action.  None disables the filter.
+            ever_reviewed: When True/False, filter on whether any curator action has
+                ever been recorded (``previous_review_count > 0``). None disables it.
+            reviewed_since_placement: When True/False, filter on whether a user_action
+                exists since the current placement. None disables it.
 
         Returns:
             A ``CursorPage`` containing results and an optional ``next_cursor``.
@@ -569,7 +659,7 @@ class MongoDecisionRepository(
 
         count = 0
 
-        # Unfiltered bulk sync mode (Decision Store) — reviewed flag is ignored here.
+        # Unfiltered bulk sync mode (Decision Store) — review flags are ignored here.
         if filters is None:
             query: dict[str, Any] = {}
             sort_field = _FIELD_UPDATED_AT
@@ -589,6 +679,12 @@ class MongoDecisionRepository(
                     for mi in mention_identifiers
                 ]
                 query[_FIELD_ABOUT_ENTITY_MENTION] = {"$in": id_docs}
+
+            if ever_reviewed is not None:
+                # "$not $gt 0" matches a missing/None counter as never-reviewed.
+                query[_FIELD_PREVIOUS_REVIEW_COUNT] = (
+                    {"$gt": 0} if ever_reviewed else {"$not": {"$gt": 0}}
+                )
 
             count = await self._collection.count_documents(query)
 
@@ -611,31 +707,19 @@ class MongoDecisionRepository(
         # Cluster-size orderings require aggregation because the sort field is
         # derived via $lookup + $addFields and is not stored on the decision doc.
         # ``last_sort_raw_value`` captures the cluster_size integer for cursor
-        # encoding when this path is active; it stays None for all other paths.
-        last_sort_raw_value: Any = None
-
+        # encoding when that path is active; it stays None for all other paths.
         is_cluster_size_ordering = (
             filters is not None
             and filters.ordering in self._AGGREGATION_ORDERINGS
         )
-
-        if is_cluster_size_ordering:
-            results, last_sort_raw_value = await self._fetch_with_cluster_size_sort(
-                query=query,
-                sort=sort,
-                fetch_limit=fetch_limit,
-                reviewed=reviewed,
-            )
-        elif reviewed is not None and filters is not None:
-            results = await self._fetch_with_review_filter(
-                query=query,
-                sort=sort,
-                fetch_limit=fetch_limit,
-                reviewed=reviewed,
-            )
-        else:
-            cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
-            results = [self._from_document(doc) async for doc in cursor]
+        results, last_sort_raw_value = await self._fetch_page(
+            query=query,
+            sort=sort,
+            fetch_limit=fetch_limit,
+            filters=filters,
+            reviewed_since_placement=reviewed_since_placement,
+            is_cluster_size_ordering=is_cluster_size_ordering,
+        )
 
         # Encode next cursor if there are more results
         next_cursor = None
@@ -653,6 +737,39 @@ class MongoDecisionRepository(
 
         return CursorPage(results=results, count=count, next_cursor=next_cursor)
 
+    async def _fetch_page(
+        self,
+        *,
+        query: dict[str, Any],
+        sort: list[tuple[str, int]],
+        fetch_limit: int,
+        filters: DecisionFilters | None,
+        reviewed_since_placement: bool | None,
+        is_cluster_size_ordering: bool,
+    ) -> tuple[list[Decision], Any]:
+        """Select and run the read path; return ``(results, last_sort_raw_value)``.
+
+        ``last_sort_raw_value`` is the derived ``cluster_size`` of the final row
+        for cluster-size orderings (used to encode the next cursor), else None.
+        """
+        if is_cluster_size_ordering:
+            return await self._fetch_with_cluster_size_sort(
+                query=query,
+                sort=sort,
+                fetch_limit=fetch_limit,
+                reviewed=reviewed_since_placement,
+            )
+        if reviewed_since_placement is not None and filters is not None:
+            results = await self._fetch_with_review_filter(
+                query=query,
+                sort=sort,
+                fetch_limit=fetch_limit,
+                reviewed=reviewed_since_placement,
+            )
+            return results, None
+        cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
+        return [self._from_document(doc) async for doc in cursor], None
+
     async def _fetch_with_review_filter(
         self,
         query: dict[str, Any],
@@ -667,17 +784,21 @@ class MongoDecisionRepository(
         ``created_at`` is strictly after the decision's current-placement timestamp
         (``updated_at`` if non-null, else ``created_at``).
 
-        The pipeline:
+        The pipeline filters **before** limiting, so a page never under-fills:
 
         1. ``$match`` — apply the pre-built filter query (same predicates as ``find()``).
-        2. ``$sort``  — apply the requested ordering so cursor pagination is stable.
-        3. ``$limit`` — limit to ``fetch_limit`` before the expensive join.
-        4. ``$lookup`` — correlated sub-pipeline against ``user_actions`` joining on
+        2. ``$lookup`` — correlated sub-pipeline against ``user_actions`` joining on
            the embedded ``about_entity_mention`` triad and the temporal predicate.
-        5. ``$match`` — keep only documents where ``_has_recent_action`` is non-empty
+        3. ``$match`` — keep only documents where ``_has_recent_action`` is non-empty
            (``reviewed=True``) or empty (``reviewed=False``).
+        4. ``$sort`` — apply the requested ordering so cursor pagination is stable.
+        5. ``$limit`` — limit to ``fetch_limit`` after the review filter.
         6. ``$project`` — remove the temporary ``_has_recent_action`` array so that
            ``_from_document`` receives clean decision documents.
+
+        Limiting after (not before) the review ``$match`` is essential: limiting
+        first would let the review filter drop most of a fetched page, returning a
+        short page and prematurely ending pagination.
 
         Args:
             query: Pre-built MongoDB match expression (may include cursor condition).
@@ -697,43 +818,50 @@ class MongoDecisionRepository(
         )
 
         pipeline: list[dict[str, Any]] = [
-            {"$match": query} if query else {"$match": {}},
+            {"$match": query if query else {}},
+            self._recent_action_lookup_stage(),
+            {"$match": review_match},
             {"$sort": sort_stage},
             {"$limit": fetch_limit},
-            {
-                "$lookup": {
-                    "from": "user_actions",
-                    "let": {
-                        "triad": f"${_FIELD_ABOUT_ENTITY_MENTION}",
-                        "since": {"$ifNull": [f"${_FIELD_UPDATED_AT}", f"${_FIELD_CREATED_AT}"]},
-                    },
-                    "pipeline": [
-                        {
-                            "$match": {
-                                "$expr": {
-                                    "$and": [
-                                        {"$eq": ["$about_entity_mention", "$$triad"]},
-                                        {"$gt": ["$created_at", "$$since"]},
-                                    ]
-                                }
-                            }
-                        },
-                        {"$limit": 1},
-                        {"$project": {"_id": 1}},
-                    ],
-                    "as": "_has_recent_action",
-                }
-            },
-            {"$match": review_match},
             {"$project": {"_has_recent_action": 0}},
         ]
 
-        # Remove the empty $match if query was empty (keep pipeline clean)
-        if not query:
-            pipeline[0] = {"$match": {}}
-
         agg_cursor = self._collection.aggregate(pipeline)
         return [self._from_document(doc) async for doc in agg_cursor]  # type: ignore[attr-defined]
+
+    @staticmethod
+    def _recent_action_lookup_stage() -> dict[str, Any]:
+        """Build the correlated ``$lookup`` that flags a user_action since placement.
+
+        Adds ``_has_recent_action`` (non-empty iff such an action exists), joining
+        ``user_actions`` on the embedded ``about_entity_mention`` triad and the
+        temporal predicate ``created_at > (updated_at, else created_at)``.  Shared
+        by the review filter and the cluster-size sort path.
+        """
+        return {
+            "$lookup": {
+                "from": _COLLECTION_USER_ACTIONS,
+                "let": {
+                    "triad": f"${_FIELD_ABOUT_ENTITY_MENTION}",
+                    "since": {"$ifNull": [f"${_FIELD_UPDATED_AT}", f"${_FIELD_CREATED_AT}"]},
+                },
+                "pipeline": [
+                    {
+                        "$match": {
+                            "$expr": {
+                                "$and": [
+                                    {"$eq": ["$about_entity_mention", "$$triad"]},
+                                    {"$gt": ["$created_at", "$$since"]},
+                                ]
+                            }
+                        }
+                    },
+                    {"$limit": 1},
+                    {"$project": {"_id": 1}},
+                ],
+                "as": "_has_recent_action",
+            }
+        }
 
     async def _fetch_with_cluster_size_sort(
         self,
@@ -801,32 +929,7 @@ class MongoDecisionRepository(
                 else {"_has_recent_action": {"$eq": []}}
             )
             pipeline += [
-                {
-                    "$lookup": {
-                        "from": "user_actions",
-                        "let": {
-                            "triad": f"${_FIELD_ABOUT_ENTITY_MENTION}",
-                            "since": {
-                                "$ifNull": [f"${_FIELD_UPDATED_AT}", f"${_FIELD_CREATED_AT}"]
-                            },
-                        },
-                        "pipeline": [
-                            {
-                                "$match": {
-                                    "$expr": {
-                                        "$and": [
-                                            {"$eq": ["$about_entity_mention", "$$triad"]},
-                                            {"$gt": ["$created_at", "$$since"]},
-                                        ]
-                                    }
-                                }
-                            },
-                            {"$limit": 1},
-                            {"$project": {"_id": 1}},
-                        ],
-                        "as": "_has_recent_action",
-                    }
-                },
+                self._recent_action_lookup_stage(),
                 {"$match": review_match},
                 {"$project": {"_has_recent_action": 0}},
             ]

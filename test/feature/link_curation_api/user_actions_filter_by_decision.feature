@@ -20,3 +20,8 @@ Feature: Filter user actions by decision_id
     Given a decision has actions of type ACCEPT_TOP and REJECT_ALL
     When I GET /api/v1/curation/user-actions with decision_id and action_type=ACCEPT_TOP
     Then only the ACCEPT_TOP action is returned
+
+  Scenario: Timeline persists across ERE re-integrations
+    Given a decision reviewed both before and after an ERE re-integration
+    When I GET /api/v1/curation/user-actions with decision_id filter
+    Then the response contains both the pre- and post-re-integration actions

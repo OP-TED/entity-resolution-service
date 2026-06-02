@@ -120,6 +120,16 @@ def test_omit_reviewed_unchanged():
     pass
 
 
+@scenario(FEATURE, "Filter decisions that need re-visiting after an ERE update")
+def test_filter_needs_revisit():
+    pass
+
+
+@scenario(FEATURE, "Each decision row carries both review primitives")
+def test_rows_carry_review_primitives():
+    pass
+
+
 @scenario(FEATURE, "Sort decisions by cluster size ascending")
 def test_sort_by_cluster_size_asc():
     pass
@@ -659,3 +669,46 @@ def decision_ere_reintegrated(
     entity_mention_repository: AsyncMock,
 ) -> None:
     _setup_decisions(decision_repository, entity_mention_repository, 1, prefix="d-reint")
+
+
+@given("a decision that was reviewed before a later ERE update")
+def decision_needs_revisit(
+    decision_repository: AsyncMock,
+    entity_mention_repository: AsyncMock,
+) -> None:
+    decisions, _ = _setup_decisions(
+        decision_repository, entity_mention_repository, 1, prefix="d-revisit"
+    )
+    # Needs revisit: reviewed at least once (count > 0) but not since the current placement.
+    decision_repository.find_review_counts.return_value = {decisions[0].id: 2}
+    decision_repository.find_reviewed_since_placement.return_value = {decisions[0].id: False}
+
+
+@when(
+    "I GET /api/v1/curation/decisions?ever_reviewed=true&reviewed_since_placement=false",
+    target_fixture="response",
+)
+def get_decisions_needs_revisit(client: TestClient) -> Any:
+    return client.get(
+        DECISIONS_URL,
+        params={"ever_reviewed": "true", "reviewed_since_placement": "false"},
+    )
+
+
+@then(
+    "the repository was queried with ever_reviewed true and reviewed_since_placement false"
+)
+def repo_queried_with_review_flags(decision_repository: AsyncMock) -> None:
+    kwargs = decision_repository.find_with_filters.call_args.kwargs
+    assert kwargs["ever_reviewed"] is True
+    assert kwargs["reviewed_since_placement"] is False
+
+
+@then("each summary carries previous_review_count and reviewed_since_placement")
+def summaries_carry_review_primitives(response: Any) -> None:
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results
+    for item in results:
+        assert "previous_review_count" in item
+        assert "reviewed_since_placement" in item

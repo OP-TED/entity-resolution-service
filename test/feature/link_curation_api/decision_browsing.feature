@@ -126,6 +126,19 @@ Feature: Decision browsing and filtering
     When the curator requests the decision list
     Then a paginated list of decision summaries is returned
 
+  # --- Four-state review surface (two primitives) ---
+
+  Scenario: Filter decisions that need re-visiting after an ERE update
+    Given a decision that was reviewed before a later ERE update
+    When I GET /api/v1/curation/decisions?ever_reviewed=true&reviewed_since_placement=false
+    Then the response includes that decision
+    And the repository was queried with ever_reviewed true and reviewed_since_placement false
+
+  Scenario: Each decision row carries both review primitives
+    Given a decision that was reviewed before a later ERE update
+    When the curator requests the decision list
+    Then each summary carries previous_review_count and reviewed_since_placement
+
   # --- Cluster-size sort ---
 
   Scenario: Sort decisions by cluster size ascending

@@ -44,6 +44,11 @@ def test_decision_id_composes_with_action_type_filter():
     pass
 
 
+@scenario(FEATURE, "Timeline persists across ERE re-integrations")
+def test_timeline_persists_across_reintegration():
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Given
 # ---------------------------------------------------------------------------
@@ -141,6 +146,39 @@ def decision_with_mixed_actions(
     return ctx
 
 
+@given(
+    "a decision reviewed both before and after an ERE re-integration",
+    target_fixture="ctx",
+)
+def decision_reviewed_across_reintegration(
+    ctx: dict[str, Any],
+    decision_repository: Any,
+    user_action_repository: Any,
+    entity_mention_repository: Any,
+    user_repository: Any,
+) -> dict[str, Any]:
+    """Two actions for the same triad — one before, one after an ERE re-integration.
+
+    The timeline is keyed by the entity-mention triad (not bounded by the decision's
+    updated_at), so both actions are returned regardless of the re-integration.
+    """
+    decision = DecisionFactory.build()
+    decision_repository.find_by_id.return_value = decision
+
+    pre = UserActionFactory.build(about_entity_mention=decision.about_entity_mention)
+    post = UserActionFactory.build(about_entity_mention=decision.about_entity_mention)
+    user_action_repository.find_with_cursor.return_value = CursorPage(
+        results=[post, pre], count=2, next_cursor=None
+    )
+    entity_mention_repository.find_by_identifiers.return_value = []
+    user_repository.find_by_ids.return_value = []
+
+    ctx["decision_id"] = decision.id
+    ctx["expected_count"] = 2
+    ctx["expected_action_ids"] = {pre.id, post.id}
+    return ctx
+
+
 # ---------------------------------------------------------------------------
 # When
 # ---------------------------------------------------------------------------
@@ -197,3 +235,12 @@ def only_accept_top_returned(response: Any, ctx: dict[str, Any]) -> None:
     assert len(data["results"]) == ctx["expected_count"]
     for result in data["results"]:
         assert result["action_type"] == UserActionType.ACCEPT_TOP.value
+
+
+@then("the response contains both the pre- and post-re-integration actions")
+def response_contains_both_actions(response: Any, ctx: dict[str, Any]) -> None:
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["count"] == ctx["expected_count"]
+    returned_ids = {item["id"] for item in data["results"]}
+    assert returned_ids == ctx["expected_action_ids"]

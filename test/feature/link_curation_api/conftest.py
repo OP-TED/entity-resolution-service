@@ -100,8 +100,9 @@ def ctx() -> dict[str, Any]:
 @pytest.fixture
 def decision_repository() -> AsyncMock:
     mock = create_autospec(DecisionRepository, instance=True)
-    # Default: no review counts — callers default to 0 for missing keys.
+    # Default: no review counts / states — callers default to 0 / False for missing keys.
     mock.find_review_counts.return_value = {}
+    mock.find_reviewed_since_placement.return_value = {}
     return mock
 
 

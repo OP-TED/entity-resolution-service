@@ -98,6 +98,16 @@ class DecisionSummary(FrozenDTO):
             "Persists across ERE re-integrations. Drives the UI 'previously reviewed' indicator."
         ),
     )
+    reviewed_since_placement: bool = Field(
+        default=False,
+        description=(
+            "True iff a curator action exists whose created_at is after the current "
+            "placement boundary (updated_at, else created_at). Derived on read, never "
+            "stored. With previous_review_count the UI composes the review state: "
+            "count==0 -> not reviewed; count>0 and not this flag -> needs revisit; "
+            "this flag -> reviewed and up to date."
+        ),
+    )
 
 
 class ActorSummary(FrozenDTO):

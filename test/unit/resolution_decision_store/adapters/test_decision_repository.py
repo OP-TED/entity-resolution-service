@@ -553,7 +553,7 @@ async def test_find_with_filters_reviewed_none_does_not_contain_lookup(repo, moc
     await repo.find_with_filters(
         filters=DecisionFilters(),
         cursor_params=CursorParams(cursor=None, limit=10),
-        reviewed=None,
+        reviewed_since_placement=None,
     )
 
     mock_collection.aggregate.assert_not_called()
@@ -581,7 +581,7 @@ async def test_find_with_filters_reviewed_true_uses_lookup_and_matches_non_empty
     await repo.find_with_filters(
         filters=DecisionFilters(),
         cursor_params=CursorParams(cursor=None, limit=10),
-        reviewed=True,
+        reviewed_since_placement=True,
     )
 
     mock_collection.aggregate.assert_called_once()
@@ -624,7 +624,7 @@ async def test_find_with_filters_reviewed_false_uses_lookup_and_matches_empty(re
     await repo.find_with_filters(
         filters=DecisionFilters(),
         cursor_params=CursorParams(cursor=None, limit=10),
-        reviewed=False,
+        reviewed_since_placement=False,
     )
 
     mock_collection.aggregate.assert_called_once()
@@ -659,7 +659,7 @@ async def test_find_with_filters_reviewed_pipeline_excludes_has_recent_action_fi
     await repo.find_with_filters(
         filters=DecisionFilters(),
         cursor_params=CursorParams(cursor=None, limit=10),
-        reviewed=True,
+        reviewed_since_placement=True,
     )
 
     pipeline = mock_collection.aggregate.call_args[0][0]
@@ -670,6 +670,112 @@ async def test_find_with_filters_reviewed_pipeline_excludes_has_recent_action_fi
     assert project.get("_has_recent_action", 1) == 0, (
         "$project must exclude _has_recent_action"
     )
+
+
+@pytest.mark.asyncio
+async def test_review_filter_applies_match_before_limit(repo, mock_collection):
+    """D2 regression: the review $match must precede $sort/$limit (no page under-fill)."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(),
+        cursor_params=CursorParams(cursor=None, limit=10),
+        reviewed_since_placement=True,
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    stage_types = [list(s.keys())[0] for s in pipeline]
+    lookup_idx = stage_types.index("$lookup")
+    # The review $match is the first $match after the $lookup.
+    review_match_idx = next(
+        i for i, s in enumerate(pipeline) if i > lookup_idx and "$match" in s
+    )
+    limit_idx = stage_types.index("$limit")
+    assert review_match_idx < limit_idx, (
+        "Review $match must run before $limit, otherwise pagination under-fills"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ever_reviewed_filter_adds_previous_review_count_match(repo, mock_collection):
+    """ever_reviewed=True adds a plain previous_review_count > 0 match (no extra $lookup)."""
+    from ers.commons.domain.data_transfer_objects import DecisionFilters
+
+    captured: dict = {}
+
+    def _find(query, *args, **kwargs):
+        captured["query"] = query
+        return _make_async_cursor([])
+
+    mock_collection.find = MagicMock(side_effect=_find)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+    mock_collection.aggregate = AsyncMock()
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(),
+        cursor_params=CursorParams(cursor=None, limit=10),
+        ever_reviewed=True,
+    )
+
+    mock_collection.aggregate.assert_not_called()  # counter match needs no aggregation
+    assert captured["query"].get("previous_review_count") == {"$gt": 0}
+
+
+@pytest.mark.asyncio
+async def test_find_reviewed_since_placement_maps_matches(repo, mock_collection):
+    """Returns True only for decisions whose triad has a user_action since placement."""
+    now = datetime.now(UTC)
+    reviewed = Decision(
+        id="hash-reviewed",
+        about_entity_mention=make_identifier(source_id="s1", request_id="r1"),
+        current_placement=make_cluster(),
+        candidates=[],
+        created_at=now,
+        updated_at=None,
+    )
+    pending = Decision(
+        id="hash-pending",
+        about_entity_mention=make_identifier(source_id="s2", request_id="r2"),
+        current_placement=make_cluster(),
+        candidates=[],
+        created_at=now,
+        updated_at=None,
+    )
+
+    # user_actions returns a recent action only for the reviewed decision's triad.
+    ua_collection = MagicMock()
+    ua_collection.find = MagicMock(
+        return_value=_make_async_cursor(
+            [{"about_entity_mention": {"source_id": "s1", "request_id": "r1",
+                                       "entity_type": "Person"}}]
+        )
+    )
+    database = MagicMock()
+    database.__getitem__ = MagicMock(return_value=ua_collection)
+    mock_collection.database = database
+
+    result = await repo.find_reviewed_since_placement([reviewed, pending])
+
+    assert result == {"hash-reviewed": True, "hash-pending": False}
+    # Single batched query, restricted to user_actions.
+    database.__getitem__.assert_called_once_with("user_actions")
+    ua_query = ua_collection.find.call_args[0][0]
+    assert "$or" in ua_query and len(ua_query["$or"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_find_reviewed_since_placement_empty_input(repo):
+    """Empty input returns an empty mapping without querying."""
+    assert await repo.find_reviewed_since_placement([]) == {}
 
 
 @pytest.mark.asyncio
@@ -971,7 +1077,7 @@ async def test_find_with_filters_cluster_size_with_reviewed_filter_includes_both
     await repo.find_with_filters(
         filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_DESC),
         cursor_params=CursorParams(cursor=None, limit=10),
-        reviewed=True,
+        reviewed_since_placement=True,
     )
 
     pipeline = mock_collection.aggregate.call_args[0][0]
