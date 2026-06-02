@@ -10,6 +10,24 @@ review, plus two newly surfaced concerns:
 
 Priority order: **C (client-reported bug, and it gates the review-state loop) → B → A.**
 
+### Normative basis (ers-docs)
+
+Cross-checked against the `entity-resolution-docs` repo. The governing artefacts:
+
+| This spec | Normative home in ers-docs |
+|---|---|
+| **B** — ERE-outcome integration → stores | Spine B (`spine-b.adoc`); UC-B1.2 *Integrate ERE Outcomes*; ADR-B2N *Decision Projection & User Action Log*; ADR-D1N *Authoritative Stores & State Separation*; ADR-A3N *Identifier Stability* |
+| **C** — curator actions → ERE re-evaluation | Spine D (`spine-d.adoc`); UC-W2 / UC-B2.1 *Recommend Resolution Update*; ADR-E1N *Recluster & Re-resolution Requests*; ADR-C2N *Message Types & Delivery Semantics* |
+| **Field/message contract** | `ERS-ERE-Contract/interface.adoc` — the **single normative source** for field names and message shapes |
+| **Review-state model (TEDSWS-524)** | ADR-B2N *No Governance Lifecycle in ERS* — the two-primitive model (counter + derived flag) is compliant because it stores **no** `proposed/accepted/rejected/confirmed` status |
+
+**Vocabulary note.** ADR-C2N and ADR-E1N still use an older action vocabulary
+(`recommended_placement` / `recommended_exclusions`,
+`resolveConsideringRecommendation` / `reResolveConsideringExclusions`) and both
+carry an explicit `// TODO: reconcile against ERS–ERE contract`. The spines and the
+contract use `proposed_cluster_ids` / `excluded_cluster_ids`. This spec and the code
+track the **contract** (`interface.adoc`), which is the normative tie-breaker.
+
 ---
 
 ## A. Code-review follow-ups (from TEDSWS-524)
@@ -22,6 +40,12 @@ These are recorded in `TEDSWS-524-delta-plan.md`; restated here as scoped work i
 `find_reviewed_since_placement` reads the `user_actions` collection (owned by
 `curation`) from inside the decision-store adapter. Contract-legal (import-linter
 passes) but each module encodes the other's storage schema.
+
+This is not just an import-graph nicety: ADR-D1N and ADR-B2N deliberately **separate**
+the Decision Projection store from the User Action Log. `previous_review_count` is
+review/curation metadata, so placing it on the decision-projection document blurs that
+documented boundary — which is the architectural argument for moving it (or its read
+port) to the curation side.
 
 - **Target:** introduce a read-port abstraction for review-state, or move the
   review-state reads to a curation-side adapter; keep a single owner per collection.
@@ -76,27 +100,63 @@ effect on each store and the invariants/edge cases to guarantee.
 
 ### B1 — Per-store effect (intended contract)
 
+An incoming outcome is applied only if it passes **both** guards from B2 — newer
+(`updated_at`) **and** materially different. The table below assumes an applied outcome.
+
 | Store / field | Effect on ERE integration | Owner / mechanism |
 |---|---|---|
-| **Decision projection** (`decisions`) | Overwritten with the new outcome **iff the outcome is material** (placement or candidates changed — TEDSWS-524 §6.1). `updated_at` advances; identical replay is a no-op. | `store_decision` + `is_same_outcome` |
+| **Decision projection** (`decisions`) | Overwritten when the outcome is newer **and** material (placement or candidates changed — TEDSWS-524 §6.1). `updated_at` advances. Stale outcome ⇒ rejected; identical replay ⇒ no-op. | `store_decision` (stale guard + `is_same_outcome`) |
 | **`cluster_sizes`** | `shift(from=old_cluster, to=new_cluster)` on placement change; `shift(None → new)` on first insert; `shift(X → X)` no-op when cluster unchanged (even if confidence changed). | `ClusterSizeIndex.shift` |
 | **`user_actions`** | **Untouched.** The curator action log is the stable trace; ERE integration never reads or writes it. | — |
 | **`previous_review_count`** (on the decision doc) | **Preserved** — the integrator writes only its own fields; the counter carries across re-integrations. | `decision_repository` `$set` excludes the counter |
 | **`reviewed_since_placement`** (derived) | Flips to `false` automatically when `updated_at` advances past the last action — no write needed. | derived on read |
 
-### B2 — Invariants to hold
-1. **Idempotent replay:** an identical ERE outcome causes **zero** writes to any store
-   (no decision write, no `cluster_sizes` shift, no counter change).
-2. **Single writer per derived value:** only the integrator shifts `cluster_sizes`;
+> **Store-taxonomy note.** ADR-D1N names exactly three ERS stores: System of Record,
+> Decision Projection, and User Action Log. `cluster_sizes` is **not** one of them — it
+> is an internal derived projection (counts only), which ADR-D1N permits as an
+> implementation-level optimisation. It holds no authoritative identity state, so it can
+> evolve freely as long as the Decision Projection stays the source for placement.
+
+### B2 — Two distinct write guards (do not conflate them)
+
+The integration path has **two** independent guards. They protect against different
+things and both already exist in the code:
+
+1. **Stale-outcome guard (ordering).** `upsert_decision` rejects any outcome whose
+   `updated_at` is **not newer** than the stored one (stored `updated_at >= incoming`
+   ⇒ `StaleOutcomeError`, caught and ignored by the integrator). This implements
+   Spine B's normative rule — *"accept an outcome only if it is not stale… using a
+   monotonic outcome marker"* — keyed on the ERE response `timestamp`. It handles
+   **late and out-of-order** deliveries (at-least-once).
+2. **Material-change short-circuit (idempotency).** *After* the stale guard, if the
+   incoming outcome is newer **but structurally identical** to the stored one
+   (`is_same_outcome`: same placement **and** same truncated candidates), the write is
+   skipped. This handles **duplicate** deliveries of the same outcome.
+
+> `is_same_outcome` is **not** the ordering control — it only suppresses identical
+> replays. Ordering is the stale guard's job. A late, older, *structurally different*
+> outcome is rejected by guard 1, never reaching guard 2.
+
+### B3 — Invariants to hold
+1. **Ordering / latest-wins:** for a triad, the stored decision always reflects the
+   outcome with the most recent `updated_at`; stale outcomes never overwrite it
+   (Spine B; ADR-C2N idempotent-but-unordered).
+2. **Idempotent replay:** an identical, non-stale ERE outcome causes **zero** writes to
+   any store (no decision write, no `cluster_sizes` shift, no counter change).
+3. **Single writer per derived value:** only the integrator shifts `cluster_sizes`;
    only `user_action_service` increments `previous_review_count`.
-3. **Counter durability:** re-integration must never reset `previous_review_count`.
-4. **Cluster-size conservation:** `sum(cluster_sizes.size)` equals the number of
+4. **Counter durability:** re-integration must never reset `previous_review_count`.
+5. **Cluster-size conservation:** `sum(cluster_sizes.size)` equals the number of
    decisions whose `current_placement.cluster_id` is set (modulo in-flight writes).
 
-### B3 — Edge cases / gaps to resolve (each needs a test)
+### B4 — Edge cases / gaps to resolve (each needs a test)
 - **Cluster emptied to size 0:** when the last decision leaves a cluster, the
   `cluster_sizes` entry lingers at `size: 0`. Decide: delete-on-zero vs keep-zero.
   Impacts stats (`cluster_singletons_count`, median, p95 must ignore `size: 0`).
+  ADR-A3N (identifier non-revocation — *"a `cluster_id` remains reserved even if the
+  cluster becomes empty"*) governs the **authoritative** id, which lives in ERE, not in
+  `cluster_sizes`. So either choice is contract-safe for this **count** projection;
+  pick delete-on-zero unless stats need the zero row.
 - **Decrement-below-zero guard:** `shift` must never produce a negative size (assert /
   clamp); a missing `from` entry on decrement must not corrupt the projection.
 - **First-integration ordering:** the `cluster_sizes` increment and the decision insert
@@ -111,11 +171,14 @@ effect on each store and the invariants/edge cases to guarantee.
 - **Bulk refresh:** `bulkWrite` of deltas must compute net `cluster_sizes` shifts
   correctly when many decisions move in one batch.
 
-### B4 — Acceptance
-A re-integration suite proves: material change → decision rewritten + `updated_at`
-bumped + `cluster_sizes` shifted + counter preserved + `reviewed_since_placement`
-flips to false; identical replay → all stores unchanged; cluster emptied → stats
-unaffected by the zero/removed entry.
+### B5 — Acceptance
+A re-integration suite proves:
+- **material change** → decision rewritten + `updated_at` bumped + `cluster_sizes`
+  shifted + counter preserved + `reviewed_since_placement` flips to false;
+- **identical replay** (newer or equal, same outcome) → all stores unchanged;
+- **stale / out-of-order outcome** (older `updated_at`) → rejected, all stores
+  unchanged, even if the placement differs;
+- **cluster emptied** → stats unaffected by the zero/removed entry.
 
 ---
 
@@ -140,10 +203,17 @@ four-state model never receives the updates it is designed to surface.
 
 ### C3 — What the code already does (so this is a *bug*, not greenfield)
 `decision_curation_service` already wires all three actions to ERE via
-`_publish_reevaluation`:
-- `accept_decision` → `proposed_cluster_ids=[current_placement.cluster_id]`
-- `reject_decision` → `excluded_cluster_ids=[c.cluster_id for c in decision.candidates]`
-- `assign_decision` → `proposed_cluster_ids=[cluster_id]`
+`_publish_reevaluation`. Mapped to Spine D's curator vocabulary
+(`acceptTop` / `acceptAlt` / `rejectAll`) and the contract fields:
+
+| Action | Spine D | Published field |
+|---|---|---|
+| `accept_decision` | `acceptTop` | `proposed_cluster_ids=[current_placement.cluster_id]` |
+| `assign_decision` | `acceptAlt` | `proposed_cluster_ids=[chosen_cluster_id]` |
+| `reject_decision` | `rejectAll` | `excluded_cluster_ids=[c.cluster_id for c in decision.candidates]` |
+
+This wiring matches Spine D and ADR-E1N (recommendation-only, ERE-authoritative), so the
+defect is in the **exclusion set**, not in whether a call is made.
 
 Verified **not** the cause:
 - The request model `erspec.models.ere.EntityMentionResolutionRequest` **does** define
@@ -152,21 +222,31 @@ Verified **not** the cause:
   `model_dump_json()` (no `exclude_none` / `exclude_defaults`), so a populated list
   **is** included in the payload.
 
-### C4 — Root-cause candidates (to confirm via logs/repro), ranked
-1. **Silent swallow (most likely contributor).** `_publish_reevaluation` wraps the
-   publish in `except Exception: log.exception(...)` and returns. Any failure
-   (channel unavailable, zero-accepted, serialization, connection) is logged as an
-   error but the curation action still returns success — so to the curator/app the
-   reject "succeeded" while ERE received nothing. Fire-and-forget with no retry/outbox.
+Verified **as** the cause (see C4#3): at integration time
+(`outcome_integration_service`) the stored decision is split
+`current = response.candidates[0]` / `candidates = response.candidates[1:]`. So
+`Decision.candidates` holds the **alternatives only — never the current placement.**
+Excluding only `decision.candidates` on reject therefore leaks the placement to ERE as
+still valid.
+
+### C4 — Root-cause analysis (one confirmed; the rest to confirm via logs/repro)
+> Item 3 is **confirmed** (see C3). Items 1, 2, 4 are additional contributors to
+> verify from logs — they are not mutually exclusive.
+
+1. **Silent swallow (most likely additional contributor).** `_publish_reevaluation`
+   wraps the publish in `except Exception: log.exception(...)` and returns. Any failure
+   (channel unavailable, serialization error, connection drop) is logged as an error but
+   the curation action still returns success — so to the curator/app the reject
+   "succeeded" while ERE received nothing. Fire-and-forget with no retry/outbox.
 2. **Empty `excluded_cluster_ids`.** If `decision.candidates` is empty at reject time
    (ERE returned no alternatives, or candidates were truncated to 0), the payload
    carries `"excluded_cluster_ids": []` — i.e. nothing actionable, matching "not
    reflected". Needs confirmation that the loaded `Decision` populates `candidates`.
-3. **Semantic gap — current placement not excluded (CONFIRMED, must fix).** "Reject
-   all recommendations" excludes only `candidates`; it does **not** exclude
-   `current_placement.cluster_id`. Per product decision, a full reject must rule out
-   the current placement **and** all candidates. The exclusion set is therefore
-   incomplete today.
+3. **Semantic gap — current placement not excluded (CONFIRMED, must fix).** Confirmed
+   by the `candidates[0]` / `candidates[1:]` split in C3: `decision.candidates` never
+   contains the current placement, so "reject all" excludes the alternatives but leaves
+   `current_placement.cluster_id` un-excluded. Per product decision, a full reject must
+   rule out the current placement **and** all candidates. This is the primary fix.
 4. **Action recorded but publish skipped.** If `record_reject` raises
    `AlreadyCuratedError` (idempotency guard) the publish is never reached — but that
    surfaces as HTTP 409, so it is distinguishable in logs.
@@ -184,6 +264,14 @@ Verified **not** the cause:
   WARNING/ERROR, not raised) — the curation action still succeeds and the UI is **not**
   blocked or flagged. Not critical at the moment; revisit if delivery reliability
   becomes an issue.
+  - *Doc reconciliation (accepted deviation).* This is weaker than ADR-C2N's
+    at-least-once intent and than Spine D's `202 Accepted`, which means *"recorded **and**
+    forwarded"*. A dropped publish here is effectively at-most-once and the curator still
+    sees success. We accept this consciously. It does **not** violate UC-B1.2 (*"if ERS
+    cannot publish… the failure is logged and no Decision Store state is modified"*),
+    and the lingering User Action Log entry is consistent with ADR-B2N (the log records
+    what was **submitted**, not what was delivered). If reliability is later required, a
+    retry/outbox closes the gap without changing the contract.
 - **Confirm wiring end-to-end** from the `/reject` and `/assign` routes through to a
   message actually accepted by the Redis channel.
 
