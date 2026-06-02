@@ -675,13 +675,14 @@ def decision_ere_reintegrated(
 def decision_needs_revisit(
     decision_repository: AsyncMock,
     entity_mention_repository: AsyncMock,
+    review_state_reader: AsyncMock,
 ) -> None:
     decisions, _ = _setup_decisions(
         decision_repository, entity_mention_repository, 1, prefix="d-revisit"
     )
     # Needs revisit: reviewed at least once (count > 0) but not since the current placement.
     decision_repository.find_review_counts.return_value = {decisions[0].id: 2}
-    decision_repository.find_reviewed_since_placement.return_value = {decisions[0].id: False}
+    review_state_reader.reviewed_since_placement.return_value = {decisions[0].id: False}
 
 
 @when(

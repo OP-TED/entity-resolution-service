@@ -142,28 +142,6 @@ class DecisionRepository(BaseDecisionRepository):
             are omitted (callers should default-to-0 on missing keys).
         """
 
-    @abstractmethod
-    async def find_reviewed_since_placement(
-        self, decisions: list[Decision]
-    ) -> dict[str, bool]:
-        """Return, per decision, whether a curator action exists since its placement.
-
-        Mirrors ``find_review_counts``: a single batched read used by the curation
-        service to attach the ``reviewed_since_placement`` flag to
-        ``DecisionSummary`` rows, without changing the shared ``find_with_filters``
-        return type.  "Since the current placement" means a user_action whose
-        ``created_at`` is after ``updated_at`` (or ``created_at`` when never
-        re-placed).
-
-        Args:
-            decisions: The page of decisions to evaluate.
-
-        Returns:
-            Mapping of ``{decision.id: bool}`` for every decision in the input
-            (decisions with no recent action map to ``False``).
-        """
-
-
 class MongoDecisionRepository(
     BaseMongoDecisionRepository,
     DecisionRepository,
@@ -186,6 +164,17 @@ class MongoDecisionRepository(
     _AGGREGATION_ORDERINGS: frozenset[DecisionOrdering] = frozenset(
         {DecisionOrdering.CLUSTER_SIZE_ASC, DecisionOrdering.CLUSTER_SIZE_DESC}
     )
+
+    def _from_document(self, doc: dict[str, Any]) -> Decision:
+        """Strip the denormalised ``previous_review_count`` before validation.
+
+        ``previous_review_count`` is a denormalised counter stored on the decision
+        document (written by ``increment_review_count``), but the ``Decision``
+        domain model forbids extra fields. It is read separately via
+        ``find_review_counts`` and must not reach ``model_validate`` here.
+        """
+        doc.pop(_FIELD_PREVIOUS_REVIEW_COUNT, None)
+        return super()._from_document(doc)
 
     def _build_query(self, filters: DecisionFilters) -> dict[str, Any]:
         query: dict[str, Any] = {}
@@ -560,60 +549,6 @@ class MongoDecisionRepository(
             result[doc["_id"]] = doc.get("previous_review_count", 0)
         return result
 
-    @staticmethod
-    def _triad_key(mention: dict[str, Any]) -> tuple[Any, Any, Any]:
-        """Stable identity key for an ``about_entity_mention`` subdocument."""
-        return (
-            mention.get("source_id"),
-            mention.get("request_id"),
-            mention.get("entity_type"),
-        )
-
-    async def find_reviewed_since_placement(
-        self, decisions: list[Decision]
-    ) -> dict[str, bool]:
-        """Return, per decision, whether a curator action exists since its placement.
-
-        One indexed read over ``user_actions``: an ``$or`` of per-decision
-        ``{about_entity_mention, created_at > since}`` clauses (``since`` is the
-        decision's ``updated_at`` or, when never re-placed, its ``created_at``).
-        The page is bounded by the page size, so the disjunction is small.
-
-        Args:
-            decisions: The page of decisions to evaluate.
-
-        Returns:
-            ``{decision.id: bool}`` for every input decision.
-        """
-        result: dict[str, bool] = {d.id: False for d in decisions}
-        if not decisions:
-            return result
-
-        or_clauses: list[dict[str, Any]] = []
-        key_to_id: dict[tuple[Any, Any, Any], str] = {}
-        for decision in decisions:
-            since = decision.updated_at or decision.created_at
-            # Dump the triad once and use it for both the query clause and the
-            # result key. Because the query matches the whole subdocument by
-            # equality, any returned user_action's triad equals this exact dump,
-            # so the keys map back deterministically (no serialization drift).
-            triad = decision.about_entity_mention.model_dump(mode="python")
-            or_clauses.append(
-                {_FIELD_ABOUT_ENTITY_MENTION: triad, _FIELD_CREATED_AT: {"$gt": since}}
-            )
-            key_to_id[self._triad_key(triad)] = decision.id
-
-        user_actions = self._collection.database[_COLLECTION_USER_ACTIONS]
-        cursor = user_actions.find(
-            {"$or": or_clauses},
-            projection={_FIELD_ABOUT_ENTITY_MENTION: 1, "_id": 0},
-        )
-        async for doc in cursor:
-            decision_id = key_to_id.get(self._triad_key(doc.get(_FIELD_ABOUT_ENTITY_MENTION, {})))
-            if decision_id is not None:
-                result[decision_id] = True
-        return result
-
     async def find_with_filters(
         self,
         filters: DecisionFilters | None = None,
@@ -648,6 +583,12 @@ class MongoDecisionRepository(
 
         Returns:
             A ``CursorPage`` containing results and an optional ``next_cursor``.
+            ``count`` reflects only the stored-field query (field filters,
+            ``mention_identifiers``, and ``ever_reviewed``); it does **not** account
+            for the ``reviewed_since_placement`` lookup filter, which is applied
+            inside the aggregation after the count is taken (A3). When
+            ``reviewed_since_placement`` is set, treat ``count`` as an upper bound on
+            the filtered total, not an exact count.
         """
         if cursor_params is None:
             cursor_params = CursorParams()
@@ -682,6 +623,9 @@ class MongoDecisionRepository(
                     {"$gt": 0} if ever_reviewed else {"$in": [0, None]}
                 )
 
+            # NOTE (A3): counts the stored-field query only. The
+            # ``reviewed_since_placement`` lookup filter is applied later in the
+            # aggregation, so this count is an upper bound when that filter is set.
             count = await self._collection.count_documents(query)
 
             sort_field, ascending = self._get_sort_info(filters.ordering)
@@ -822,8 +766,8 @@ class MongoDecisionRepository(
             {"$project": {"_has_recent_action": 0}},
         ]
 
-        agg_cursor = self._collection.aggregate(pipeline)
-        return [self._from_document(doc) async for doc in agg_cursor]  # type: ignore[attr-defined]
+        agg_cursor = await self._collection.aggregate(pipeline)
+        return [self._from_document(doc) async for doc in agg_cursor]
 
     @staticmethod
     def _recent_action_lookup_stage() -> dict[str, Any]:
@@ -936,8 +880,8 @@ class MongoDecisionRepository(
         ]
 
         raw_docs: list[dict[str, Any]] = []
-        agg_cursor = self._collection.aggregate(pipeline)
-        async for doc in agg_cursor:  # type: ignore[attr-defined]
+        agg_cursor = await self._collection.aggregate(pipeline)
+        async for doc in agg_cursor:
             raw_docs.append(doc)
 
         last_cluster_size: int | None = raw_docs[-1].get(_FIELD_CLUSTER_SIZE) if raw_docs else None

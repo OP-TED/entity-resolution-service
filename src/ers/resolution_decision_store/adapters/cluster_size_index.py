@@ -53,6 +53,11 @@ class MongoClusterSizeIndex:
         Note:
             ``from_cluster == to_cluster`` is a no-op — no database call is made.
             When both are ``None`` the call is also a no-op.
+            The decrement never upserts: a non-existent ``from_cluster`` stays
+            absent. After the decrement, an entry that reaches ``size <= 0`` is
+            deleted (delete-on-zero), which doubles as the decrement-below-zero
+            guard — no negative count is ever persisted and stats never observe a
+            ``size: 0`` row.
         """
         if from_cluster is not None and from_cluster == to_cluster:
             return
@@ -68,7 +73,7 @@ class MongoClusterSizeIndex:
                         "$inc": {_FIELD_SIZE: -by},
                         "$set": {_FIELD_UPDATED_AT: now},
                     },
-                    upsert=True,
+                    upsert=False,
                 )
             )
 
@@ -89,6 +94,14 @@ class MongoClusterSizeIndex:
             return
 
         await self._collection.bulk_write(ops, ordered=False)
+
+        if from_cluster is not None:
+            # delete-on-zero + decrement-below-zero guard: drop the entry once it
+            # reaches (or passes) zero so no negative count persists and stats
+            # never observe a ``size: 0`` row.
+            await self._collection.delete_one(
+                {"_id": from_cluster, _FIELD_SIZE: {"$lte": 0}}
+            )
 
     async def get_size(self, cluster_id: str) -> int:
         """Return current size for the given cluster, or 0 if absent.

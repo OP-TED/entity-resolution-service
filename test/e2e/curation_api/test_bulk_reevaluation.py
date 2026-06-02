@@ -20,6 +20,7 @@ from httpx import ASGITransport, AsyncClient
 from ers.commons.adapters.redis_client import AbstractClient
 from ers.curation.adapters import (
     EntityMentionCurationRepository,
+    ReviewStateReader,
     UserActionCurationRepository,
 )
 from ers.curation.entrypoints.api.app import create_app
@@ -127,6 +128,7 @@ def _build_service_with_decisions(
         entity_mention_repository=entity_mention_repo,
         user_action_service=user_action_service,
         ere_publish_service=ere_publish_service,
+        review_state_reader=create_autospec(ReviewStateReader, instance=True),
     )
     return service, ere_adapter
 

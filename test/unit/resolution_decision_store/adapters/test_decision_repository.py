@@ -574,7 +574,7 @@ async def test_find_with_filters_reviewed_true_uses_lookup_and_matches_non_empty
         yield  # noqa: unreachable – makes this an async generator
 
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
     mock_collection.find = MagicMock()
 
@@ -617,7 +617,7 @@ async def test_find_with_filters_reviewed_false_uses_lookup_and_matches_empty(re
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
     mock_collection.find = MagicMock()
 
@@ -653,7 +653,7 @@ async def test_find_with_filters_reviewed_pipeline_excludes_has_recent_action_fi
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
 
     await repo.find_with_filters(
@@ -683,7 +683,7 @@ async def test_review_filter_applies_match_before_limit(repo, mock_collection):
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
 
     await repo.find_with_filters(
@@ -767,7 +767,7 @@ async def test_review_filters_combine_counter_match_into_aggregation(repo, mock_
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
 
     await repo.find_with_filters(
@@ -784,52 +784,9 @@ async def test_review_filters_combine_counter_match_into_aggregation(repo, mock_
     )
 
 
-@pytest.mark.asyncio
-async def test_find_reviewed_since_placement_maps_matches(repo, mock_collection):
-    """Returns True only for decisions whose triad has a user_action since placement."""
-    now = datetime.now(UTC)
-    reviewed = Decision(
-        id="hash-reviewed",
-        about_entity_mention=make_identifier(source_id="s1", request_id="r1"),
-        current_placement=make_cluster(),
-        candidates=[],
-        created_at=now,
-        updated_at=None,
-    )
-    pending = Decision(
-        id="hash-pending",
-        about_entity_mention=make_identifier(source_id="s2", request_id="r2"),
-        current_placement=make_cluster(),
-        candidates=[],
-        created_at=now,
-        updated_at=None,
-    )
-
-    # user_actions returns a recent action only for the reviewed decision's triad.
-    ua_collection = MagicMock()
-    ua_collection.find = MagicMock(
-        return_value=_make_async_cursor(
-            [{"about_entity_mention": {"source_id": "s1", "request_id": "r1",
-                                       "entity_type": "Person"}}]
-        )
-    )
-    database = MagicMock()
-    database.__getitem__ = MagicMock(return_value=ua_collection)
-    mock_collection.database = database
-
-    result = await repo.find_reviewed_since_placement([reviewed, pending])
-
-    assert result == {"hash-reviewed": True, "hash-pending": False}
-    # Single batched query, restricted to user_actions.
-    database.__getitem__.assert_called_once_with("user_actions")
-    ua_query = ua_collection.find.call_args[0][0]
-    assert "$or" in ua_query and len(ua_query["$or"]) == 2
-
-
-@pytest.mark.asyncio
-async def test_find_reviewed_since_placement_empty_input(repo):
-    """Empty input returns an empty mapping without querying."""
-    assert await repo.find_reviewed_since_placement([]) == {}
+# NOTE: ``find_reviewed_since_placement`` moved to the curation-owned
+# ``MongoReviewStateReader`` (A1). Its tests live in
+# ``test/unit/curation/adapters/test_review_state_reader.py``.
 
 
 @pytest.mark.asyncio
@@ -883,7 +840,7 @@ async def test_find_with_filters_cluster_size_asc_uses_aggregation(repo, mock_co
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
     mock_collection.find = MagicMock()
 
@@ -907,7 +864,7 @@ async def test_find_with_filters_cluster_size_desc_uses_aggregation(repo, mock_c
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
     mock_collection.find = MagicMock()
 
@@ -931,7 +888,7 @@ async def test_find_with_filters_cluster_size_pipeline_contains_lookup(repo, moc
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
 
     await repo.find_with_filters(
@@ -961,7 +918,7 @@ async def test_find_with_filters_cluster_size_pipeline_adds_cluster_size_field(r
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
 
     await repo.find_with_filters(
@@ -988,7 +945,7 @@ async def test_find_with_filters_cluster_size_pipeline_projects_out_meta(repo, m
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
 
     await repo.find_with_filters(
@@ -1016,7 +973,7 @@ async def test_find_with_filters_cluster_size_pipeline_match_before_lookup(repo,
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
 
     await repo.find_with_filters(
@@ -1042,7 +999,7 @@ async def test_find_with_filters_cluster_size_sort_uses_cluster_size_and_id(repo
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
 
     await repo.find_with_filters(
@@ -1069,7 +1026,7 @@ async def test_find_with_filters_cluster_size_desc_sort_direction(repo, mock_col
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
 
     await repo.find_with_filters(
@@ -1125,7 +1082,7 @@ async def test_find_with_filters_cluster_size_with_reviewed_filter_includes_both
 
     agg_cursor = MagicMock()
     agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = MagicMock(return_value=agg_cursor)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
     mock_collection.count_documents = AsyncMock(return_value=0)
 
     await repo.find_with_filters(

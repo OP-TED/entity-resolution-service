@@ -11,6 +11,7 @@ def make_collection() -> MagicMock:
     col = MagicMock()
     col.bulk_write = AsyncMock(return_value=MagicMock())
     col.find_one = AsyncMock(return_value=None)
+    col.delete_one = AsyncMock(return_value=MagicMock())
     return col
 
 
@@ -102,6 +103,53 @@ async def test_shift_both_clusters_decrements_from_and_increments_to():
 
 
 # ---------------------------------------------------------------------------
+# shift — delete-on-zero + decrement-below-zero guard (B4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_shift_decrement_does_not_upsert_from_cluster():
+    """Decrementing must never create an entry: a non-existent from_cluster
+    stays absent so no phantom negative count is materialised."""
+    col = make_collection()
+    index = make_index(col)
+
+    await index.shift(from_cluster="cluster-X", to_cluster="cluster-Y")
+
+    ops = col.bulk_write.call_args[0][0]
+    from_op = next(op for op in ops if op._filter == {"_id": "cluster-X"})  # type: ignore[attr-defined]
+    assert from_op._upsert is False  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_shift_deletes_from_cluster_once_it_reaches_zero():
+    """delete-on-zero + decrement guard: after the decrement, the from_cluster
+    entry is removed when its size is <= 0, so stats never see ``size: 0`` and
+    no negative count can persist."""
+    col = make_collection()
+    index = make_index(col)
+
+    await index.shift(from_cluster="cluster-X", to_cluster="cluster-Y")
+
+    col.delete_one.assert_awaited_once()
+    flt = col.delete_one.call_args[0][0]
+    assert flt["_id"] == "cluster-X"
+    assert flt["size"] == {"$lte": 0}
+
+
+@pytest.mark.asyncio
+async def test_shift_insert_path_does_not_delete():
+    """The pure-insert path (from=None) has nothing to decrement, so no
+    delete-on-zero cleanup is issued."""
+    col = make_collection()
+    index = make_index(col)
+
+    await index.shift(from_cluster=None, to_cluster="cluster-X")
+
+    col.delete_one.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
 # shift — same cluster (no-op)
 # ---------------------------------------------------------------------------
 
@@ -123,8 +171,8 @@ async def test_shift_same_cluster_is_no_op():
 
 
 @pytest.mark.asyncio
-async def test_shift_removal_path_emits_single_decrement_upsert():
-    """shift(from=X, to=None) issues one UpdateOne for X only (removal path)."""
+async def test_shift_removal_path_decrements_without_upsert_and_cleans_zero():
+    """shift(from=X, to=None) decrements X (no upsert) and removes it on zero."""
     col = make_collection()
     index = make_index(col)
 
@@ -137,6 +185,9 @@ async def test_shift_removal_path_emits_single_decrement_upsert():
     op_update = ops[0]._doc  # type: ignore[attr-defined]
     assert op_filter == {"_id": "cluster-X"}
     assert op_update["$inc"]["size"] == -1
+    assert ops[0]._upsert is False  # type: ignore[attr-defined]
+    col.delete_one.assert_awaited_once()
+    assert col.delete_one.call_args[0][0] == {"_id": "cluster-X", "size": {"$lte": 0}}
 
 
 # ---------------------------------------------------------------------------

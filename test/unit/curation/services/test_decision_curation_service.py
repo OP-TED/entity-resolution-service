@@ -1,13 +1,16 @@
 import json
+import logging
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
+from erspec.models.core import UserActionType
 from erspec.models.ere import EntityMentionResolutionRequest
 
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters import (
     EntityMentionCurationRepository,
+    ReviewStateReader,
 )
 from ers.curation.domain.data_transfer_objects import (
     BulkActionResponse,
@@ -30,9 +33,16 @@ from test.unit.factories import (
 @pytest.fixture
 def decision_repository() -> MagicMock:
     mock = create_autospec(DecisionRepository, instance=True)
-    # Default: no review counts / states — list_decisions defaults to 0 / False.
+    # Default: no review counts — list_decisions defaults to 0 for missing keys.
     mock.find_review_counts.return_value = {}
-    mock.find_reviewed_since_placement.return_value = {}
+    return mock
+
+
+@pytest.fixture
+def review_state_reader() -> MagicMock:
+    mock = create_autospec(ReviewStateReader, instance=True)
+    # Default: no review states — list_decisions defaults to False for missing keys.
+    mock.reviewed_since_placement.return_value = {}
     return mock
 
 
@@ -61,12 +71,14 @@ def service(
     entity_mention_repository: MagicMock,
     user_action_service: MagicMock,
     ere_publish_service: MagicMock,
+    review_state_reader: MagicMock,
 ) -> DecisionCurationService:
     return DecisionCurationService(
         decision_repository=decision_repository,
         entity_mention_repository=entity_mention_repository,
         user_action_service=user_action_service,
         ere_publish_service=ere_publish_service,
+        review_state_reader=review_state_reader,
     )
 
 
@@ -108,13 +120,14 @@ class TestListDecisions:
         service: DecisionCurationService,
         decision_repository: MagicMock,
         entity_mention_repository: MagicMock,
+        review_state_reader: MagicMock,
     ) -> None:
         decision = DecisionFactory.build()
         decision_repository.find_with_filters.return_value = CursorPage(
             results=[decision], next_cursor=None
         )
         decision_repository.find_review_counts.return_value = {decision.id: 2}
-        decision_repository.find_reviewed_since_placement.return_value = {decision.id: True}
+        review_state_reader.reviewed_since_placement.return_value = {decision.id: True}
         entity_mention_repository.find_by_identifiers.return_value = []
 
         result = await service.list_decisions(
@@ -131,6 +144,7 @@ class TestListDecisions:
         service: DecisionCurationService,
         decision_repository: MagicMock,
         entity_mention_repository: MagicMock,
+        review_state_reader: MagicMock,
     ) -> None:
         decision = DecisionFactory.build()
         decision_repository.find_with_filters.return_value = CursorPage(
@@ -139,7 +153,7 @@ class TestListDecisions:
         # Never reviewed: count 0 AND no action since placement — the fourth state,
         # distinct from "needs revisit" (count > 0, same flag value).
         decision_repository.find_review_counts.return_value = {decision.id: 0}
-        decision_repository.find_reviewed_since_placement.return_value = {decision.id: False}
+        review_state_reader.reviewed_since_placement.return_value = {decision.id: False}
         entity_mention_repository.find_by_identifiers.return_value = []
 
         summary = (
@@ -661,7 +675,7 @@ class TestAssignDecisionPublishesERE:
 
 
 class TestRejectDecisionPublishesERE:
-    async def test_reject_publishes_all_candidates_as_exclusions(
+    async def test_reject_excludes_current_placement_and_candidates(
         self,
         service: DecisionCurationService,
         decision_repository: MagicMock,
@@ -669,6 +683,11 @@ class TestRejectDecisionPublishesERE:
         user_action_service: MagicMock,
         ere_publish_service: MagicMock,
     ) -> None:
+        """TEDSWS-530: "reject all" must exclude the current placement AND every
+        candidate — the stored ``candidates`` never contains the placement
+        (``candidates[1:]`` at integration), so excluding candidates alone leaks
+        the placement to ERE as still valid.
+        """
         decision = DecisionFactory.build()
         entity_mention = EntityMentionFactory.build(
             identifiedBy=decision.about_entity_mention
@@ -682,7 +701,98 @@ class TestRejectDecisionPublishesERE:
         request: EntityMentionResolutionRequest = (
             ere_publish_service.publish_request.call_args[0][0]
         )
-        expected_exclusions = [c.cluster_id for c in decision.candidates]
+        expected = {decision.current_placement.cluster_id} | {
+            c.cluster_id for c in decision.candidates
+        }
         assert request.entity_mention == entity_mention
-        assert request.excluded_cluster_ids == expected_exclusions
+        assert set(request.excluded_cluster_ids) == expected
+        assert decision.current_placement.cluster_id in request.excluded_cluster_ids
+        assert request.excluded_cluster_ids  # non-empty
         assert request.proposed_cluster_ids == []
+
+    async def test_reject_deduplicates_when_placement_is_also_a_candidate(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+        user_action_service: MagicMock,
+        ere_publish_service: MagicMock,
+    ) -> None:
+        """If the current placement also appears in the candidate list, the
+        exclusion set must list it once (deduplicated).
+        """
+        placement = ClusterReferenceFactory.build()
+        other = ClusterReferenceFactory.build()
+        decision = DecisionFactory.build(
+            current_placement=placement,
+            candidates=[placement, other],
+        )
+        entity_mention = EntityMentionFactory.build(
+            identifiedBy=decision.about_entity_mention
+        )
+        decision_repository.find_by_id.return_value = decision
+        entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
+
+        await service.reject_decision(decision.id, actor="curator")
+
+        request: EntityMentionResolutionRequest = (
+            ere_publish_service.publish_request.call_args[0][0]
+        )
+        excluded = request.excluded_cluster_ids
+        assert excluded.count(placement.cluster_id) == 1
+        assert set(excluded) == {placement.cluster_id, other.cluster_id}
+
+    async def test_reject_swallows_ere_publish_error(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+        user_action_service: MagicMock,
+        ere_publish_service: MagicMock,
+    ) -> None:
+        """Best-effort delivery: a publish failure must not break the reject."""
+        decision = DecisionFactory.build()
+        entity_mention = EntityMentionFactory.build(
+            identifiedBy=decision.about_entity_mention
+        )
+        decision_repository.find_by_id.return_value = decision
+        entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
+        ere_publish_service.publish_request.side_effect = ConnectionError("Redis down")
+
+        # Must not raise
+        await service.reject_decision(decision.id, actor="curator")
+
+
+class TestReevaluationAuditLog:
+    async def test_successful_reject_logs_outgoing_payload_summary(
+        self,
+        service: DecisionCurationService,
+        decision_repository: MagicMock,
+        entity_mention_repository: MagicMock,
+        user_action_service: MagicMock,
+        ere_publish_service: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """TEDSWS-530 auditability: the success path must log, at INFO, the
+        outgoing payload summary (action + excluded_cluster_ids + ere_request_id)
+        so the exclusions are visible in the logs the client inspects.
+        """
+        decision = DecisionFactory.build()
+        entity_mention = EntityMentionFactory.build(
+            identifiedBy=decision.about_entity_mention
+        )
+        decision_repository.find_by_id.return_value = decision
+        entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
+        ere_publish_service.publish_request.return_value = "ere-req-123"
+
+        with caplog.at_level(
+            logging.INFO, logger="ers.curation.services.decision_curation_service"
+        ):
+            await service.reject_decision(decision.id, actor="curator")
+
+        summary = "\n".join(
+            r.getMessage() for r in caplog.records if r.levelno == logging.INFO
+        )
+        assert UserActionType.REJECT_ALL.value in summary
+        assert decision.current_placement.cluster_id in summary
+        assert "ere-req-123" in summary

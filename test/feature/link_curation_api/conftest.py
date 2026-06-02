@@ -20,6 +20,7 @@ from starlette.testclient import TestClient
 from ers.commons.adapters.hasher import Argon2PasswordHasher
 from ers.curation.adapters import (
     EntityMentionCurationRepository,
+    ReviewStateReader,
     StatisticsRepository,
     UserActionCurationRepository,
 )
@@ -100,9 +101,16 @@ def ctx() -> dict[str, Any]:
 @pytest.fixture
 def decision_repository() -> AsyncMock:
     mock = create_autospec(DecisionRepository, instance=True)
-    # Default: no review counts / states — callers default to 0 / False for missing keys.
+    # Default: no review counts — callers default to 0 for missing keys.
     mock.find_review_counts.return_value = {}
-    mock.find_reviewed_since_placement.return_value = {}
+    return mock
+
+
+@pytest.fixture
+def review_state_reader() -> AsyncMock:
+    mock = create_autospec(ReviewStateReader, instance=True)
+    # Default: no review states — callers default to False for missing keys.
+    mock.reviewed_since_placement.return_value = {}
     return mock
 
 
@@ -174,12 +182,14 @@ def decision_curation_service(
     entity_mention_repository: AsyncMock,
     user_action_service: UserActionService,
     ere_publish_service: MagicMock,
+    review_state_reader: AsyncMock,
 ) -> DecisionCurationService:
     return DecisionCurationService(
         decision_repository=decision_repository,
         entity_mention_repository=entity_mention_repository,
         user_action_service=user_action_service,
         ere_publish_service=ere_publish_service,
+        review_state_reader=review_state_reader,
     )
 
 

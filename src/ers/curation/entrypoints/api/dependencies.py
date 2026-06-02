@@ -11,8 +11,10 @@ from ers.curation.adapters import (
     EntityMentionCurationRepository,
     MongoDecisionRepository,
     MongoEntityMentionCurationRepository,
+    MongoReviewStateReader,
     MongoStatisticsRepository,
     MongoUserActionCurationRepository,
+    ReviewStateReader,
     StatisticsRepository,
     UserActionCurationRepository,
 )
@@ -93,6 +95,12 @@ async def get_statistics_repository(
     return MongoStatisticsRepository(db)
 
 
+async def get_review_state_reader(
+    db: Annotated[AsyncDatabase, Depends(_get_database)],
+) -> ReviewStateReader:
+    return MongoReviewStateReader(db)
+
+
 async def get_user_repository(
     db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> UserRepository:
@@ -121,12 +129,14 @@ async def get_decision_curation_service(
     entity_repo: Annotated[EntityMentionCurationRepository, Depends(get_entity_mention_repository)],
     user_action_service: Annotated[UserActionService, Depends(get_user_action_service)],
     ere_publish_service: Annotated[EREPublishService, Depends(_get_ere_publish_service)],
+    review_state_reader: Annotated[ReviewStateReader, Depends(get_review_state_reader)],
 ) -> DecisionCurationService:
     return DecisionCurationService(
         decision_repository=decision_repo,
         entity_mention_repository=entity_repo,
         user_action_service=user_action_service,
         ere_publish_service=ere_publish_service,
+        review_state_reader=review_state_reader,
     )
 
 

@@ -50,6 +50,26 @@ def repo(collection: AsyncMock) -> MongoUserActionCurationRepository:
     return MongoUserActionCurationRepository(db)
 
 
+class TestHasCurrentAction:
+    async def test_uses_strict_gt_on_placement_boundary(
+        self,
+        repo: MongoUserActionCurationRepository,
+        collection: AsyncMock,
+    ) -> None:
+        """A5: the "action since placement" boundary must use ``$gt`` (strict),
+        aligned with ``find_reviewed_since_placement``. An action recorded at the
+        exact placement instant is therefore *not* counted as a current action.
+        """
+        since = datetime(2026, 6, 2, 12, 0, 0, tzinfo=UTC)
+        identifier = EntityMentionIdentifierFactory.build()
+        collection.count_documents.return_value = 0
+
+        await repo.has_current_action(identifier, since)
+
+        query = collection.count_documents.call_args[0][0]
+        assert query["created_at"] == {"$gt": since}
+
+
 class TestBuildFilterQuery:
     def test_none_filters_returns_empty(self) -> None:
         assert MongoUserActionCurationRepository._build_filter_query(None) == {}

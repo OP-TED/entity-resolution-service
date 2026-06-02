@@ -16,6 +16,7 @@ from ers.commons.domain.data_transfer_objects import CursorParams
 from ers.commons.services.exceptions import ServiceUnavailableError
 from ers.curation.adapters import (
     EntityMentionCurationRepository,
+    ReviewStateReader,
     StatisticsRepository,
     UserActionCurationRepository,
 )
@@ -102,11 +103,13 @@ class TestDecisionCurationServiceTranslation:
         entity_repo = create_autospec(EntityMentionCurationRepository, instance=True)
         user_action_service = create_autospec(UserActionService, instance=True)
         ere_publish_service = create_autospec(EREPublishService, instance=True)
+        review_state_reader = create_autospec(ReviewStateReader, instance=True)
         service = DecisionCurationService(
             decision_repository=decision_repo,
             entity_mention_repository=entity_repo,
             user_action_service=user_action_service,
             ere_publish_service=ere_publish_service,
+            review_state_reader=review_state_reader,
         )
 
         with pytest.raises(ServiceUnavailableError) as exc_info:

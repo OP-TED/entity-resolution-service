@@ -3,7 +3,7 @@ import logging
 from collections.abc import Callable, Collection, Coroutine
 from typing import Any
 
-from erspec.models.core import Decision, EntityMention
+from erspec.models.core import Decision, EntityMention, UserActionType
 from erspec.models.ere import EntityMentionResolutionRequest
 
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
@@ -11,6 +11,7 @@ from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters.entity_mention_repository import (
     EntityMentionCurationRepository,
 )
+from ers.curation.adapters.review_state_reader import ReviewStateReader
 from ers.curation.domain.data_transfer_objects import (
     BulkActionResponse,
     BulkItemResult,
@@ -39,11 +40,13 @@ class DecisionCurationService:
         entity_mention_repository: EntityMentionCurationRepository,
         user_action_service: UserActionService,
         ere_publish_service: EREPublishService,
+        review_state_reader: ReviewStateReader,
     ) -> None:
         self._decision_repository = decision_repository
         self._entity_mention_repository = entity_mention_repository
         self._user_action_service = user_action_service
         self._ere_publish_service = ere_publish_service
+        self._review_state_reader = review_state_reader
 
     async def _get_decision_or_raise(self, decision_id: str) -> Decision:
         decision = await self._decision_repository.find_by_id(decision_id)
@@ -54,6 +57,7 @@ class DecisionCurationService:
     async def _publish_reevaluation(
         self,
         decision: Decision,
+        action: UserActionType,
         proposed_cluster_ids: list[str] | None = None,
         excluded_cluster_ids: list[str] | None = None,
     ) -> None:
@@ -62,10 +66,14 @@ class DecisionCurationService:
         Fetches the entity mention from the repository and publishes a
         re-evaluation request to ERE. Skips silently if the entity mention
         is not found. Swallows ERE publish errors so the curation action
-        response is not affected.
+        response is not affected (best-effort delivery, TEDSWS-530).
+
+        On a successful publish, logs the outgoing payload summary at INFO so the
+        exclusions/proposals are auditable in the logs (TEDSWS-530).
 
         Args:
             decision: The curated decision (provides entity mention identifier).
+            action: The curator action driving the re-evaluation.
             proposed_cluster_ids: Clusters to propose (resolveConsideringRecommendation).
             excluded_cluster_ids: Clusters to exclude (resolveWithExclusions).
         """
@@ -87,9 +95,20 @@ class DecisionCurationService:
             excluded_cluster_ids=excluded_cluster_ids or [],
         )
         try:
-            await self._ere_publish_service.publish_request(request)
+            ere_request_id = await self._ere_publish_service.publish_request(request)
         except Exception:
             log.exception("Failed to publish ERE re-evaluation for decision %s", decision.id)
+            return
+
+        log.info(
+            "Curator re-evaluation published: action=%s decision=%s "
+            "proposed_cluster_ids=%s excluded_cluster_ids=%s ere_request_id=%s",
+            action.value,
+            decision.id,
+            request.proposed_cluster_ids,
+            request.excluded_cluster_ids,
+            ere_request_id,
+        )
 
     @translate_mongo_errors
     async def list_decisions(
@@ -141,18 +160,17 @@ class DecisionCurationService:
             reviewed_since_placement=effective_reviewed_since_placement,
         )
 
+        # These three reads share ``page.results`` as input but have no data
+        # dependency on one another — run them concurrently (A4).
         identifiers = [d.about_entity_mention for d in page.results]
-        entity_mentions = await self._entity_mention_repository.find_by_identifiers(
-            identifiers,
+        decision_ids = [d.id for d in page.results]
+        entity_mentions, review_counts, review_states = await asyncio.gather(
+            self._entity_mention_repository.find_by_identifiers(identifiers),
+            self._decision_repository.find_review_counts(decision_ids),
+            self._review_state_reader.reviewed_since_placement(page.results),
         )
 
         mention_map = self._index_by_identifier(entity_mentions)
-
-        decision_ids = [d.id for d in page.results]
-        review_counts = await self._decision_repository.find_review_counts(decision_ids)
-        review_states = await self._decision_repository.find_reviewed_since_placement(
-            page.results
-        )
 
         decision_summaries = [
             self._to_decision_summary(decision, mention_map, review_counts, review_states)
@@ -189,6 +207,7 @@ class DecisionCurationService:
         await self._user_action_service.record_accept(actor=actor, decision=decision)
         await self._publish_reevaluation(
             decision,
+            action=UserActionType.ACCEPT_TOP,
             proposed_cluster_ids=[decision.current_placement.cluster_id],
         )
 
@@ -206,7 +225,8 @@ class DecisionCurationService:
         await self._user_action_service.record_reject(actor=actor, decision=decision)
         await self._publish_reevaluation(
             decision,
-            excluded_cluster_ids=[c.cluster_id for c in decision.candidates],
+            action=UserActionType.REJECT_ALL,
+            excluded_cluster_ids=self._reject_exclusion_ids(decision),
         )
 
     async def assign_decision(self, decision_id: str, cluster_id: str, actor: str) -> None:
@@ -226,6 +246,7 @@ class DecisionCurationService:
         )
         await self._publish_reevaluation(
             decision,
+            action=UserActionType.ACCEPT_ALTERNATIVE,
             proposed_cluster_ids=[cluster_id],
         )
 
@@ -275,6 +296,27 @@ class DecisionCurationService:
                 status=BulkItemStatus.ERROR,
                 detail=str(exc),
             )
+
+    @staticmethod
+    def _reject_exclusion_ids(decision: Decision) -> list[str]:
+        """Build the exclusion set for a "reject all" action.
+
+        Excludes the current placement **and** every candidate, deduplicated and
+        order-preserving (placement first). The stored ``candidates`` never
+        contains the current placement, so the placement must be added explicitly
+        or it would leak to ERE as still valid (TEDSWS-530).
+
+        Args:
+            decision: The decision being rejected.
+
+        Returns:
+            The deduplicated cluster ids to exclude; always non-empty (the
+            current placement is always present).
+        """
+        ordered = [decision.current_placement.cluster_id] + [
+            c.cluster_id for c in decision.candidates
+        ]
+        return list(dict.fromkeys(ordered))
 
     @staticmethod
     def _index_by_identifier(
