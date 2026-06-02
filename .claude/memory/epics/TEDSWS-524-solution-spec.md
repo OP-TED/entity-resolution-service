@@ -9,7 +9,24 @@ Two tickets, one underlying truth: review status is a *derived* property of `use
 
 ## Architectural principle
 
-> **A decision is `Reviewed` iff a `user_action` exists for it with `created_at > decision.updated_at` (or `> decision.created_at` when never re-placed); otherwise it is `Pending`.**
+> **Review state is *derived on read* from two independent primitives, never stored:**
+> 1. **`previous_review_count`** — total `user_action`s ever recorded against the decision (0 / 1 / >1).
+> 2. **`reviewed_since_placement`** — a `user_action` exists whose `created_at > decision.updated_at` (or `> decision.created_at` when never re-placed).
+>
+> The UI composes the curator-facing states from these two primitives (see table below). There is no stored `status`, no `Pending`/`Reviewed` enum.
+
+**"Current placement" means the full ERE *outcome*, not just the cluster.** `decision.updated_at` advances on any *material outcome change* — a change in `cluster_id`, `confidence_score`, `similarity_score`, or the candidate list — not only when the cluster id changes (see §6.1). This is what lets a re-assessment that returns the *same cluster with lower confidence* re-surface as needing review: `updated_at` moves past the last action's timestamp, so `reviewed_since_placement` flips to `false`.
+
+### Curator-facing states (composed by the UI from the two primitives)
+
+| State | `previous_review_count` | `reviewed_since_placement` | Meaning |
+|---|---|---|---|
+| **Not reviewed** | `== 0` | `false` (trivially) | No curator action ever recorded |
+| **Reviewed, up to date** | `>= 1` | `true` | Reviewed; no ERE outcome change since the review |
+| **Reviewed, needs revisit** | `>= 1` | `false` | Reviewed, but a material ERE outcome arrived after the last review |
+| **Reviewed more than once, up to date** | `> 1` | `true` | Reviewed repeatedly; current |
+
+The "not reviewed" and "needs revisit" states are **both** `reviewed_since_placement == false` — they are separated *only* by `previous_review_count`. A single boolean cannot express this; the two primitives together can.
 
 This is not a local preference — it is mandated by the architecture:
 
@@ -21,14 +38,7 @@ This is not a local preference — it is mandated by the architecture:
 
 > *"ERS shall process responses idempotently … Late, duplicate, or out-of-order responses are treated as normal behaviour."* — `entity-resolution-docs › AnnexeC-ADRs/adrc2.adoc:51-57`
 
-**Governance shift consequence** (origin of the TEDSWS-522 "previously seen" pain): the canonical URI registry was originally governed by ERS; it now lives in ERE. ERS holds an *overwritten projection* of the latest ERE outcome. The only stable curator trace is the `user_actions` log. The UI must therefore distinguish two questions, served by two different reads against the same log:
-
-| Question | Resets on ERE re-integration? | Served by |
-|---|---|---|
-| **Q1 — Is the *current placement* reviewed?** | Yes — by design | `?reviewed=true\|false` query parameter on the decisions list (optional; UI's two-tab pattern can also derive it from existing endpoints) |
-| **Q2 — Has this *entity* ever been reviewed?** | No | `previous_review_count` counter on `DecisionSummary` (badge) + `GET /curation/user-actions?decision_id={id}` for the full timeline |
-
-No `status` field. No `last_action_at` projected onto `DecisionSummary`. No `DecisionStatus` enum. Status is composed by the UI from two endpoints (filter + history).
+**Governance shift consequence** (origin of the TEDSWS-522 "previously seen" pain): the canonical URI registry was originally governed by ERS; it now lives in ERE. ERS holds an *overwritten projection* of the latest ERE outcome. The only stable curator trace is the `user_actions` log. The two primitives answer two different questions against that log — one that *resets* on every ERE re-integration (`reviewed_since_placement` — is the *current placement* reviewed?), one that *persists* across them (`previous_review_count` — has this *entity* ever been reviewed?). Neither is a stored lifecycle flag; the four named states live only in the UI's composition layer.
 
 ---
 
@@ -83,63 +93,90 @@ Both operations are atomic `$inc` upserts in Mongo; portable to any DB that supp
 **Sort pipeline** in `MongoDecisionRepository.find_with_filters` when `ordering ∈ {CLUSTER_SIZE_ASC, CLUSTER_SIZE_DESC}`:
 
 ```
-$match     <existing filters>
+$match     <existing filters + cursor condition>
 $lookup    from: cluster_sizes
            localField: current_placement.cluster_id
            foreignField: _id
            as: _cluster_meta
 $addFields cluster_size: { $ifNull: [{ $arrayElemAt: ["$_cluster_meta.size", 0] }, 0] }
-$project   drop _cluster_meta
-$sort      { cluster_size: ±1, _id: -1 }     # _id deterministic tiebreaker (existing pattern, _build_sort:149)
-$skip / $limit
+$sort      { cluster_size: ±1, _id: ±1 }     # _id deterministic tiebreaker
+$limit     <page_size + 1>
 ```
 
-Single indexed lookup per row, scalar field for sort + pagination. Add `CLUSTER_SIZE_ASC` / `CLUSTER_SIZE_DESC` to `DecisionOrdering` + matching `_SORT_FIELD_MAP` entries.
+**Cursor pagination over a derived sort key.** `cluster_size` is *looked up*, not stored on the decision, so it is not available to encode a `$skip`-free cursor by reading the document alone. The repository captures the `cluster_size` of the **last returned row from the aggregation document** and encodes it (with `_id`) into `next_cursor`; the next page's `$match` reconstructs the `(cluster_size, _id)` keyset predicate. This keeps pagination keyset-based (no `$skip`) and stable under ties. Single indexed lookup per row, scalar field for sort. Add `CLUSTER_SIZE_ASC` / `CLUSTER_SIZE_DESC` to `DecisionOrdering` + matching `_SORT_FIELD_MAP` entries.
 
 **One-off backfill** when the projection is first introduced: aggregate the current `decisions` collection once to populate `cluster_sizes`. A `scripts/backfill_cluster_sizes.py` does it via `$group` + bulk upsert.
 
-**Why this is the right call now (vs. when I first rejected it):** the user concern is *performance and cross-DB reliability*, not just YAGNI. A maintained projection is the canonical Cosmic-Python answer to "I need a derived value cheaply on read": maintain it in the same use case that produces the underlying truth. The integrator already knows when placement changes; the increment is one line.
+A maintained projection is the canonical Cosmic-Python answer to "I need a derived value cheaply on read": maintain it in the same use case that produces the underlying truth. The integrator already knows when placement changes; the increment is one line. This trades a small write-side cost for stable, cross-DB-portable reads.
 
-### 2. Pending/Reviewed filter — `?reviewed=true|false` query parameter (no DTO change)
+### 2. Review-state filter & per-row primitive — `reviewed_since_placement` (+ `ever_reviewed` filter)
 
-Bind a single boolean query parameter on `GET /api/v1/curation/decisions`:
+The curator-facing states (§ Architectural principle) are composed by the UI from **two** primitives. One — `previous_review_count` — is the stored counter of §3.1. The other — `reviewed_since_placement` — is *derived on read* here: a `user_action` exists whose `created_at` is after the current placement boundary `updated_at ?? created_at`.
 
-- `?reviewed=true` → return decisions with a `user_action` since current placement.
-- `?reviewed=false` → return decisions with **no** `user_action` since current placement.
-- omitted → no filter.
+**Per-row field** — surface `reviewed_since_placement` on `DecisionSummary` so the UI renders the badge without a second call. It is computed in the same aggregation as the list query (the gated `$lookup` below) and is **never stored** — the architectural prohibition on a stored lifecycle status (`conceptual-model.adoc:223`) is honoured because the value is recomputed on every read.
 
-**No new DTO type, no field on `DecisionSummary`, no `DecisionStatus` enum.** The parameter is a thin pass-through at the entrypoint layer that translates into a backend predicate:
+```python
+class DecisionSummary(FrozenDTO):
+    ...
+    previous_review_count: int = Field(default=0, ...)        # §3.1 — 0 / 1 / >1
+    reviewed_since_placement: bool = Field(
+        default=False,
+        description=(
+            "True iff a curator action exists whose created_at is after the current "
+            "placement boundary (updated_at ?? created_at). Derived on read; with "
+            "previous_review_count the UI composes Not-reviewed / Up-to-date / Needs-revisit."
+        ),
+    )
+```
+
+**Two orthogonal filter params** on `GET /api/v1/curation/decisions`, mirroring the two primitives (each optional; UI sends one or both to express a named state):
+
+| Param | Predicate | Used for |
+|---|---|---|
+| `?ever_reviewed=true\|false` | `previous_review_count > 0` (cheap `$match` on the stored counter) | separates **Not reviewed** (`false`) from the reviewed states |
+| `?reviewed_since_placement=true\|false` | the gated `$lookup` below | separates **Up to date** (`true`) from **Needs revisit** (`false`) |
+
+UI mapping: *Not reviewed* → `?ever_reviewed=false`; *Up to date* → `?reviewed_since_placement=true`; *Needs revisit* → `?ever_reviewed=true&reviewed_since_placement=false`. The impossible combo (`ever_reviewed=false & reviewed_since_placement=true`) simply returns empty.
 
 ```python
 # entrypoint (schemas.py — pure parameter binding)
 @router.get("/curation/decisions")
 async def list_decisions(
     ...,
-    reviewed: Annotated[bool | None, Query(description="Filter by current-placement review state.")] = None,
+    ever_reviewed: Annotated[bool | None, Query(description="Filter on whether any curator action exists.")] = None,
+    reviewed_since_placement: Annotated[bool | None, Query(description="Filter on whether a curator action exists since the current placement.")] = None,
 ):
     ...
 ```
 
-The service forwards `reviewed` as a parameter alongside `DecisionFilters` (the existing filter DTO stays untouched). The repository applies a gated `$lookup` stage only when `reviewed is not None`:
+The service forwards both flags alongside `DecisionFilters` (the existing filter DTO stays untouched). The repository computes `reviewed_since_placement` for the per-row field on the curation path (never on the bulk-sync path `query_decisions_paginated`), and applies the filter `$match` stages only when the corresponding param is set.
+
+**Join key — the `about_entity_mention` triad, not a `decision_id`.** `user_actions` reference a decision by its embedded `about_entity_mention` triad (the same triad that the decision document carries); there is no `decision_id` field on `user_actions`. The correlated `$lookup` therefore joins on the triad and the temporal predicate:
 
 ```
+$match     <existing filters + cursor condition>
 $lookup    from: user_actions
-           let: { decision_id: "$_id", since: { $ifNull: ["$updated_at", "$created_at"] } }
+           let: { triad: "$about_entity_mention", since: { $ifNull: ["$updated_at", "$created_at"] } }
            pipeline: [
                { $match: { $expr: { $and: [
-                   { $eq:  ["$decision_id", "$$decision_id"] },
+                   { $eq:  ["$about_entity_mention", "$$triad"] },
                    { $gt:  ["$created_at", "$$since"] },
                ] } } },
                { $limit: 1 },
                { $project: { _id: 1 } },
            ]
            as: _has_recent_action
-$match     reviewed=true  → { _has_recent_action: { $ne: [] } }
-           reviewed=false → { _has_recent_action: { $eq: [] } }
+$addFields reviewed_since_placement: { $ne: ["$_has_recent_action", []] }   # per-row field
+$match     ever_reviewed=true            → { previous_review_count: { $gt: 0 } }
+           ever_reviewed=false           → { previous_review_count: { $eq: 0 } }
+           reviewed_since_placement=true → { reviewed_since_placement: true }
+           reviewed_since_placement=false→ { reviewed_since_placement: false }
+$sort      <ordering + _id tiebreaker>
+$limit     <page_size + 1>
 $project   drop _has_recent_action
 ```
 
-The lookup is **never** added when `reviewed is None` and is **never** added on the bulk-sync path (`query_decisions_paginated`), via the same gating mechanism — see §6.
+**Filter before limit (pagination correctness).** The review `$match` must run **before** `$sort`/`$limit`. Applying the limit first and filtering afterwards under-fills the page and can terminate pagination prematurely (a fetched page whose rows are all dropped by the review match yields no `next_cursor` even when more matching decisions exist). The keystone index is `user_actions.about_entity_mention` (shared with §3.2). The `ever_reviewed` filter touches only the stored counter, so it costs nothing extra; the `$lookup` is never added on the bulk-sync path.
 
 ### 3. Per-decision "previously reviewed" — counter on the decision + `decision_id` filter on user-actions
 
@@ -165,16 +202,18 @@ class DecisionSummary(FrozenDTO):
 
 - In `user_action_service.record_accept` / `record_reject` / `record_assign`, after `_user_action_repository.save(action)`, the service issues an atomic `$inc { previous_review_count: 1 }` on the decision document via the decision-store repository. One extra write per action; constant cost.
 
-- On ERE re-integration, the decision-store integrator **preserves** this field by writing only its own fields (`current_placement`, `candidates`, `updated_at`, `about_entity_mention`) — exactly the existing `$set` behaviour at `decision_repository.py:212-241`. No backfill required at integration time; the counter naturally carries forward.
+- On ERE re-integration, the decision-store integrator **preserves** this field by writing only its own fields (`current_placement`, `candidates`, `updated_at`, `about_entity_mention`) in `$set` — never touching `previous_review_count`. No backfill required at integration time; the counter naturally carries forward.
 
 - One-off backfill for decisions that already have actions in `user_actions`: `scripts/backfill_previous_review_count.py` runs once.
+
+This counter is also the primitive that **separates "Not reviewed" from "Needs revisit"** (both have `reviewed_since_placement == false`): only `previous_review_count` distinguishes a decision never touched (`0`) from one reviewed before a later ERE outcome (`> 0`). Together with `reviewed_since_placement` (§2) it yields all four curator-facing states.
 
 **Why a maintained field beats on-read aggregation here:**
 
 - Returned **on every list row** without a `$lookup` per query (which was the cost concern).
 - Reliable: incremented in the same write path that produces the source-of-truth `user_action`. Two atomic writes (action save + counter increment). If the integrator overwrites the decision, the counter is preserved because it lives outside the ERE-owned fields.
 - Cross-DB: a plain integer field with an atomic increment — no aggregation pipeline.
-- Architecturally clean: the counter is **not a status flag**. It is a *count of historical curator interactions*, which the docs do not forbid (the prohibition is on lifecycle-status fields like Pending/Reviewed, not on cumulative trace counters). The Reviewed/Pending question is *still* answered by derivation from `user_actions` (the `?reviewed` filter via `$lookup`).
+- Architecturally clean: the counter is **not a status flag**. It is a *count of historical curator interactions*, which the docs do not forbid (the prohibition is on lifecycle-status fields like Pending/Reviewed, not on cumulative trace counters). The "reviewed since current placement" question is *still* answered by derivation from `user_actions` (the `reviewed_since_placement` field via `$lookup`).
 
 #### 3.2 History via existing endpoint — `decision_id` filter on `/curation/user-actions`
 
@@ -186,9 +225,9 @@ class UserActionFilters(FrozenDTO):
     decision_id: str | None = None    # NEW
 ```
 
-UI calls: `GET /api/v1/curation/user-actions?decision_id={id}&ordering=-created_at&limit=<n>` — full `UserActionSummary` payloads, paginated, newest first. No new route, no new DTO; reuses the listing infrastructure that already exists.
+UI calls: `GET /api/v1/curation/user-actions?decision_id={id}&ordering=-created_at&limit=<n>` — full `UserActionSummary` payloads, paginated, newest first. No new route, no new DTO; reuses the existing listing infrastructure.
 
-Repository: `UserActionCurationRepository.find_with_cursor` adds one `$match` term when `decision_id is not None`. Index on `user_actions.decision_id` is the keystone — same index already required by §2 for the `reviewed` filter.
+Repository: `UserActionCurationRepository.find_with_cursor` adds one `$match` term filtering on the decision's `about_entity_mention` triad. The entrypoint accepts an opaque `decision_id`; the service resolves it to the decision's triad (one decision read) before querying `user_actions`. The keystone index is `user_actions.about_entity_mention` — the same index §2 uses for the `reviewed_since_placement` lookup.
 
 ### 4. Cluster size on `CanonicalEntityPreview` (per-cluster context for review)
 
@@ -235,22 +274,35 @@ Backing from UC-W4:
 
 The shift from "aggregate over `decisions`" to "aggregate over `cluster_sizes`" makes the stats query cost proportional to the number of *clusters*, not the number of *decisions* — a meaningful speedup at scale.
 
-### 6. Idempotency fix — TEDSWS-522 write side
+### 6. Write-side contract — when an outcome resets review state
 
-Remove the buggy gate at `src/ers/curation/services/user_action_service.py:42-50`:
+The whole review-state model rests on one invariant: **`decision.updated_at` advances whenever ERE delivers a *materially different* outcome.** Two write-side rules enforce it.
+
+#### 6.1 Store-decision short-circuit keys on the full outcome, not the cluster id
+
+`DecisionStoreService.store_decision` is the single place that applies an ERE outcome to the projection. It is reached on two write paths — the ERE result integrator (`integrate_outcome`) and the coordinator's provisional issuance (`_issue_provisional`) — so its contract must be correct for both.
+
+**Contract:** the write is a no-op **only when the incoming outcome is identical to the stored one** — same `current_placement` *and* same (truncated) `candidates`. Any material change (cluster id, confidence, similarity, or candidate ordering) writes through and bumps `updated_at`.
+
+The outcome is the pair `(current_placement, candidates)`; both are `FrozenDTO` value objects with structural equality. Candidates are truncated to `DECISION_STORE_MAX_CANDIDATES` before persisting, so the comparison uses the truncated incoming list. A domain helper keeps the comparison explicit and unit-testable — no free comparisons scattered in the service:
 
 ```python
-async def _check_not_already_curated(self, decision: Decision) -> None:
-    since = decision.updated_at or decision.created_at
-    already_curated = await self._user_action_repository.has_current_action(
-        about_entity_mention=decision.about_entity_mention,
-        since=since,
-    )
-    if already_curated:
-        raise AlreadyCuratedError(decision.id)
+# resolution_decision_store/domain — value-object comparison, no I/O
+def is_same_outcome(existing: Decision, current: ClusterReference, candidates: list[ClusterReference]) -> bool:
+    """True iff the stored outcome equals the incoming one (placement + ordered candidates)."""
 ```
 
-After ERE re-integration, `updated_at` advances → prior actions fall before `since` → exactly one fresh curator action is allowed against the new placement. No second silent acceptance, no inconsistent ERE re-trigger.
+Why outcome-equality and not cluster-equality: a re-assessment that returns the **same cluster with a lower confidence** is exactly the case that must re-surface for review. Keying on the cluster id alone would skip the write, leave `updated_at` stale (so `reviewed_since_placement` stays `true` and the decision never appears as "Needs revisit"), and keep displaying the stale higher confidence — contradicting *"the projection is overwritten whenever a new clustering outcome is received"* (`adrb2.adoc:30`).
+
+Consequences, all desirable:
+- A **true idempotent replay** (identical outcome) still no-ops — churn-avoidance and ERE response idempotency (`adrc2.adoc:51-57`) preserved.
+- A **same-cluster confidence/candidate change** writes through → `updated_at` bumps → the decision becomes "Needs revisit" and shows fresh confidence.
+- `ClusterSizeIndex.shift(from=X, to=X)` is a no-op for the unchanged-cluster case (idempotent for `from == to`), so the cluster-size projection is unaffected by confidence-only changes.
+- The provisional path (`_issue_provisional`) is an insert (no `existing`), so the narrower no-op condition does not change its behaviour.
+
+#### 6.2 A curator may act once per placement
+
+Recording a curator action is allowed **iff** no action exists since the current placement (`created_at > updated_at ?? created_at`). After ERE advances `updated_at`, prior actions fall before the boundary and exactly one fresh action is permitted against the new placement; a second action on the *same* placement is rejected (`AlreadyCuratedError`, HTTP 409). This is the same boundary that derives `reviewed_since_placement`, so the read and write sides agree by construction: no second silent acceptance, no inconsistent ERE re-trigger.
 
 ---
 
@@ -265,57 +317,78 @@ After ERE re-integration, `updated_at` advances → prior actions fall before `s
 | `ClusterSizeIndex` port (domain protocol) | `src/ers/resolution_decision_store/domain/cluster_size_index.py` (new) |
 | `MongoClusterSizeIndex` adapter | `src/ers/resolution_decision_store/adapters/cluster_size_index.py` (new) |
 | Integration write hooks (call `ClusterSizeIndex.shift` on insert / placement change) | `src/ers/resolution_decision_store/services/decision_store_service.py` (the use case that applies ERE outcomes — single place that knows when placement changes) |
-| `reviewed` query param binding | `src/ers/curation/entrypoints/api/v1/decisions.py` (no DTO field, no enum) |
+| Material-outcome-change: outcome-keyed short-circuit (§6.1) + `is_same_outcome` helper | `src/ers/resolution_decision_store/services/decision_store_service.py` (short-circuit) + `src/ers/resolution_decision_store/domain/` (value-object comparison helper) |
+| `DecisionSummary.reviewed_since_placement` — derived-on-read bool (per-row primitive) | `src/ers/curation/domain/data_transfer_objects.py` (DTO field) + computed in the read pipeline (`$addFields`) |
+| `ever_reviewed` + `reviewed_since_placement` query param binding | `src/ers/curation/entrypoints/api/v1/decisions.py` (no stored field, no enum) |
 | `UserActionFilters.decision_id` — extend the existing filter on `/curation/user-actions` | `src/ers/commons/domain/data_transfer_objects.py` (or `src/ers/curation/domain/data_transfer_objects.py` — wherever `UserActionFilters` lives) + filter binding in `entrypoints/api/v1/user_actions.py` + `$match` term in `user_action_repository.find_with_cursor` |
-| Read pipeline — cluster-size sort `$lookup` against `cluster_sizes`, gated `$lookup` against `user_actions` for `reviewed` | `src/ers/resolution_decision_store/adapters/decision_repository.py` |
+| Read pipeline — cluster-size sort `$lookup` against `cluster_sizes`; `$lookup` against `user_actions` to compute `reviewed_since_placement` (per-row field; gated `$match` for the `reviewed_since_placement` / `ever_reviewed` filters) | `src/ers/resolution_decision_store/adapters/decision_repository.py` |
 | Atomic `$inc previous_review_count` on every action save | `src/ers/curation/services/user_action_service.py` (in `record_accept` / `record_reject` / `record_assign`) |
 | `build_cluster_preview` — read `cluster_size` from `ClusterSizeIndex.get_size` (no ad-hoc `count_documents`) | `src/ers/curation/services/canonical_entity_service.py` |
-| Write-guard fix (TEDSWS-522 idempotency) | `src/ers/curation/services/user_action_service.py:42` |
+| Curator-acts-once write guard (§6.2) | `src/ers/curation/services/user_action_service.py` |
 | Statistics aggregations — query `cluster_sizes`, not `decisions` | `src/ers/curation/adapters/statistics_repository.py` |
 | One-off backfill scripts | `src/scripts/backfill_cluster_sizes.py`, `src/scripts/backfill_previous_review_count.py` |
-| Indexes (verify / declare) | `cluster_sizes._id` (PK), `cluster_sizes.size`, `user_actions.decision_id`, `decisions.current_placement.cluster_id` |
+| Indexes (verify / declare) | `cluster_sizes._id` (PK), `cluster_sizes.size`, `user_actions.about_entity_mention`, `decisions.current_placement.cluster_id` |
 
 Dependency direction respected: entrypoints → services → domain; adapters → domain. `ClusterSizeIndex` is a domain port (Protocol) — both the integrator (writer) and the read repository (reader) depend on the abstraction, not on the Mongo adapter.
 
 ---
 
-## Verified impact (GitNexus, repo `entity-resolution-service`)
+## Architectural validation
 
-| Symbol | Risk | Reading |
-|---|---|---|
-| `DecisionOrdering` | LOW | 0 upstream callers — safe to extend |
-| `RegistryStatistics` | LOW | 1 caller (`get_registry_statistics`) — rename `average_cluster_size` → `cluster_size_average` localised to this single call site + the stats payload contract |
-| `CanonicalEntityPreview` | **CRITICAL** (15 processes) | Rating reflects usage breadth, not breakage. Adding a field with a default is non-breaking; only `build_cluster_preview` body changes. |
-| `build_cluster_preview` | CRITICAL (15 processes) | Same reading — function body now reads from `ClusterSizeIndex` (one indexed key-value lookup) instead of doing a count. |
-| `find_with_filters` | LOW | Shared with `query_decisions_paginated` (bulk sync); the cluster-size `$lookup` against `cluster_sizes` is added only when `ordering` matches the new enum values; the `reviewed` `$lookup` is added only when `reviewed is not None` — both gated, both off by default. |
-| `_check_not_already_curated` | **CRITICAL** | 3 direct callers, 20 affected processes. The fix *is* the desired behavioural change for TEDSWS-522. Covered by explicit regression scenarios. |
-| `record_accept` / `record_reject` / `record_assign` | HIGH (transitively) | New side-effect: one extra atomic `$inc` on the decision document per call. The action save and the increment must be coordinated; see R8 in risks for the failure-mode handling. |
-| `decision_store_service` integration use case | HIGH | New side-effect: calls `ClusterSizeIndex.shift` on placement changes. Localised to the use case; no cross-cutting changes. |
+No conflicts with the architecture docs (verified via doc-mining pass — `conceptual-model.adoc`, `adrb2.adoc`, `adrc2.adoc`, `ucw2.adoc`, `ucw4.adoc`). The counter and the cluster-size projection are *traces of curator activity* and *cluster cardinality*, respectively — neither is a decision-lifecycle status, so the prohibition on "pending/reviewed flags" at `conceptual-model.adoc:223` is not engaged. `reviewed_since_placement` is computed per request (never stored), so it is not a status field either.
 
-No conflicts with the architecture docs (verified via doc-mining pass — `conceptual-model.adoc`, `adrb2.adoc`, `adrc2.adoc`, `ucw2.adoc`, `ucw4.adoc`). The counter and the cluster-size projection are *traces of curator activity* and *cluster cardinality*, respectively — neither is a decision-lifecycle status, so the prohibition on "pending/reviewed flags" at `conceptual-model.adoc:223` is not engaged.
+> Blast-radius / symbol-level impact analysis for the concrete code changes lives in the implementation delta plan (`TEDSWS-524-delta-plan.md`), not here — this spec describes the target design, not its diff against the current code.
 
 ---
 
 ## Tests (BDD + unit)
 
-### Feature: `decision_browsing.feature` — Pending/Reviewed filter & cluster-size sort
+### Feature: `decision_browsing.feature` — review-state filters & cluster-size sort
 
 ```gherkin
-Scenario: List decisions pending review (no prior action against current placement)
-  Given a decision exists with no user_action recorded since its current placement
-  When I GET /api/v1/curation/decisions?reviewed=false
+Scenario: Not-reviewed decisions (no curator action ever)
+  Given a decision with previous_review_count = 0
+  When I GET /api/v1/curation/decisions?ever_reviewed=false
   Then the response includes that decision
+  And the row has reviewed_since_placement = false
 
-Scenario: Filter decisions already reviewed on current placement
+Scenario: Reviewed and up to date (action since current placement)
   Given a decision with a user_action whose created_at is after its current placement
-  When I GET /api/v1/curation/decisions?reviewed=true
+  When I GET /api/v1/curation/decisions?reviewed_since_placement=true
   Then the response includes that decision
+  And the row has reviewed_since_placement = true
 
-Scenario: ERE re-integration returns a previously-reviewed decision to Pending
+Scenario: Reviewed but needs revisit (ERE update arrived after the last review)
   Given a decision was reviewed (accept) at T1
-  And ERE re-integrates a new outcome for the same mention at T2 > T1, advancing updated_at
-  When I GET /api/v1/curation/decisions?reviewed=false
+  And ERE re-integrates a material new outcome for the same mention at T2 > T1, advancing updated_at
+  When I GET /api/v1/curation/decisions?ever_reviewed=true&reviewed_since_placement=false
   Then the response includes that decision
+  And the row has previous_review_count >= 1
+  And the row has reviewed_since_placement = false
+
+Scenario: Not-reviewed and needs-revisit are distinguishable (the boolean would conflate them)
+  Given a decision N with previous_review_count = 0 and no action since placement
+  And a decision R with previous_review_count = 2 and no action since placement
+  When I GET /api/v1/curation/decisions?ever_reviewed=false
+  Then the response includes N
+  And the response excludes R
+  When I GET /api/v1/curation/decisions?ever_reviewed=true&reviewed_since_placement=false
+  Then the response includes R
+  And the response excludes N
+
+Scenario: Same-cluster confidence drop re-surfaces a reviewed decision as needs-revisit
+  Given a decision in cluster X was reviewed (accept) at T1 with confidence 0.92
+  When ERE re-integrates the same cluster X at T2 > T1 with confidence 0.55
+  Then the decision's updated_at advances to T2
+  And the decision's current_placement.confidence_score = 0.55
+  And GET /api/v1/curation/decisions?reviewed_since_placement=false includes that decision
+
+Scenario: Reviewed-more-than-once and current
+  Given a decision with previous_review_count = 3 and a user_action since its current placement
+  When I GET /api/v1/curation/decisions?reviewed_since_placement=true
+  Then the response includes that decision
+  And the row has previous_review_count = 3
+  And the row has reviewed_since_placement = true
 
 Scenario: Sort by cluster size ascending then descending
   Given clusters A (size 5), B (size 12), C (size 3) each contain decisions
@@ -377,11 +450,12 @@ Scenario: Counter is preserved across ERE re-integration
   Then the row for that decision still has previous_review_count = 3
   And the current_placement reflects the new ERE outcome
 
-Scenario: Reviewed filter and counter are independent
+Scenario: The two primitives are independent (needs-revisit row keeps its lifetime count)
   Given a decision with previous_review_count = 5 and no action since current placement
-  When I GET /api/v1/curation/decisions?reviewed=false
+  When I GET /api/v1/curation/decisions?ever_reviewed=true&reviewed_since_placement=false
   Then the row appears in the result
   And its previous_review_count = 5
+  And its reviewed_since_placement = false
 ```
 
 ### Feature: `decision_canonical_entity_preview.feature` — per-cluster size
@@ -433,10 +507,12 @@ Scenario: Placement change shifts the count
   Then cluster_sizes[X].size = 4
   And cluster_sizes[Y].size = 3
 
-Scenario: Unchanged placement is a no-op
+Scenario: Unchanged cluster keeps the cluster_sizes count (even when confidence changes)
   Given a decision in cluster X with cluster_sizes[X].size = 7
-  When ERE re-integrates with the same cluster_id = X
+  When ERE re-integrates with the same cluster_id = X but a different confidence
   Then cluster_sizes[X].size = 7
+  # The decision document is still rewritten (updated_at bumped, new confidence stored — §6.1),
+  # but ClusterSizeIndex.shift(from=X, to=X) is a no-op, so the projection is unchanged.
 
 Scenario: Sort by cluster size uses the projection
   Given clusters A (size 5), B (size 12), C (size 3) in cluster_sizes
@@ -466,6 +542,35 @@ Scenario: Cannot double-act on the same fresh placement
   Then the response status is 409
 ```
 
+### Feature: `decision_store_material_outcome.feature` — §6.1 short-circuit narrowing
+
+```gherkin
+Scenario: Identical outcome replay is an idempotent no-op
+  Given a decision in cluster X with confidence 0.80 and candidates [Y, Z]
+  When ERE re-integrates the identical outcome (cluster X, confidence 0.80, candidates [Y, Z])
+  Then the write is short-circuited
+  And updated_at is unchanged
+
+Scenario: Same cluster but changed confidence writes through and bumps updated_at
+  Given a decision in cluster X with confidence 0.80
+  When ERE re-integrates cluster X with confidence 0.55 at T2
+  Then the write is NOT short-circuited
+  And updated_at = T2
+  And current_placement.confidence_score = 0.55
+
+Scenario: Same cluster but changed candidate ordering writes through
+  Given a decision in cluster X with candidates [Y, Z]
+  When ERE re-integrates cluster X with candidates [Z, Y]
+  Then the write is NOT short-circuited
+  And updated_at advances
+
+Scenario: Changed cluster writes through (unchanged behaviour)
+  Given a decision in cluster X
+  When ERE re-integrates the decision into cluster Y
+  Then the write is NOT short-circuited
+  And updated_at advances
+```
+
 ### Unit tests
 
 - `_check_not_already_curated`: predicate fires regardless of `updated_at` state.
@@ -473,7 +578,9 @@ Scenario: Cannot double-act on the same fresh placement
 - `MongoClusterSizeIndex.shift`: atomic `$inc` upserts on both keys; verify bulk-write batches commute.
 - `record_accept` / `record_reject` / `record_assign`: action save + counter increment are coordinated; verify the action insertion and the `$inc` either both occur or neither does (see R8 mitigation).
 - Repository `$lookup` against `cluster_sizes`: stage added only for the cluster-size sort enum values; falls back to `0` for clusters absent from `cluster_sizes`.
-- Repository `$lookup` against `user_actions`: stage added only when `reviewed is not None`; omitted on the bulk-sync path.
+- Repository `$lookup` against `user_actions`: computes `reviewed_since_placement` on the curation path; `ever_reviewed` / `reviewed_since_placement` `$match` stages applied only when the respective param is not None; whole lookup omitted on the bulk-sync path.
+- Review-state derivation: the four curator-facing states are correctly composed from `(previous_review_count, reviewed_since_placement)` — in particular "Not reviewed" (`count==0`) and "Needs revisit" (`count>0 & !since`) are distinguished despite sharing `reviewed_since_placement == false`.
+- `is_same_outcome` / short-circuit (§6.1): no-op only when `current_placement` AND truncated `candidates` are structurally equal; writes through on any confidence / similarity / candidate-ordering / cluster change. `shift(from=X, to=X)` invoked as a no-op when cluster unchanged.
 - `build_cluster_preview`: `cluster_size` read from `ClusterSizeIndex.get_size`; service does **not** call the decisions collection for this.
 - `statistics_repository`: percentile, singleton, max, average — verified on synthetic `cluster_sizes` populations including ties and a single-cluster registry.
 - No-regression on `query_decisions_paginated`: payload unchanged when neither gating flag is set.
@@ -484,32 +591,33 @@ Scenario: Cannot double-act on the same fresh placement
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| **R1 — `$lookup` against `user_actions` for the `reviewed` filter** | Low | Indexed `user_actions.decision_id`, inner pipeline `$limit:1` + project `_id` only; gated (only when `reviewed is not None`) and only on the curation path |
+| **R1 — `$lookup` against `user_actions` for `reviewed_since_placement`** | Low | Indexed `user_actions.about_entity_mention`, inner pipeline `$limit:1` + project `_id` only; only on the curation path (never on bulk sync). `ever_reviewed` adds no lookup (stored-counter `$match`) |
 | **R2 — `cluster_sizes` drift from `decisions`** (the central correctness risk of the new projection) | Medium → Low | Three layered defences: (a) single writer — only the decision-store integration use case calls `ClusterSizeIndex.shift`; (b) backfill script idempotent and runnable any time; (c) periodic invariant check (`scripts/verify_cluster_sizes.py` — diff aggregation vs projection) wired into a low-frequency CI job or oncall runbook. Strong incentive to keep the writer single — flagged in the docstring on the integrator |
 | **R3 — `previous_review_count` drift from `user_actions`** | Low | Single writer (`user_action_service.record_*`); action insert + counter `$inc` performed in close sequence. See R8 for failure-mode handling. Backfill script idempotent. Periodic invariant check (count `user_actions` per decision vs the counter) catches drift if it ever happens |
 | **R4 — `_check_not_already_curated` change rated CRITICAL** | N/A — desired | The change *is* the TEDSWS-522 fix. Covered by explicit Gherkin regression. Reversible by re-introducing the `updated_at is not None` gate |
 | **R5 — `CanonicalEntityPreview` field addition** | Very low | Pydantic field with default — non-breaking on serialisation. The 15 affected flows are read-paths only. |
 | **R6 — Per-decision history pulls full summaries** (one call per detail-panel open) | Low | Lazy-loaded on detail-panel open, not per list row. `decision_id`-indexed query, cursor-paginated. Typical decision has very few historical actions; payload bounded by `limit` |
-| **R7 — Semantics discrepancy with product mental model** ("any action" vs "since current placement") | Medium | Now structurally separated by design: `previous_review_count` answers "any action" (lifetime), the `?reviewed` filter answers "since current placement" (current). Both are exposed; the product owner / UX layer chooses which to surface where |
+| **R7 — Semantics discrepancy with product mental model** ("any action" vs "since current placement") | Medium → resolved | Structurally separated by design into two primitives: `previous_review_count` (lifetime) and `reviewed_since_placement` (current). The UI composes the four named states (Not reviewed / Up to date / Needs revisit / Reviewed-more-than-once). Neither primitive is forced to answer both questions |
 | **R8 — Action save + counter `$inc` not transactional** | Low | The action save is the canonical write; the counter is a denormalised mirror. Failure modes: (a) action save fails ⇒ no increment, consistent; (b) action save succeeds, increment fails ⇒ counter under-reports by 1 until the periodic invariant check or the next backfill run reconciles it. The UI does not block on the counter being correct to the unit. Acceptable. (Optional hardening: a small outbox table to retry failed increments — flagged as future work, not in scope.) |
 | **R9 — Stats payload rename breaks consumers** (`average_cluster_size` → `cluster_size_average`) | Low | Single rename in a non-public, internal-curation API surface. Coordinate with the curation webapp release. If a soft migration is preferred, emit both names for one release with a deprecation flag — but not the default recommendation |
+| **R10 — Short-circuit narrowing increases write volume** (§6.1) | Low | Only *materially changed* outcomes write through; truly identical replays still no-op, so ERE response idempotency (`adrc2.adoc:51-57`) is preserved. Worst case is one extra `find_one_and_update` per genuine outcome change — bounded by the real re-assessment rate. The stale-confidence-display bug it fixes is the stronger reason to make the change |
 
 ---
 
 ## Coherence & elegance check
 
-- **Two questions, two surfaces, each served by the cheapest reliable read.**
-  - *Q1 — is the current placement reviewed?* → derived on read via gated `$lookup` (cheap, no projection needed because the answer flips on every ERE re-integration anyway).
-  - *Q2 — has this entity been touched before?* → answered by a stored counter (`previous_review_count`) maintained at write time, because the answer is needed cheaply on **every** list row.
-  - Each question is matched to the technique that fits its read profile and its volatility — neither is forced into the wrong technique.
+- **Two primitives, four states, each served by the cheapest reliable read.**
+  - *Is the current placement reviewed?* (`reviewed_since_placement`) → derived on read via the `$lookup` (cheap, no projection needed because the answer flips on every material ERE re-integration anyway).
+  - *Has this entity been touched before?* (`previous_review_count`) → a stored counter maintained at write time, because the answer is needed cheaply on **every** list row and separates "Not reviewed" from "Needs revisit".
+  - The UI composes the four curator-facing states from these two primitives. Each primitive is matched to the technique that fits its read profile and its volatility — neither is forced to answer both questions.
 
 - **Aligned with existing patterns.** Sort enum follows the established `"field"` / `"-field"` shape. The `decision_id` extension on `UserActionFilters` mirrors how the existing endpoint already accepts `action_type`, `actor`, and `time_range_*` filters. Gating via opt-in pipeline branches mirrors the way `find_with_filters` already conditions on `filters`.
 
-- **Stable read-side cost.** No per-list `$group` over the full decisions set anywhere — the cluster-size sort reads from a maintained projection; the stats query reads from the same projection; the `previous_review_count` is a stored field; the only `$lookup` (for `reviewed`) is gated, single-key, and bounded by page size.
+- **Stable read-side cost.** No per-list `$group` over the full decisions set anywhere — the cluster-size sort reads from a maintained projection; the stats query reads from the same projection; the `previous_review_count` is a stored field; the only `$lookup` (for `reviewed_since_placement`) is single-key, bounded by page size, and confined to the curation path.
 
 - **Cross-DB portable.** Every read is either an indexed lookup or a scalar field. No DB-specific aggregation tricks. Moving away from Mongo would require porting two atomic `$inc` increments and a `find().sort().limit(1)` — that's it.
 
-- **No status flag anywhere.** The architectural prohibition (conceptual-model.adoc:223) is honoured. `previous_review_count` is a *count*, not a status; the `?reviewed` filter is computed at request time, not stored.
+- **No status flag anywhere.** The architectural prohibition (conceptual-model.adoc:223) is honoured. `previous_review_count` is a *count*, not a status; `reviewed_since_placement` is *derived on read* (recomputed every request), not stored. The named states live only in the UI's composition layer.
 
 - **Architecturally validated.** Five load-bearing doc passages support the chosen approach (`conceptual-model.adoc:223`, `adrb2.adoc:30`, `adrb2.adoc:41-45`, `adrc2.adoc:51-57`, `ucw4.adoc:17-26`); zero contradictions found.
 
@@ -542,10 +650,10 @@ Scenario: Cannot double-act on the same fresh placement
 - **Services (use cases)**:
   - `decision_store_service` applies ERE outcomes → calls `ClusterSizeIndex.shift` (write-side projection maintenance).
   - `user_action_service.record_*` → calls action repo + decision-repo counter increment (write-side counter maintenance).
-  - `decision_curation_service.list_decisions` → forwards `reviewed` + ordering to the read repository (read-side, no business logic).
+  - `decision_curation_service.list_decisions` → forwards `ever_reviewed` + `reviewed_since_placement` + ordering to the read repository (read-side, no business logic).
   - `statistics_service` → reads from `cluster_sizes` projection (read-side).
   - `canonical_entity_service.build_cluster_preview` → reads `ClusterSizeIndex.get_size` (read-side).
-- **Entrypoints (HTTP)**: parameter binding (`reviewed` boolean, `ordering` enum, `decision_id` filter on `/curation/user-actions`), DTO forwarding. Zero business logic.
+- **Entrypoints (HTTP)**: parameter binding (`ever_reviewed` + `reviewed_since_placement` booleans, `ordering` enum, `decision_id` filter on `/curation/user-actions`), DTO forwarding. Zero business logic.
 
 Dependency direction respected throughout: `entrypoints → services → domain` and `adapters → domain`. No reverse imports.
 
@@ -558,13 +666,14 @@ The two new side-effects (cluster-size shift on integration; review-count increm
 
 Ordered so each step is independently shippable and adds value without depending on the next.
 
-1. **Write-guard fix** in `user_action_service._check_not_already_curated` + idempotency Gherkin regression. Closes TEDSWS-522 write side. **Independent of every later step.**
-2. **`previous_review_count` on the decision** — schema field (default 0), `DecisionRepository.increment_review_count`, `$inc` call from `user_action_service.record_*`, backfill script, periodic invariant verification script, Gherkin scenarios. Closes the TEDSWS-522 "previously seen" indicator on the list side.
-3. **Extend `UserActionFilters` with `decision_id`** — one filter field, reuses the existing `/curation/user-actions` listing. Completes the TEDSWS-522 detail-panel timeline.
-4. **`ClusterSizeIndex` port + `MongoClusterSizeIndex` adapter + integrator write hooks + backfill script + verification script.** Foundation for steps 5–7.
-5. **`?reviewed=true|false` filter** — entrypoint binding, service forwarding, repository gated `$lookup` against `user_actions`, scenarios.
-6. **Cluster-size sort** — `DecisionOrdering` extension, `_SORT_FIELD_MAP` entry, repository `$lookup` against `cluster_sizes`, scenarios.
-7. **`CanonicalEntityPreview.cluster_size`** — `build_cluster_preview` reads from `ClusterSizeIndex.get_size`. Scenarios.
-8. **Cluster-size distribution stats** — `RegistryStatistics` rename + new fields, `statistics_repository` reads `cluster_sizes`, scenarios. Coordinate the `average_cluster_size` rename with the curation webapp release.
+1. **Curator-acts-once contract** (§6.2) — review-boundary write guard + idempotency Gherkin regression. Closes the TEDSWS-522 write side. Independent of every later step.
+2. **Material-outcome-change short-circuit** (§6.1) — `is_same_outcome` domain helper + outcome-keyed short-circuit in `store_decision`; write-side Gherkin (`decision_store_material_outcome.feature`). Independent; required for "Needs revisit" to fire on same-cluster confidence drops and to fix stale-confidence display.
+3. **`previous_review_count` on the decision** — schema field (default 0), counter increment from `user_action_service.record_*`, backfill + invariant-verification scripts, Gherkin. Provides the "ever reviewed" primitive (separates Not-reviewed from Needs-revisit).
+4. **Extend `UserActionFilters` with `decision_id`** — one filter field resolving to the triad; reuses the existing `/curation/user-actions` listing. Completes the TEDSWS-522 detail-panel timeline.
+5. **`ClusterSizeIndex` port + Mongo adapter + integrator write hooks + backfill + verification scripts.** Foundation for steps 6–8.
+6. **Review-state read surface** — `DecisionSummary.reviewed_since_placement` (derived field), `ever_reviewed` + `reviewed_since_placement` filter params, repository `$lookup` with filter-before-limit, four-state scenarios. Depends on step 3 for the counter primitive.
+7. **Cluster-size sort** — `DecisionOrdering` extension, `_SORT_FIELD_MAP` entry, repository aggregation + keyset cursor over the derived `cluster_size`, scenarios.
+8. **`CanonicalEntityPreview.cluster_size`** — `build_cluster_preview` reads from `ClusterSizeIndex.get_size`. Scenarios.
+9. **Cluster-size distribution stats** — `RegistryStatistics` `cluster_*` fields, `statistics_repository` reads `cluster_sizes`, scenarios. Coordinate any stats-field rename with the curation webapp release.
 
-**PR strategy.** Step 1 ships on its own. Steps 2–3 form a TEDSWS-522 follow-up PR. Steps 4–8 form the TEDSWS-524 PR (stack on the 2–3 PR via `--base feature/TEDSWS-522`). Total: three stacked PRs, each independently reviewable.
+Each step is independently shippable. Steps 1–4 close TEDSWS-522; steps 5–9 deliver TEDSWS-524.
