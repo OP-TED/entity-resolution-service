@@ -66,7 +66,7 @@ def parse_args() -> argparse.Namespace:
         "--ers-url",
         required=True,
         help=(
-            "ERS base URL, e.g. https://ers-api.ersys.meaningfy.ws. "
+            "ERS base URL, e.g. https://<your-ers-host>. "
             "If a full /resolve-bulk URL is passed, it is also accepted."
         ),
     )
