@@ -1,5 +1,5 @@
 """Unit tests for scripts.backfill_cluster_sizes."""
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pymongo import UpdateOne
@@ -158,6 +158,7 @@ async def test_run_backfill_empty_decisions_makes_no_writes():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+@pytest.mark.xfail(reason="Task 4: _delete_stale_entries not yet implemented", strict=True)
 async def test_run_backfill_deletes_stale_entries():
     """After upserting, delete_many is called once with a $nin filter.
 
