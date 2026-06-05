@@ -13,6 +13,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 from starlette.testclient import TestClient
 
 from ers.commons.domain.data_transfer_objects import CursorPage
+from ers.resolution_decision_store.adapters.decision_repository import ReviewMetadata
 from test.unit.factories import (
     DecisionFactory,
     EntityMentionFactory,
@@ -100,7 +101,9 @@ def test_list_entity_types():
     pass
 
 
-@scenario(FEATURE, "List decisions pending review (no prior action against current placement)")
+@scenario(
+    FEATURE, "List decisions pending review (no prior action against current placement)"
+)
 def test_filter_reviewed_false():
     pass
 
@@ -110,7 +113,9 @@ def test_filter_reviewed_true():
     pass
 
 
-@scenario(FEATURE, "ERE re-integration returns a previously-reviewed decision to Pending")
+@scenario(
+    FEATURE, "ERE re-integration returns a previously-reviewed decision to Pending"
+)
 def test_ere_reintegration_returns_to_pending():
     pass
 
@@ -602,7 +607,9 @@ def entity_types_returned(response: Any) -> None:
 
 
 @when(
-    parsers.parse('I request decisions with ordering "{ordering}" and reviewed "{reviewed_val}"'),
+    parsers.parse(
+        'I request decisions with ordering "{ordering}" and reviewed "{reviewed_val}"'
+    ),
     target_fixture="response",
 )
 def request_with_ordering_and_reviewed(
@@ -633,7 +640,9 @@ def decision_without_recent_action(
     decision_repository: AsyncMock,
     entity_mention_repository: AsyncMock,
 ) -> None:
-    _setup_decisions(decision_repository, entity_mention_repository, 1, prefix="d-pending")
+    _setup_decisions(
+        decision_repository, entity_mention_repository, 1, prefix="d-pending"
+    )
 
 
 @when("I GET /api/v1/curation/decisions?reviewed=false", target_fixture="response")
@@ -653,7 +662,9 @@ def decision_with_recent_action(
     decision_repository: AsyncMock,
     entity_mention_repository: AsyncMock,
 ) -> None:
-    _setup_decisions(decision_repository, entity_mention_repository, 1, prefix="d-reviewed")
+    _setup_decisions(
+        decision_repository, entity_mention_repository, 1, prefix="d-reviewed"
+    )
 
 
 @when("I GET /api/v1/curation/decisions?reviewed=true", target_fixture="response")
@@ -668,21 +679,26 @@ def decision_ere_reintegrated(
     decision_repository: AsyncMock,
     entity_mention_repository: AsyncMock,
 ) -> None:
-    _setup_decisions(decision_repository, entity_mention_repository, 1, prefix="d-reint")
+    _setup_decisions(
+        decision_repository, entity_mention_repository, 1, prefix="d-reint"
+    )
 
 
 @given("a decision that was reviewed before a later ERE update")
 def decision_needs_revisit(
     decision_repository: AsyncMock,
     entity_mention_repository: AsyncMock,
-    review_state_reader: AsyncMock,
 ) -> None:
     decisions, _ = _setup_decisions(
         decision_repository, entity_mention_repository, 1, prefix="d-revisit"
     )
-    # Needs revisit: reviewed at least once (count > 0) but not since the current placement.
-    decision_repository.find_review_counts.return_value = {decisions[0].id: 2}
-    review_state_reader.reviewed_since_placement.return_value = {decisions[0].id: False}
+    # Needs revisit: reviewed at least once (count > 0) but the flag was reset to
+    # False by the integrator on the later placement advance.
+    decision_repository.find_review_metadata.return_value = {
+        decisions[0].id: ReviewMetadata(
+            previous_review_count=2, reviewed_since_placement=False
+        )
+    }
 
 
 @when(

@@ -11,7 +11,6 @@ from ers.commons.services.exceptions import NotFoundError
 from ers.curation.adapters.entity_mention_repository import (
     EntityMentionCurationRepository,
 )
-from ers.curation.adapters.review_state_reader import ReviewStateReader
 from ers.curation.domain.data_transfer_objects import (
     BulkActionResponse,
     BulkItemResult,
@@ -24,7 +23,10 @@ from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.services._pymongo_translation import translate_mongo_errors
 from ers.curation.services.user_action_service import UserActionService
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
-from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
+from ers.resolution_decision_store.adapters.decision_repository import (
+    DecisionRepository,
+    ReviewMetadata,
+)
 
 log = logging.getLogger(__name__)
 
@@ -40,13 +42,11 @@ class DecisionCurationService:
         entity_mention_repository: EntityMentionCurationRepository,
         user_action_service: UserActionService,
         ere_publish_service: EREPublishService,
-        review_state_reader: ReviewStateReader,
     ) -> None:
         self._decision_repository = decision_repository
         self._entity_mention_repository = entity_mention_repository
         self._user_action_service = user_action_service
         self._ere_publish_service = ere_publish_service
-        self._review_state_reader = review_state_reader
 
     async def _get_decision_or_raise(self, decision_id: str) -> Decision:
         decision = await self._decision_repository.find_by_id(decision_id)
@@ -160,20 +160,21 @@ class DecisionCurationService:
             reviewed_since_placement=effective_reviewed_since_placement,
         )
 
-        # These three reads share ``page.results`` as input but have no data
-        # dependency on one another — run them concurrently (A4).
+        # Two independent reads sharing ``page.results`` as input — run them
+        # concurrently. The previous third read against ``user_actions`` is gone
+        # now that ``reviewed_since_placement`` is materialised on the decision
+        # row and returned by ``find_review_metadata`` alongside the counter.
         identifiers = [d.about_entity_mention for d in page.results]
         decision_ids = [d.id for d in page.results]
-        entity_mentions, review_counts, review_states = await asyncio.gather(
+        entity_mentions, review_metadata = await asyncio.gather(
             self._entity_mention_repository.find_by_identifiers(identifiers),
-            self._decision_repository.find_review_counts(decision_ids),
-            self._review_state_reader.reviewed_since_placement(page.results),
+            self._decision_repository.find_review_metadata(decision_ids),
         )
 
         mention_map = self._index_by_identifier(entity_mentions)
 
         decision_summaries = [
-            self._to_decision_summary(decision, mention_map, review_counts, review_states)
+            self._to_decision_summary(decision, mention_map, review_metadata)
             for decision in page.results
         ]
 
@@ -336,18 +337,17 @@ class DecisionCurationService:
     def _to_decision_summary(
         decision: Decision,
         mention_map: dict[tuple[str, str, str], EntityMention],
-        review_counts: dict[str, int] | None = None,
-        review_states: dict[str, bool] | None = None,
+        review_metadata: dict[str, ReviewMetadata] | None = None,
     ) -> DecisionSummary:
         """Build a DecisionSummary from a Decision and its related data.
 
         Args:
             decision: The decision to summarise.
-            mention_map: Index of EntityMention objects keyed by (source_id, request_id, entity_type).
-            review_counts: Optional mapping of decision_id → previous_review_count.
-                Defaults to 0 for missing keys.
-            review_states: Optional mapping of decision_id → reviewed_since_placement.
-                Defaults to False for missing keys.
+            mention_map: Index of EntityMention objects keyed by
+                ``(source_id, request_id, entity_type)``.
+            review_metadata: Optional mapping of ``decision_id`` → ``ReviewMetadata``
+                (counter + flag, both materialised on the decision row). Missing
+                keys default to ``ReviewMetadata(count=0, reviewed_since_placement=False)``.
 
         Returns:
             A DecisionSummary with all fields populated.
@@ -355,8 +355,7 @@ class DecisionCurationService:
         emi = decision.about_entity_mention
         key = (emi.source_id, emi.request_id, emi.entity_type)
         mention = mention_map.get(key)
-        count = (review_counts or {}).get(decision.id, 0)
-        reviewed_since_placement = (review_states or {}).get(decision.id, False)
+        metadata = (review_metadata or {}).get(decision.id, ReviewMetadata())
 
         return DecisionSummary(
             id=decision.id,
@@ -367,8 +366,8 @@ class DecisionCurationService:
             current_placement=decision.current_placement,
             created_at=decision.created_at,
             updated_at=decision.updated_at,
-            previous_review_count=count,
-            reviewed_since_placement=reviewed_since_placement,
+            previous_review_count=metadata.previous_review_count,
+            reviewed_since_placement=metadata.reviewed_since_placement,
         )
 
 

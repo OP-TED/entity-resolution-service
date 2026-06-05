@@ -105,7 +105,7 @@ class MongoUserActionCurationRepository(
         count = await self._collection.count_documents(
             {
                 "about_entity_mention": about_entity_mention.model_dump(mode="python"),
-                # Strict ``$gt`` aligns with ``ReviewStateReader.reviewed_since_placement``
+                # Strict ``$gt`` aligns with ``DecisionRepository.record_review``
                 # (A5): an action at the exact placement instant is not "since placement".
                 "created_at": {"$gt": since},
             },

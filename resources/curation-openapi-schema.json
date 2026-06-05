@@ -204,7 +204,7 @@
           "Decisions"
         ],
         "summary": "List Decisions",
-        "description": "Retrieve cursor-paginated list of decisions with optional filtering.",
+        "description": "Retrieve cursor-paginated list of decisions with optional filtering.\n\nThe UI composes the four review states from the two row primitives\n(``previous_review_count`` and ``reviewed_since_placement``) and filters via\nthe two orthogonal query parameters.\n\nArgs:\n    filters: Field-level filter criteria (entity type, confidence, etc.).\n    cursor_params: Cursor-based pagination parameters.\n    user: Authenticated and verified curator.\n    service: Decision curation service (injected).\n    ever_reviewed: Filter on lifetime review existence.\n    reviewed_since_placement: Filter on review since the current placement.\n    reviewed: Deprecated alias of ``reviewed_since_placement``.",
         "operationId": "list_decisions_api_v1_curation_decisions_get",
         "security": [
           {
@@ -212,6 +212,62 @@
           }
         ],
         "parameters": [
+          {
+            "name": "ever_reviewed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter on whether any curator action has ever been recorded against the decision (previous_review_count > 0). Omit to disable.",
+              "title": "Ever Reviewed"
+            },
+            "description": "Filter on whether any curator action has ever been recorded against the decision (previous_review_count > 0). Omit to disable."
+          },
+          {
+            "name": "reviewed_since_placement",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter on whether a curator action exists since the current placement (created_at after updated_at, else created_at). Omit to disable. Combine ever_reviewed=true with reviewed_since_placement=false to list decisions that need re-visiting after an ERE update.",
+              "title": "Reviewed Since Placement"
+            },
+            "description": "Filter on whether a curator action exists since the current placement (created_at after updated_at, else created_at). Omit to disable. Combine ever_reviewed=true with reviewed_since_placement=false to list decisions that need re-visiting after an ERE update."
+          },
+          {
+            "name": "reviewed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Deprecated alias of reviewed_since_placement. Ignored when reviewed_since_placement is provided.",
+              "deprecated": true,
+              "title": "Reviewed"
+            },
+            "description": "Deprecated alias of reviewed_since_placement. Ignored when reviewed_since_placement is provided.",
+            "deprecated": true
+          },
           {
             "name": "entity_type",
             "in": "query",
@@ -1116,6 +1172,24 @@
             "description": "Sort order for the returned actions."
           },
           {
+            "name": "decision_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by the decision identifier.  Returns only user actions recorded against this decision (matched via the entity mention triad).",
+              "title": "Decision Id"
+            },
+            "description": "Filter by the decision identifier.  Returns only user actions recorded against this decision (matched via the entity mention triad)."
+          },
+          {
             "name": "cursor",
             "in": "query",
             "required": false,
@@ -1779,6 +1853,11 @@
             "title": "Similarity Score",
             "description": "Similarity score between the entity mention and the cluster."
           },
+          "cluster_size": {
+            "type": "integer",
+            "title": "Cluster Size",
+            "description": "Total number of decisions (entity mentions) assigned to this cluster, sourced from the cluster_sizes projection."
+          },
           "top_entities": {
             "items": {
               "$ref": "#/components/schemas/EntityMentionPreview"
@@ -1793,6 +1872,7 @@
           "cluster_id",
           "confidence_score",
           "similarity_score",
+          "cluster_size",
           "top_entities"
         ],
         "title": "CanonicalEntityPreview",
@@ -2044,7 +2124,9 @@
           "created_at",
           "-created_at",
           "updated_at",
-          "-updated_at"
+          "-updated_at",
+          "cluster_size",
+          "-cluster_size"
         ],
         "title": "DecisionOrdering",
         "description": "Allowed ordering options for decision listing."
@@ -2080,6 +2162,18 @@
             ],
             "title": "Updated At",
             "description": "Timestamp of the last update to this decision."
+          },
+          "previous_review_count": {
+            "type": "integer",
+            "title": "Previous Review Count",
+            "description": "Lifetime count of curator actions ever recorded against this decision. Persists across ERE re-integrations. Drives the UI 'previously reviewed' indicator.",
+            "default": 0
+          },
+          "reviewed_since_placement": {
+            "type": "boolean",
+            "title": "Reviewed Since Placement",
+            "description": "True iff a curator action exists whose created_at is after the current placement boundary (updated_at, else created_at). Materialised on the decision row by two writers: the integrator resets it to False on every placement advance; record_review conditionally sets it to True when a curator action lands. With previous_review_count the UI composes the review state: count==0 -> not reviewed; count>0 and not this flag -> needs revisit; this flag -> reviewed and up to date.",
+            "default": false
           }
         },
         "type": "object",
@@ -2375,7 +2469,7 @@
           "cluster_size_p95": {
             "type": "integer",
             "title": "Cluster Size P95",
-            "description": "95th-percentile cluster size — surfaces long-tail outliers."
+            "description": "95th-percentile cluster size \u2014 surfaces long-tail outliers."
           },
           "cluster_size_max": {
             "type": "integer",

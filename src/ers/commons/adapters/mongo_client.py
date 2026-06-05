@@ -41,6 +41,12 @@ class MongoClientManager:
             name="decisions_about_entity_mention",
         )
 
+        await db["decisions"].create_index(
+            [("reviewed_since_placement", 1), ("_id", 1)],
+            name="decisions_reviewed_since_placement_id",
+            background=True,
+        )
+
         await db["users"].create_index(
             "email",
             unique=True,

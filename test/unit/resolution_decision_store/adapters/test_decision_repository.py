@@ -1,4 +1,5 @@
 """Unit tests for MongoDecisionRepository (mocked MongoDB collection)."""
+
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
@@ -21,20 +22,33 @@ from ers.resolution_decision_store.domain.errors import (
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 def make_identifier(source_id="s1", request_id="r1", entity_type="Person"):
-    return EntityMentionIdentifier(source_id=source_id, request_id=request_id, entity_type=entity_type)
+    return EntityMentionIdentifier(
+        source_id=source_id, request_id=request_id, entity_type=entity_type
+    )
 
 
 def make_cluster(cluster_id="c1"):
-    return ClusterReference(cluster_id=cluster_id, confidence_score=0.9, similarity_score=0.85)
+    return ClusterReference(
+        cluster_id=cluster_id, confidence_score=0.9, similarity_score=0.85
+    )
 
 
 def make_doc(now, triad_hash=None, cluster_id="c1"):
     triad_hash = triad_hash or derive_provisional_cluster_id(make_identifier())
     return {
         "_id": triad_hash,
-        "about_entity_mention": {"source_id": "s1", "request_id": "r1", "entity_type": "Person"},
-        "current_placement": {"cluster_id": cluster_id, "confidence_score": 0.9, "similarity_score": 0.85},
+        "about_entity_mention": {
+            "source_id": "s1",
+            "request_id": "r1",
+            "entity_type": "Person",
+        },
+        "current_placement": {
+            "cluster_id": cluster_id,
+            "confidence_score": 0.9,
+            "similarity_score": 0.85,
+        },
         "candidates": [],
         "created_at": now,
         "updated_at": now,
@@ -60,6 +74,7 @@ def repo(mock_database):
 
 # ── upsert_decision ───────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_upsert_returns_decision_on_success(repo, mock_collection):
     """Insert path: pre-read returns None → find_one_and_update returns the new doc."""
@@ -77,7 +92,9 @@ async def test_upsert_sets_id_from_triad_hash(repo, mock_collection):
     now = datetime.now(UTC)
     expected_hash = derive_provisional_cluster_id(make_identifier())
     mock_collection.find_one = AsyncMock(return_value=None)
-    mock_collection.find_one_and_update = AsyncMock(return_value=make_doc(now, triad_hash=expected_hash))
+    mock_collection.find_one_and_update = AsyncMock(
+        return_value=make_doc(now, triad_hash=expected_hash)
+    )
     result = await repo.upsert_decision(make_identifier(), make_cluster(), [], now)
     assert result.id == expected_hash
 
@@ -96,7 +113,9 @@ async def test_upsert_skips_pre_read_when_existing_passed(repo, mock_collection)
     )
     mock_collection.find_one = AsyncMock()
     mock_collection.find_one_and_update = AsyncMock(return_value=make_doc(now))
-    await repo.upsert_decision(make_identifier(), make_cluster("c2"), [], now, existing=existing)
+    await repo.upsert_decision(
+        make_identifier(), make_cluster("c2"), [], now, existing=existing
+    )
     mock_collection.find_one.assert_not_called()
 
 
@@ -120,27 +139,38 @@ async def test_upsert_raises_stale_when_result_is_none(repo, mock_collection):
     mock_collection.find_one_and_update = AsyncMock(return_value=None)
     mock_collection.find_one = AsyncMock(return_value=existing_doc)
     with pytest.raises(StaleOutcomeError):
-        await repo.upsert_decision(make_identifier(), make_cluster(), [], older, existing=existing_decision)
+        await repo.upsert_decision(
+            make_identifier(), make_cluster(), [], older, existing=existing_decision
+        )
 
 
 @pytest.mark.asyncio
-async def test_upsert_raises_operation_error_when_no_existing_doc(repo, mock_collection):
+async def test_upsert_raises_operation_error_when_no_existing_doc(
+    repo, mock_collection
+):
     """Insert path: find_one_and_update returns None (unexpected) + no doc found → RepositoryOperationError."""
     now = datetime.now(UTC)
     mock_collection.find_one_and_update = AsyncMock(return_value=None)
     mock_collection.find_one = AsyncMock(return_value=None)
     with pytest.raises(RepositoryOperationError):
-        await repo.upsert_decision(make_identifier(), make_cluster(), [], now, existing=None)
+        await repo.upsert_decision(
+            make_identifier(), make_cluster(), [], now, existing=None
+        )
 
 
 @pytest.mark.asyncio
 async def test_upsert_wraps_connection_failure(repo, mock_collection):
     """B3: ConnectionFailure on find_one_and_update → RepositoryConnectionError."""
     from pymongo.errors import ConnectionFailure
+
     mock_collection.find_one = AsyncMock(return_value=None)
-    mock_collection.find_one_and_update = AsyncMock(side_effect=ConnectionFailure("down"))
+    mock_collection.find_one_and_update = AsyncMock(
+        side_effect=ConnectionFailure("down")
+    )
     with pytest.raises(RepositoryConnectionError):
-        await repo.upsert_decision(make_identifier(), make_cluster(), [], datetime.now(UTC))
+        await repo.upsert_decision(
+            make_identifier(), make_cluster(), [], datetime.now(UTC)
+        )
 
 
 @pytest.mark.asyncio
@@ -152,6 +182,7 @@ async def test_concurrent_inserts_one_wins(repo, mock_collection):
     — never silently drop the write or succeed with an incorrect result.
     """
     from pymongo.errors import DuplicateKeyError as MongoDuplicateKeyError
+
     now = datetime.now(UTC)
     existing = make_doc(now)
     mock_collection.find_one_and_update = AsyncMock(
@@ -160,11 +191,15 @@ async def test_concurrent_inserts_one_wins(repo, mock_collection):
     mock_collection.find_one = AsyncMock(return_value=existing)
 
     with pytest.raises(StaleOutcomeError):
-        await repo.upsert_decision(make_identifier(), make_cluster(), [], now, existing=None)
+        await repo.upsert_decision(
+            make_identifier(), make_cluster(), [], now, existing=None
+        )
 
 
 @pytest.mark.asyncio
-async def test_upsert_translates_pymongo_connection_failure_on_pre_read(repo, mock_collection):
+async def test_upsert_translates_pymongo_connection_failure_on_pre_read(
+    repo, mock_collection
+):
     """B3: Raw pymongo ConnectionFailure on the internal pre-read → RepositoryConnectionError.
 
     When ``existing`` is not provided, the repository performs a pre-read via
@@ -172,16 +207,20 @@ async def test_upsert_translates_pymongo_connection_failure_on_pre_read(repo, mo
     exceptions never leak past the adapter boundary.
     """
     from pymongo.errors import ConnectionFailure
+
     mock_collection.find_one = AsyncMock(side_effect=ConnectionFailure("network error"))
     mock_collection.find_one_and_update = AsyncMock()
 
     with pytest.raises(RepositoryConnectionError):
-        await repo.upsert_decision(make_identifier(), make_cluster(), [], datetime.now(UTC))
+        await repo.upsert_decision(
+            make_identifier(), make_cluster(), [], datetime.now(UTC)
+        )
 
     mock_collection.find_one_and_update.assert_not_called()
 
 
 # ── find_by_triad ─────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_find_by_triad_returns_decision_when_found(repo, mock_collection):
@@ -208,10 +247,13 @@ async def test_find_by_triad_queries_by_triad_hash(repo, mock_collection):
 
 # ── find_with_filters (unfiltered bulk pagination) ────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_find_with_filters_first_page_no_cursor(repo, mock_collection):
     now = datetime.now(UTC)
-    docs = [make_doc(now + timedelta(seconds=i), triad_hash=f"hash{i}") for i in range(3)]
+    docs = [
+        make_doc(now + timedelta(seconds=i), triad_hash=f"hash{i}") for i in range(3)
+    ]
 
     async def async_generator():
         for doc in docs:
@@ -224,16 +266,22 @@ async def test_find_with_filters_first_page_no_cursor(repo, mock_collection):
 
     mock_collection.find = MagicMock(return_value=cursor_mock)
 
-    page = await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor=None, limit=3))
+    page = await repo.find_with_filters(
+        filters=None, cursor_params=CursorParams(cursor=None, limit=3)
+    )
     assert len(page.results) == 3
     assert page.next_cursor is None
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_returns_next_cursor_when_more_results(repo, mock_collection):
+async def test_find_with_filters_returns_next_cursor_when_more_results(
+    repo, mock_collection
+):
     now = datetime.now(UTC)
     # Return page_size+1 docs to signal more pages
-    docs = [make_doc(now + timedelta(seconds=i), triad_hash=f"hash{i}") for i in range(4)]
+    docs = [
+        make_doc(now + timedelta(seconds=i), triad_hash=f"hash{i}") for i in range(4)
+    ]
 
     async def async_generator():
         for doc in docs:
@@ -245,19 +293,28 @@ async def test_find_with_filters_returns_next_cursor_when_more_results(repo, moc
     cursor_mock.__aiter__ = lambda self: async_generator()
 
     mock_collection.find = MagicMock(return_value=cursor_mock)
-    page = await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor=None, limit=3))
+    page = await repo.find_with_filters(
+        filters=None, cursor_params=CursorParams(cursor=None, limit=3)
+    )
     assert len(page.results) == 3
     assert page.next_cursor is not None
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_raises_invalid_cursor_on_bad_input(repo, mock_collection):
+async def test_find_with_filters_raises_invalid_cursor_on_bad_input(
+    repo, mock_collection
+):
     with pytest.raises(InvalidCursorError):
-        await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor="not-valid-base64!!!", limit=10))
+        await repo.find_with_filters(
+            filters=None,
+            cursor_params=CursorParams(cursor="not-valid-base64!!!", limit=10),
+        )
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_empty_collection_returns_empty_page(repo, mock_collection):
+async def test_find_with_filters_empty_collection_returns_empty_page(
+    repo, mock_collection
+):
     async def async_generator():
         return
         yield  # make it an async generator
@@ -269,18 +326,33 @@ async def test_find_with_filters_empty_collection_returns_empty_page(repo, mock_
 
     mock_collection.find = MagicMock(return_value=cursor_mock)
 
-    page = await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor=None, limit=3))
+    page = await repo.find_with_filters(
+        filters=None, cursor_params=CursorParams(cursor=None, limit=3)
+    )
     assert len(page.results) == 0
     assert page.next_cursor is None
 
 
 # ── find_mention_ids_by_cluster ───────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_find_mention_ids_by_cluster_returns_identifiers(repo, mock_collection):
     docs = [
-        {"about_entity_mention": {"source_id": "s1", "request_id": "r1", "entity_type": "Person"}},
-        {"about_entity_mention": {"source_id": "s2", "request_id": "r2", "entity_type": "Person"}},
+        {
+            "about_entity_mention": {
+                "source_id": "s1",
+                "request_id": "r1",
+                "entity_type": "Person",
+            }
+        },
+        {
+            "about_entity_mention": {
+                "source_id": "s2",
+                "request_id": "r2",
+                "entity_type": "Person",
+            }
+        },
     ]
 
     async def async_generator():
@@ -332,8 +404,12 @@ async def test_upsert_insert_path_omits_updated_at(repo, mock_collection):
     await repo.upsert_decision(make_identifier(), make_cluster(), [], now)
 
     call_args = mock_collection.find_one_and_update.call_args
-    update_doc = call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs.get("update")
-    assert update_doc is not None, "find_one_and_update was not called with an update doc"
+    update_doc = (
+        call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs.get("update")
+    )
+    assert update_doc is not None, (
+        "find_one_and_update was not called with an update doc"
+    )
     assert "updated_at" not in update_doc.get("$set", {}), (
         "Insert path must not set updated_at in $set"
     )
@@ -356,11 +432,17 @@ async def test_upsert_update_path_sets_updated_at(repo, mock_collection):
     )
     mock_collection.find_one_and_update = AsyncMock(return_value=make_doc(now))
 
-    await repo.upsert_decision(make_identifier(), make_cluster("c2"), [], now, existing=existing_decision)
+    await repo.upsert_decision(
+        make_identifier(), make_cluster("c2"), [], now, existing=existing_decision
+    )
 
     call_args = mock_collection.find_one_and_update.call_args
-    update_doc = call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs.get("update")
-    assert update_doc is not None, "find_one_and_update was not called with an update doc"
+    update_doc = (
+        call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs.get("update")
+    )
+    assert update_doc is not None, (
+        "find_one_and_update was not called with an update doc"
+    )
     assert "updated_at" in update_doc.get("$set", {}), (
         "Update path must set updated_at in $set"
     )
@@ -384,7 +466,9 @@ async def test_upsert_stale_filter_accepts_none_when_incoming_after_created_at(
     )
     mock_collection.find_one_and_update = AsyncMock(return_value=make_doc(t2))
 
-    result = await repo.upsert_decision(make_identifier(), make_cluster("c2"), [], t2, existing=existing_decision)
+    result = await repo.upsert_decision(
+        make_identifier(), make_cluster("c2"), [], t2, existing=existing_decision
+    )
     assert result is not None
     mock_collection.find_one.assert_not_called()
 
@@ -409,7 +493,9 @@ async def test_upsert_stale_filter_rejects_when_updated_at_none_and_incoming_old
     mock_collection.find_one = AsyncMock(return_value=existing_doc)
 
     with pytest.raises(StaleOutcomeError):
-        await repo.upsert_decision(make_identifier(), make_cluster("c2"), [], t1, existing=existing_decision)
+        await repo.upsert_decision(
+            make_identifier(), make_cluster("c2"), [], t1, existing=existing_decision
+        )
 
 
 @pytest.mark.asyncio
@@ -430,7 +516,9 @@ async def test_upsert_stale_filter_rejects_regression(repo, mock_collection):
     mock_collection.find_one = AsyncMock(return_value=existing_doc)
 
     with pytest.raises(StaleOutcomeError):
-        await repo.upsert_decision(make_identifier(), make_cluster("c2"), [], t1, existing=existing_decision)
+        await repo.upsert_decision(
+            make_identifier(), make_cluster("c2"), [], t1, existing=existing_decision
+        )
 
 
 # ── ensure_indexes: partial index R7 ─────────────────────────────────────────
@@ -461,6 +549,7 @@ async def test_ensure_indexes_creates_partial_delta_index(repo, mock_collection)
 
 # ── count_distinct_clusters ───────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_count_distinct_clusters_returns_count(repo, mock_collection):
     mock_collection.distinct = AsyncMock(return_value=["c1", "c2", "c3"])
@@ -478,6 +567,7 @@ async def test_count_distinct_clusters_returns_zero_when_empty(repo, mock_collec
 
 # ── average_cluster_size ──────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_average_cluster_size_returns_average(repo, mock_collection):
     agg_cursor = AsyncMock()
@@ -489,7 +579,9 @@ async def test_average_cluster_size_returns_average(repo, mock_collection):
 
 
 @pytest.mark.asyncio
-async def test_average_cluster_size_returns_zero_when_no_decisions(repo, mock_collection):
+async def test_average_cluster_size_returns_zero_when_no_decisions(
+    repo, mock_collection
+):
     agg_cursor = AsyncMock()
     agg_cursor.to_list = AsyncMock(return_value=[])
     mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
@@ -498,38 +590,130 @@ async def test_average_cluster_size_returns_zero_when_no_decisions(repo, mock_co
     assert result == 0.0
 
 
-# ── increment_review_count ────────────────────────────────────────────────────
+# ── record_review ─────────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_increment_review_count_issues_inc_operation(repo, mock_collection):
-    """increment_review_count calls update_one with $inc: {previous_review_count: 1}."""
+async def test_record_review_issues_aggregation_pipeline_update(repo, mock_collection):
+    """record_review uses an aggregation-update pipeline (list of stages)."""
     mock_collection.update_one = AsyncMock()
+    action_ts = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
 
-    await repo.increment_review_count("decision-abc")
+    await repo.record_review("decision-abc", action_ts)
 
-    mock_collection.update_one.assert_called_once_with(
-        {"_id": "decision-abc"},
-        {"$inc": {"previous_review_count": 1}},
-    )
+    args, _ = mock_collection.update_one.call_args
+    filter_doc, update_arg = args
+    assert filter_doc == {"_id": "decision-abc"}
+    assert isinstance(update_arg, list), "update must be a pipeline (list of stages)"
+    assert len(update_arg) == 1
+    assert "$set" in update_arg[0]
+    set_stage = update_arg[0]["$set"]
+    assert "previous_review_count" in set_stage
+    assert "reviewed_since_placement" in set_stage
 
 
 @pytest.mark.asyncio
-async def test_increment_review_count_no_upsert(repo, mock_collection):
-    """increment_review_count must NOT use upsert — missing doc is a no-op."""
+async def test_record_review_no_upsert(repo, mock_collection):
+    """record_review must NOT upsert — missing doc is a silent no-op."""
     mock_collection.update_one = AsyncMock()
 
-    await repo.increment_review_count("decision-xyz")
+    await repo.record_review("decision-xyz", datetime(2026, 6, 5, tzinfo=UTC))
 
     call_kwargs = mock_collection.update_one.call_args.kwargs
     assert call_kwargs.get("upsert", False) is False
 
 
-# ── find_with_filters: reviewed filter ───────────────────────────────────────
+@pytest.mark.asyncio
+async def test_record_review_pipeline_compares_action_timestamp_to_placement_boundary(
+    repo, mock_collection
+):
+    """The $cond inside the pipeline compares action_created_at against
+    ``$ifNull(updated_at, created_at)`` — the stored placement boundary."""
+    mock_collection.update_one = AsyncMock()
+    action_ts = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
+
+    await repo.record_review("decision-abc", action_ts)
+
+    pipeline = mock_collection.update_one.call_args.args[1]
+    flag_expr = pipeline[0]["$set"]["reviewed_since_placement"]
+    assert "$cond" in flag_expr
+    cond_branches = flag_expr["$cond"]
+    # First element of $cond is the predicate; we expect a $gt against $ifNull.
+    predicate = cond_branches[0]
+    assert "$gt" in predicate
+    assert predicate["$gt"][0] == action_ts
+    assert predicate["$gt"][1] == {"$ifNull": ["$updated_at", "$created_at"]}
+
+
+# ── find_review_metadata ──────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_find_review_metadata_returns_both_fields(repo, mock_collection):
+    """find_review_metadata returns ReviewMetadata with counter + flag."""
+    from ers.resolution_decision_store.adapters.decision_repository import (
+        ReviewMetadata,
+    )
+
+    async def _gen():
+        yield {
+            "_id": "decision-a",
+            "previous_review_count": 3,
+            "reviewed_since_placement": True,
+        }
+        yield {
+            "_id": "decision-b",
+            "previous_review_count": 0,
+            "reviewed_since_placement": False,
+        }
+
+    cursor_mock = MagicMock()
+    cursor_mock.__aiter__ = lambda self: _gen()
+    mock_collection.find = MagicMock(return_value=cursor_mock)
+
+    result = await repo.find_review_metadata(["decision-a", "decision-b"])
+
+    assert result["decision-a"] == ReviewMetadata(
+        previous_review_count=3, reviewed_since_placement=True
+    )
+    assert result["decision-b"] == ReviewMetadata(
+        previous_review_count=0, reviewed_since_placement=False
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_review_metadata_defaults_missing_fields(repo, mock_collection):
+    """Documents lacking either field default to ReviewMetadata's zero values."""
+    from ers.resolution_decision_store.adapters.decision_repository import (
+        ReviewMetadata,
+    )
+
+    async def _gen():
+        yield {"_id": "decision-a"}
+
+    cursor_mock = MagicMock()
+    cursor_mock.__aiter__ = lambda self: _gen()
+    mock_collection.find = MagicMock(return_value=cursor_mock)
+
+    result = await repo.find_review_metadata(["decision-a"])
+
+    assert result["decision-a"] == ReviewMetadata(
+        previous_review_count=0, reviewed_since_placement=False
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_review_metadata_empty_ids_returns_empty(repo):
+    result = await repo.find_review_metadata([])
+    assert result == {}
+
+
+# ── find_with_filters: review filters as stored-field $match ──────────────────
 
 
 def _make_async_cursor(docs):
     """Build a mock cursor that yields docs asynchronously."""
+
     async def _gen():
         for doc in docs:
             yield doc
@@ -542,8 +726,8 @@ def _make_async_cursor(docs):
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_reviewed_none_does_not_contain_lookup(repo, mock_collection):
-    """reviewed=None: pipeline uses find(), NOT aggregate() — no $lookup against user_actions."""
+async def test_find_with_filters_reviewed_none_uses_find(repo, mock_collection):
+    """reviewed_since_placement=None: no aggregation — plain find()."""
     from ers.commons.domain.data_transfer_objects import DecisionFilters
 
     mock_collection.find = MagicMock(return_value=_make_async_cursor([]))
@@ -561,22 +745,21 @@ async def test_find_with_filters_reviewed_none_does_not_contain_lookup(repo, moc
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_reviewed_true_uses_lookup_and_matches_non_empty(repo, mock_collection):
-    """reviewed=True: pipeline contains $lookup and $match for non-empty _has_recent_action."""
+async def test_find_with_filters_reviewed_true_adds_stored_field_match(
+    repo, mock_collection
+):
+    """reviewed_since_placement=True is a plain $match on the stored boolean — no $lookup."""
     from ers.commons.domain.data_transfer_objects import DecisionFilters
 
-    agg_cursor = AsyncMock()
-    agg_cursor.__aiter__ = AsyncMock(return_value=iter([]))
-    agg_cursor.to_list = AsyncMock(return_value=[])
+    captured: dict = {}
 
-    async def _aiter(self):
-        return
-        yield  # noqa: unreachable – makes this an async generator
+    def _find(query, *args, **kwargs):
+        captured["query"] = query
+        return _make_async_cursor([])
 
-    agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
+    mock_collection.find = MagicMock(side_effect=_find)
     mock_collection.count_documents = AsyncMock(return_value=0)
-    mock_collection.find = MagicMock()
+    mock_collection.aggregate = AsyncMock()
 
     await repo.find_with_filters(
         filters=DecisionFilters(),
@@ -584,42 +767,26 @@ async def test_find_with_filters_reviewed_true_uses_lookup_and_matches_non_empty
         reviewed_since_placement=True,
     )
 
-    mock_collection.aggregate.assert_called_once()
-    pipeline = mock_collection.aggregate.call_args[0][0]
-
-    stage_types = [list(s.keys())[0] for s in pipeline]
-    assert "$lookup" in stage_types, "Pipeline must contain a $lookup stage"
-
-    lookup_stage = next(s["$lookup"] for s in pipeline if "$lookup" in s)
-    assert lookup_stage["from"] == "user_actions"
-    assert lookup_stage["as"] == "_has_recent_action"
-    assert "let" in lookup_stage
-    assert "pipeline" in lookup_stage
-
-    # The $match after lookup for reviewed=True must require non-empty array
-    post_lookup_idx = stage_types.index("$lookup") + 1
-    match_stages = [s for s in pipeline[post_lookup_idx:] if "$match" in s]
-    assert match_stages, "Pipeline must have a $match after $lookup"
-    match_expr = str(match_stages[0])
-    assert "$ne" in match_expr or "ne" in match_expr, (
-        "reviewed=True must match non-empty _has_recent_action"
-    )
+    mock_collection.aggregate.assert_not_called()
+    assert captured["query"].get("reviewed_since_placement") is True
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_reviewed_false_uses_lookup_and_matches_empty(repo, mock_collection):
-    """reviewed=False: pipeline contains $lookup and $match for empty _has_recent_action."""
+async def test_find_with_filters_reviewed_false_matches_false_or_missing(
+    repo, mock_collection
+):
+    """reviewed_since_placement=False uses $in [False, None] for engine-safe missing-field semantics."""
     from ers.commons.domain.data_transfer_objects import DecisionFilters
 
-    async def _aiter(self):
-        return
-        yield
+    captured: dict = {}
 
-    agg_cursor = MagicMock()
-    agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
+    def _find(query, *args, **kwargs):
+        captured["query"] = query
+        return _make_async_cursor([])
+
+    mock_collection.find = MagicMock(side_effect=_find)
     mock_collection.count_documents = AsyncMock(return_value=0)
-    mock_collection.find = MagicMock()
+    mock_collection.aggregate = AsyncMock()
 
     await repo.find_with_filters(
         filters=DecisionFilters(),
@@ -627,34 +794,25 @@ async def test_find_with_filters_reviewed_false_uses_lookup_and_matches_empty(re
         reviewed_since_placement=False,
     )
 
-    mock_collection.aggregate.assert_called_once()
-    pipeline = mock_collection.aggregate.call_args[0][0]
-
-    stage_types = [list(s.keys())[0] for s in pipeline]
-    assert "$lookup" in stage_types
-
-    post_lookup_idx = stage_types.index("$lookup") + 1
-    match_stages = [s for s in pipeline[post_lookup_idx:] if "$match" in s]
-    assert match_stages, "Pipeline must have a $match after $lookup"
-    match_expr = str(match_stages[0])
-    assert "$eq" in match_expr or "eq" in match_expr, (
-        "reviewed=False must match empty _has_recent_action"
-    )
+    mock_collection.aggregate.assert_not_called()
+    assert captured["query"].get("reviewed_since_placement") == {"$in": [False, None]}
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_reviewed_pipeline_excludes_has_recent_action_field(repo, mock_collection):
-    """Pipeline must project out _has_recent_action so it is not returned in results."""
+async def test_find_with_filters_count_includes_review_predicate(repo, mock_collection):
+    """count_documents must run against the same query that includes the review filter
+    so ``CursorPage.count`` matches the page result set exactly (resolves A3)."""
     from ers.commons.domain.data_transfer_objects import DecisionFilters
 
-    async def _aiter(self):
-        return
-        yield
+    captured: dict = {}
 
-    agg_cursor = MagicMock()
-    agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
-    mock_collection.count_documents = AsyncMock(return_value=0)
+    async def _count(query, *args, **kwargs):
+        captured["count_query"] = query
+        return 0
+
+    mock_collection.find = MagicMock(return_value=_make_async_cursor([]))
+    mock_collection.count_documents = AsyncMock(side_effect=_count)
+    mock_collection.aggregate = AsyncMock()
 
     await repo.find_with_filters(
         filters=DecisionFilters(),
@@ -662,52 +820,14 @@ async def test_find_with_filters_reviewed_pipeline_excludes_has_recent_action_fi
         reviewed_since_placement=True,
     )
 
-    pipeline = mock_collection.aggregate.call_args[0][0]
-    project_stages = [s for s in pipeline if "$project" in s]
-    assert project_stages, "Pipeline must contain a $project stage to remove _has_recent_action"
-    # The field must be excluded (value 0 or absent from projection)
-    project = project_stages[-1]["$project"]
-    assert project.get("_has_recent_action", 1) == 0, (
-        "$project must exclude _has_recent_action"
-    )
+    assert captured["count_query"].get("reviewed_since_placement") is True
 
 
 @pytest.mark.asyncio
-async def test_review_filter_applies_match_before_limit(repo, mock_collection):
-    """D2 regression: the review $match must precede $sort/$limit (no page under-fill)."""
-    from ers.commons.domain.data_transfer_objects import DecisionFilters
-
-    async def _aiter(self):
-        return
-        yield
-
-    agg_cursor = MagicMock()
-    agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
-    mock_collection.count_documents = AsyncMock(return_value=0)
-
-    await repo.find_with_filters(
-        filters=DecisionFilters(),
-        cursor_params=CursorParams(cursor=None, limit=10),
-        reviewed_since_placement=True,
-    )
-
-    pipeline = mock_collection.aggregate.call_args[0][0]
-    stage_types = [list(s.keys())[0] for s in pipeline]
-    lookup_idx = stage_types.index("$lookup")
-    # The review $match is the first $match after the $lookup.
-    review_match_idx = next(
-        i for i, s in enumerate(pipeline) if i > lookup_idx and "$match" in s
-    )
-    limit_idx = stage_types.index("$limit")
-    assert review_match_idx < limit_idx, (
-        "Review $match must run before $limit, otherwise pagination under-fills"
-    )
-
-
-@pytest.mark.asyncio
-async def test_ever_reviewed_filter_adds_previous_review_count_match(repo, mock_collection):
-    """ever_reviewed=True adds a plain previous_review_count > 0 match (no extra $lookup)."""
+async def test_ever_reviewed_filter_adds_previous_review_count_match(
+    repo, mock_collection
+):
+    """ever_reviewed=True adds a plain previous_review_count > 0 match (no $lookup)."""
     from ers.commons.domain.data_transfer_objects import DecisionFilters
 
     captured: dict = {}
@@ -726,13 +846,13 @@ async def test_ever_reviewed_filter_adds_previous_review_count_match(repo, mock_
         ever_reviewed=True,
     )
 
-    mock_collection.aggregate.assert_not_called()  # counter match needs no aggregation
+    mock_collection.aggregate.assert_not_called()
     assert captured["query"].get("previous_review_count") == {"$gt": 0}
 
 
 @pytest.mark.asyncio
 async def test_ever_reviewed_false_matches_never_reviewed(repo, mock_collection):
-    """ever_reviewed=False matches a missing/None/0 counter via $in (no $not, engine-safe)."""
+    """ever_reviewed=False matches a missing/None/0 counter via $in (engine-safe)."""
     from ers.commons.domain.data_transfer_objects import DecisionFilters
 
     captured: dict = {}
@@ -756,19 +876,20 @@ async def test_ever_reviewed_false_matches_never_reviewed(repo, mock_collection)
 
 
 @pytest.mark.asyncio
-async def test_review_filters_combine_counter_match_into_aggregation(repo, mock_collection):
-    """ever_reviewed + reviewed_since_placement together: the counter $match survives
-    into the aggregation that applies the user_actions review filter."""
+async def test_review_filters_combine_in_single_query(repo, mock_collection):
+    """ever_reviewed=True + reviewed_since_placement=False (the "needs revisit" UI state)
+    must apply both stored-field predicates in a single find() — one query, exact count."""
     from ers.commons.domain.data_transfer_objects import DecisionFilters
 
-    async def _aiter(self):
-        return
-        yield
+    captured: dict = {}
 
-    agg_cursor = MagicMock()
-    agg_cursor.__aiter__ = lambda self: _aiter(self)
-    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
+    def _find(query, *args, **kwargs):
+        captured["query"] = query
+        return _make_async_cursor([])
+
+    mock_collection.find = MagicMock(side_effect=_find)
     mock_collection.count_documents = AsyncMock(return_value=0)
+    mock_collection.aggregate = AsyncMock()
 
     await repo.find_with_filters(
         filters=DecisionFilters(),
@@ -777,26 +898,23 @@ async def test_review_filters_combine_counter_match_into_aggregation(repo, mock_
         reviewed_since_placement=False,
     )
 
-    pipeline = mock_collection.aggregate.call_args[0][0]
-    first_match = next(s["$match"] for s in pipeline if "$match" in s)
-    assert first_match.get("previous_review_count") == {"$gt": 0}, (
-        "the ever_reviewed counter predicate must carry into the aggregation $match"
-    )
-
-
-# NOTE: ``find_reviewed_since_placement`` moved to the curation-owned
-# ``MongoReviewStateReader`` (A1). Its tests live in
-# ``test/unit/curation/adapters/test_review_state_reader.py``.
+    mock_collection.aggregate.assert_not_called()
+    assert captured["query"].get("previous_review_count") == {"$gt": 0}
+    assert captured["query"].get("reviewed_since_placement") == {"$in": [False, None]}
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_unfiltered_bulk_sync_reviewed_none_unchanged(repo, mock_collection):
+async def test_find_with_filters_unfiltered_bulk_sync_reviewed_none_unchanged(
+    repo, mock_collection
+):
     """Bulk-sync caller (filters=None, no reviewed kwarg) must use find(), not aggregate()."""
     mock_collection.find = MagicMock(return_value=_make_async_cursor([]))
     mock_collection.aggregate = AsyncMock()
 
     # Simulate the bulk-sync call pattern: no reviewed kwarg at all
-    await repo.find_with_filters(filters=None, cursor_params=CursorParams(cursor=None, limit=10))
+    await repo.find_with_filters(
+        filters=None, cursor_params=CursorParams(cursor=None, limit=10)
+    )
 
     mock_collection.aggregate.assert_not_called()
     mock_collection.find.assert_called_once()
@@ -826,13 +944,41 @@ async def test_upsert_does_not_overwrite_previous_review_count(repo, mock_collec
     )
 
 
+@pytest.mark.asyncio
+async def test_build_insert_doc_initialises_reviewed_since_placement_false(repo):
+    """A brand-new decision must start with ``reviewed_since_placement=False`` —
+    there are no curator actions against a placement that just came into existence."""
+    now = datetime.now(UTC)
+    insert_doc = repo._build_insert_doc(make_identifier(), make_cluster(), [], now)
+
+    assert insert_doc["$setOnInsert"]["reviewed_since_placement"] is False
+
+
+@pytest.mark.asyncio
+async def test_build_update_doc_resets_reviewed_since_placement_false(repo):
+    """Every material placement advance resets the flag in the same atomic $set
+    that bumps ``updated_at`` — invalidating any curator state attached to the
+    previous placement."""
+    now = datetime.now(UTC)
+    update_doc = repo._build_update_doc(make_identifier(), make_cluster(), [], now)
+
+    assert update_doc["$set"]["reviewed_since_placement"] is False
+    # And the reset rides on the same $set as updated_at — proving atomicity.
+    assert update_doc["$set"]["updated_at"] == now
+
+
 # ── find_with_filters: cluster-size sort ─────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_cluster_size_asc_uses_aggregation(repo, mock_collection):
+async def test_find_with_filters_cluster_size_asc_uses_aggregation(
+    repo, mock_collection
+):
     """cluster_size ordering must use aggregation (find() cannot sort on a derived field)."""
-    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
 
     async def _aiter(self):
         return
@@ -854,9 +1000,14 @@ async def test_find_with_filters_cluster_size_asc_uses_aggregation(repo, mock_co
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_cluster_size_desc_uses_aggregation(repo, mock_collection):
+async def test_find_with_filters_cluster_size_desc_uses_aggregation(
+    repo, mock_collection
+):
     """cluster_size descending also routes through aggregation."""
-    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
 
     async def _aiter(self):
         return
@@ -878,9 +1029,14 @@ async def test_find_with_filters_cluster_size_desc_uses_aggregation(repo, mock_c
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_cluster_size_pipeline_contains_lookup(repo, mock_collection):
+async def test_find_with_filters_cluster_size_pipeline_contains_lookup(
+    repo, mock_collection
+):
     """Pipeline for cluster_size sort must contain a $lookup against cluster_sizes."""
-    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
 
     async def _aiter(self):
         return
@@ -901,16 +1057,23 @@ async def test_find_with_filters_cluster_size_pipeline_contains_lookup(repo, moc
     assert "$lookup" in stage_types, "Cluster-size pipeline must contain $lookup"
 
     lookup = next(s["$lookup"] for s in pipeline if "$lookup" in s)
-    assert lookup["from"] == "cluster_sizes", "$lookup must target cluster_sizes collection"
+    assert lookup["from"] == "cluster_sizes", (
+        "$lookup must target cluster_sizes collection"
+    )
     assert lookup["localField"] == "current_placement.cluster_id"
     assert lookup["foreignField"] == "_id"
     assert lookup["as"] == "_cluster_meta"
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_cluster_size_pipeline_adds_cluster_size_field(repo, mock_collection):
+async def test_find_with_filters_cluster_size_pipeline_adds_cluster_size_field(
+    repo, mock_collection
+):
     """Pipeline must $addFields cluster_size from the joined _cluster_meta array."""
-    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
 
     async def _aiter(self):
         return
@@ -935,9 +1098,14 @@ async def test_find_with_filters_cluster_size_pipeline_adds_cluster_size_field(r
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_cluster_size_pipeline_projects_out_meta(repo, mock_collection):
+async def test_find_with_filters_cluster_size_pipeline_projects_out_meta(
+    repo, mock_collection
+):
     """Pipeline must $project _cluster_meta out so _from_document receives clean docs."""
-    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
 
     async def _aiter(self):
         return
@@ -963,9 +1131,14 @@ async def test_find_with_filters_cluster_size_pipeline_projects_out_meta(repo, m
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_cluster_size_pipeline_match_before_lookup(repo, mock_collection):
+async def test_find_with_filters_cluster_size_pipeline_match_before_lookup(
+    repo, mock_collection
+):
     """$match (filters) must appear before $lookup so Mongo can use indexes."""
-    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
 
     async def _aiter(self):
         return
@@ -989,9 +1162,14 @@ async def test_find_with_filters_cluster_size_pipeline_match_before_lookup(repo,
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_cluster_size_sort_uses_cluster_size_and_id(repo, mock_collection):
+async def test_find_with_filters_cluster_size_sort_uses_cluster_size_and_id(
+    repo, mock_collection
+):
     """$sort must sort by cluster_size (asc) + _id (asc) for ascending ordering."""
-    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
 
     async def _aiter(self):
         return
@@ -1016,9 +1194,14 @@ async def test_find_with_filters_cluster_size_sort_uses_cluster_size_and_id(repo
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_cluster_size_desc_sort_direction(repo, mock_collection):
+async def test_find_with_filters_cluster_size_desc_sort_direction(
+    repo, mock_collection
+):
     """$sort for descending cluster_size must have cluster_size: -1, _id: -1."""
-    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
 
     async def _aiter(self):
         return
@@ -1038,14 +1221,19 @@ async def test_find_with_filters_cluster_size_desc_sort_direction(repo, mock_col
     sort_stages = [s["$sort"] for s in pipeline if "$sort" in s]
     assert sort_stages
     sort = sort_stages[-1]
-    assert sort.get("cluster_size") == -1, "Descending: cluster_size direction must be -1"
+    assert sort.get("cluster_size") == -1, (
+        "Descending: cluster_size direction must be -1"
+    )
     assert sort.get("_id") == -1, "Descending: _id tiebreaker direction must match"
 
 
 @pytest.mark.asyncio
 async def test_find_with_filters_legacy_orderings_still_use_find(repo, mock_collection):
     """Legacy orderings (confidence_score, created_at, updated_at) must NOT use aggregate()."""
-    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
 
     for ordering in [
         DecisionOrdering.CONFIDENCE_ASC,
@@ -1064,17 +1252,23 @@ async def test_find_with_filters_legacy_orderings_still_use_find(repo, mock_coll
             cursor_params=CursorParams(cursor=None, limit=10),
         )
 
-        mock_collection.aggregate.assert_not_called(), (
-            f"Legacy ordering {ordering!r} must not trigger aggregation"
+        (
+            mock_collection.aggregate.assert_not_called(),
+            (f"Legacy ordering {ordering!r} must not trigger aggregation"),
         )
 
 
 @pytest.mark.asyncio
-async def test_find_with_filters_cluster_size_with_reviewed_filter_includes_both_lookups(
+async def test_find_with_filters_cluster_size_with_reviewed_filter_uses_stored_field_match(
     repo, mock_collection
 ):
-    """cluster_size + reviewed=True: pipeline must contain two $lookup stages."""
-    from ers.commons.domain.data_transfer_objects import DecisionFilters, DecisionOrdering
+    """cluster_size sort + reviewed_since_placement=True: only **one** $lookup
+    (cluster_sizes) is needed. The review predicate is a stored-field $match in
+    stage 1 — no $lookup against user_actions ever runs on the hot path."""
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
 
     async def _aiter(self):
         return
@@ -1093,9 +1287,12 @@ async def test_find_with_filters_cluster_size_with_reviewed_filter_includes_both
 
     pipeline = mock_collection.aggregate.call_args[0][0]
     lookup_stages = [s["$lookup"] for s in pipeline if "$lookup" in s]
-    assert len(lookup_stages) == 2, (
-        "cluster_size + reviewed pipeline must contain two $lookup stages"
-    )
     sources = {s["from"] for s in lookup_stages}
-    assert "cluster_sizes" in sources
-    assert "user_actions" in sources
+    assert sources == {"cluster_sizes"}, (
+        "cluster_size sort needs only the cluster_sizes lookup — the review filter "
+        "is a stored-field $match, not a $lookup user_actions."
+    )
+
+    # The review predicate lives in the stage-1 $match.
+    first_match = next(s["$match"] for s in pipeline if "$match" in s)
+    assert first_match.get("reviewed_since_placement") is True

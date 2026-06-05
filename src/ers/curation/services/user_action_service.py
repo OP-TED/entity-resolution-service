@@ -126,9 +126,11 @@ class UserActionService:
     async def record_accept(self, actor: str, decision: Decision) -> None:
         """Record an accept action in the user action trail.
 
-        The action save is the canonical write.  After a successful save,
-        the decision's previous_review_count is atomically incremented as a
-        denormalised mirror counter.
+        The action save is the canonical write. After a successful save,
+        the decision's materialised review primitives (``previous_review_count``
+        and ``reviewed_since_placement``) are updated atomically via
+        ``record_review``; the flag is set to ``True`` only when this action's
+        ``created_at`` is strictly after the stored placement boundary.
 
         Args:
             actor: Identifier of the curator performing the action.
@@ -140,14 +142,16 @@ class UserActionService:
         await self._check_not_already_curated(decision)
         user_action = UserActionFactory.create_accept(actor=actor, decision=decision)
         await self._user_action_repository.save(user_action)
-        await self._decision_repository.increment_review_count(decision.id)
+        await self._decision_repository.record_review(decision.id, user_action.created_at)
 
     async def record_reject(self, actor: str, decision: Decision) -> None:
         """Record a reject action in the user action trail.
 
-        The action save is the canonical write.  After a successful save,
-        the decision's previous_review_count is atomically incremented as a
-        denormalised mirror counter.
+        The action save is the canonical write. After a successful save,
+        the decision's materialised review primitives (``previous_review_count``
+        and ``reviewed_since_placement``) are updated atomically via
+        ``record_review``; the flag is set to ``True`` only when this action's
+        ``created_at`` is strictly after the stored placement boundary.
 
         Args:
             actor: Identifier of the curator performing the action.
@@ -159,14 +163,16 @@ class UserActionService:
         await self._check_not_already_curated(decision)
         user_action = UserActionFactory.create_reject(actor=actor, decision=decision)
         await self._user_action_repository.save(user_action)
-        await self._decision_repository.increment_review_count(decision.id)
+        await self._decision_repository.record_review(decision.id, user_action.created_at)
 
     async def record_assign(self, actor: str, decision: Decision, cluster_id: str) -> None:
         """Record an assign action in the user action trail.
 
-        The action save is the canonical write.  After a successful save,
-        the decision's previous_review_count is atomically incremented as a
-        denormalised mirror counter.
+        The action save is the canonical write. After a successful save,
+        the decision's materialised review primitives (``previous_review_count``
+        and ``reviewed_since_placement``) are updated atomically via
+        ``record_review``; the flag is set to ``True`` only when this action's
+        ``created_at`` is strictly after the stored placement boundary.
 
         Args:
             actor: Identifier of the curator performing the action.
@@ -182,7 +188,7 @@ class UserActionService:
             actor=actor, decision=decision, cluster_id=cluster_id
         )
         await self._user_action_repository.save(user_action)
-        await self._decision_repository.increment_review_count(decision.id)
+        await self._decision_repository.record_review(decision.id, user_action.created_at)
 
     async def get_selected_cluster_preview(
         self,

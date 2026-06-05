@@ -21,3 +21,13 @@ Feature: Decision summary previous-review counter
     When ERE re-integrates a new outcome for the same decision
     Then the row for that decision still has previous_review_count equal to 3
     And the current_placement reflects the new ERE outcome
+
+  Scenario: A curator action flips reviewed_since_placement to true
+    Given a decision with previous_review_count equal to 0
+    When the curator records an accept action on that decision
+    Then the row for that decision has reviewed_since_placement equal to true
+
+  Scenario: ERE re-integration resets reviewed_since_placement to false
+    Given a decision with previous_review_count equal to 3
+    When ERE re-integrates a new outcome for the same decision
+    Then the row for that decision has reviewed_since_placement equal to false

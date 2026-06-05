@@ -102,10 +102,12 @@ class DecisionSummary(FrozenDTO):
         default=False,
         description=(
             "True iff a curator action exists whose created_at is after the current "
-            "placement boundary (updated_at, else created_at). Derived on read, never "
-            "stored. With previous_review_count the UI composes the review state: "
-            "count==0 -> not reviewed; count>0 and not this flag -> needs revisit; "
-            "this flag -> reviewed and up to date."
+            "placement boundary (updated_at, else created_at). Materialised on the "
+            "decision row by two writers: the integrator resets it to False on every "
+            "placement advance; record_review conditionally sets it to True when a "
+            "curator action lands. With previous_review_count the UI composes the "
+            "review state: count==0 -> not reviewed; count>0 and not this flag -> "
+            "needs revisit; this flag -> reviewed and up to date."
         ),
     )
 
@@ -177,21 +179,13 @@ class RegistryStatistics(FrozenDTO):
     total_canonical_entities: int = Field(
         description="Total number of distinct canonical entity clusters."
     )
-    cluster_size_average: float = Field(
-        description="Average decisions per cluster."
-    )
-    cluster_size_median: float = Field(
-        description="Median (p50) cluster size."
-    )
+    cluster_size_average: float = Field(description="Average decisions per cluster.")
+    cluster_size_median: float = Field(description="Median (p50) cluster size.")
     cluster_size_p95: int = Field(
         description="95th-percentile cluster size — surfaces long-tail outliers."
     )
-    cluster_size_max: int = Field(
-        description="Largest cluster size."
-    )
-    cluster_singletons_count: int = Field(
-        description="Number of clusters of size 1."
-    )
+    cluster_size_max: int = Field(description="Largest cluster size.")
+    cluster_singletons_count: int = Field(description="Number of clusters of size 1.")
     resolution_requests: int = Field(
         description="Total number of entity resolution requests processed."
     )

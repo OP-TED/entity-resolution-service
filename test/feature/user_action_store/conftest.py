@@ -41,8 +41,8 @@ def user_repository() -> MagicMock:
 @pytest.fixture
 def decision_repository() -> MagicMock:
     mock = create_autospec(DecisionRepository, instance=True)
-    mock.increment_review_count = AsyncMock()
-    mock.find_review_counts.return_value = {}
+    mock.record_review = AsyncMock()
+    mock.find_review_metadata.return_value = {}
     return mock
 
 
