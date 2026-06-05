@@ -1,10 +1,17 @@
 """Backfill script: (re)build the cluster_sizes projection from decisions.
 
 Aggregates ``decisions`` by ``current_placement.cluster_id``, then upserts each
-resulting count into ``cluster_sizes``.  The script is idempotent — running it
-multiple times produces the same result.  Use it after a data migration, after
-the initial deployment of the cluster-size feature, or whenever manual
-verification indicates drift.
+resulting count into ``cluster_sizes`` and removes any stale entries.
+The script is idempotent -- running it multiple times produces the same result.
+Use it after a data migration, after the initial deployment of the cluster-size
+feature, or whenever manual verification indicates drift.
+
+Warning:
+    This script uses ``$set`` (absolute overwrite) to write each cluster's count.
+    Running it while decisions are actively being integrated can cause a
+    ``$inc`` write from ``DecisionStoreService.store_decision`` to be lost if it
+    races with the ``$set``. Run during a maintenance window or at a time when
+    ERE is not actively delivering outcomes.
 
 Usage::
 
@@ -49,7 +56,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=500,
         metavar="N",
-        help="Number of upsert operations per bulk_write batch (default: 500).",
+        help=(
+            "Number of write operations per bulk_write call (default: 500). "
+            "Controls write-batch size only; the full aggregation result is "
+            "loaded into memory before writes begin."
+        ),
     )
     return parser
 
