@@ -30,7 +30,7 @@ COV_FLAGS = --cov=ers \
 #-----------------------------------------------------------------------------
 # Dev commands
 #-----------------------------------------------------------------------------
-.PHONY: help install-poetry install lock build seed-db openapi api-docs
+.PHONY: help install-poetry install lock build seed-db openapi api-docs backfill-cluster-sizes backfill-review-counts verify-cluster-sizes
 
 help: ## Display available targets
 	@ echo -e "$(BUILD_PRINT)Available targets:$(END_BUILD_PRINT)"
@@ -123,6 +123,20 @@ seed-db: ## Seed the database with mock data (needs running database and config)
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Seeding database with mock data$(END_BUILD_PRINT)"
 	@ cd src && poetry run python -m scripts.seed_db
 	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Database seeding complete$(END_BUILD_PRINT)"
+
+backfill-cluster-sizes: ## Rebuild cluster_sizes projection from decisions (idempotent, run after deploy)
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Backfilling cluster_sizes...$(END_BUILD_PRINT)"
+	@ cd src && poetry run python -m scripts.backfill_cluster_sizes
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Done$(END_BUILD_PRINT)"
+
+backfill-review-counts: ## Seed previous_review_count on decisions from user_actions (idempotent, one-off)
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Backfilling previous_review_count...$(END_BUILD_PRINT)"
+	@ cd src && poetry run python -m scripts.backfill_previous_review_count
+	@ echo -e "$(BUILD_PRINT)$(ICON_DONE) Done$(END_BUILD_PRINT)"
+
+verify-cluster-sizes: ## Verify cluster_sizes projection is consistent with decisions (exits 0=ok, 1=drift)
+	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Verifying cluster_sizes...$(END_BUILD_PRINT)"
+	@ cd src && poetry run python -m scripts.verify_cluster_sizes
 
 openapi: ## Generate OpenAPI schema into resources/
 	@ echo -e "$(BUILD_PRINT)$(ICON_PROGRESS) Generating OpenAPI schemas$(END_BUILD_PRINT)"

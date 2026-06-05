@@ -195,6 +195,60 @@ curation-api:
       condition: service_completed_successfully
 ```
 
+### Operational scripts (run after initial deployment of v1.1.0)
+
+After deploying a version that introduces the `cluster_sizes` projection or the
+`previous_review_count` field, run the following one-off scripts to backfill
+existing data. All scripts are idempotent — safe to re-run. Use `--dry-run`
+first on any production environment to preview changes without writing.
+
+**Run order: backfills first, then verify.**
+
+#### Rebuild the `cluster_sizes` projection
+
+```bash
+# Preview (no writes):
+cd src && poetry run python -m scripts.backfill_cluster_sizes --dry-run
+
+# Apply:
+make backfill-cluster-sizes
+```
+
+**When to run:** after the initial deployment of v1.1.0 (projection starts
+empty), after any data migration that moves decisions between clusters, or
+whenever `make verify-cluster-sizes` reports drift.
+
+> **Live-system warning:** this script uses `$set` (absolute overwrite). If run
+> while decisions are actively being integrated, a concurrent `$inc` write from
+> the integrator can be lost. Run during a maintenance window or quiet period.
+
+#### Seed `previous_review_count` on existing decisions
+
+```bash
+# Preview:
+cd src && poetry run python -m scripts.backfill_previous_review_count --dry-run
+
+# Apply:
+make backfill-review-counts
+```
+
+**When to run:** once, after the initial deployment of v1.1.0, for decisions
+curated before `previous_review_count` was introduced.
+
+#### Verify the `cluster_sizes` projection
+
+```bash
+make verify-cluster-sizes
+# or: cd src && poetry run python -m scripts.verify_cluster_sizes --verbose
+```
+
+Exits `0` if consistent, `1` if drift detected (logs each discrepancy).
+Run after either backfill to confirm the projection is clean.
+
+> **`--batch-size` note:** controls write-batch size in the backfill scripts,
+> not the read chunk size. The full aggregation is loaded into memory before
+> writes begin.
+
 ### Load balancer configuration
 
 ERS does not include a load balancer — you bring your own. Both `curation-api`
