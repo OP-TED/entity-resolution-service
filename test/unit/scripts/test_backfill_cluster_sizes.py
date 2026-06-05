@@ -158,14 +158,11 @@ async def test_run_backfill_empty_decisions_makes_no_writes():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="Task 4: _delete_stale_entries not yet implemented", strict=True)
 async def test_run_backfill_deletes_stale_entries():
     """After upserting, delete_many is called once with a $nin filter.
 
-    'A' is a live cluster so it must NOT appear in the $nin list.
-
-    NOTE: This test is intentionally RED until Task 4 adds _delete_stale_entries
-    to backfill_cluster_sizes.py.
+    'A' is the only live cluster; it MUST appear in the $nin exclusion list so
+    that only documents whose _id is not in the live set are removed.
     """
     rows = [{"_id": "A", "count": 1}]
     db = _make_db(aggregate_rows=rows)
@@ -176,4 +173,6 @@ async def test_run_backfill_deletes_stale_entries():
     cluster_sizes_col.delete_many.assert_called_once()
     delete_filter = cluster_sizes_col.delete_many.call_args[0][0]
     assert "$nin" in delete_filter["_id"]
-    assert "A" not in delete_filter["_id"]["$nin"]
+    # "A" is a live cluster: it MUST appear in the $nin exclusion list so it is
+    # preserved (only documents whose _id is NOT in live_cluster_ids are deleted).
+    assert "A" in delete_filter["_id"]["$nin"]

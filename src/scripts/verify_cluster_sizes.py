@@ -138,7 +138,8 @@ async def _verify(db: AsyncDatabase[Any], *, verbose: bool) -> bool:
     if drifts:
         log.error(
             "Projection inconsistent: %d cluster(s) have drift. "
-            "Run backfill_cluster_sizes to repair.",
+            "Run backfill_cluster_sizes to repair (upserts missing entries "
+            "and deletes stale ones).",
             len(drifts),
         )
         return False
