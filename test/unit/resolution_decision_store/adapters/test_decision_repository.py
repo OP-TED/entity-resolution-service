@@ -1296,3 +1296,143 @@ async def test_find_with_filters_cluster_size_with_reviewed_filter_uses_stored_f
     # The review predicate lives in the stage-1 $match.
     first_match = next(s["$match"] for s in pipeline if "$match" in s)
     assert first_match.get("reviewed_since_placement") is True
+
+
+# ── cursor placement on cluster_size aggregation (M2 / C1 regression) ─────────
+
+
+@pytest.mark.asyncio
+async def test_cluster_size_sort_without_cursor_has_no_cluster_size_in_stage_1(
+    repo, mock_collection
+):
+    """First page (cursor=None) — stage-1 $match must NOT contain a cluster_size
+    predicate. The field does not exist on raw decision docs; placing the
+    predicate here would match nothing on subsequent pages."""
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_DESC),
+        cursor_params=CursorParams(cursor=None, limit=10),
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    stage_1_match = next(s["$match"] for s in pipeline if "$match" in s)
+    assert "cluster_size" not in stage_1_match
+
+
+@pytest.mark.asyncio
+async def test_cluster_size_sort_with_cursor_places_predicate_after_addfields(
+    repo, mock_collection
+):
+    """C1 regression: when a cursor is present, the cluster_size predicate must
+    live in a $match stage placed AFTER $addFields cluster_size (where the
+    field is actually materialised), and MUST NOT appear in the stage-1 $match
+    (where cluster_size doesn't exist yet)."""
+    from ers.commons.domain.cursor import encode_cursor
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    # Encode a cursor as if returned by a previous page: (cluster_size=5, _id="X").
+    cursor = encode_cursor(5, "decision-x")
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_DESC),
+        cursor_params=CursorParams(cursor=cursor, limit=10),
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    stage_types = [next(iter(s.keys())) for s in pipeline]
+
+    # Stage 1 must NOT mention cluster_size — that was the C1 bug.
+    stage_1_match = pipeline[0]["$match"]
+    assert "cluster_size" not in str(stage_1_match), (
+        "C1 regression: cluster_size cursor must NOT be in the stage-1 $match"
+    )
+
+    # There must be exactly one $addFields and one downstream $match for the
+    # cursor, in that order, before $sort.
+    add_fields_idx = stage_types.index("$addFields")
+    sort_idx = stage_types.index("$sort")
+    match_indices = [i for i, t in enumerate(stage_types) if t == "$match"]
+
+    cursor_match_indices = [
+        i
+        for i in match_indices
+        if i > add_fields_idx and "cluster_size" in str(pipeline[i]["$match"])
+    ]
+    assert len(cursor_match_indices) == 1, (
+        "expected exactly one cursor $match referencing cluster_size after $addFields; "
+        f"got pipeline shape {stage_types}"
+    )
+    assert cursor_match_indices[0] < sort_idx, (
+        "cursor $match must run before $sort/$limit so pagination cannot under-fill"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cluster_size_sort_keeps_stored_field_filters_in_stage_1(
+    repo, mock_collection
+):
+    """Stored-field filters (entity_type, confidence, reviewed_since_placement…)
+    must remain in the stage-1 $match so the database can use indexes. They
+    must NOT drift downstream of $lookup — only the derived ``cluster_size``
+    cursor predicate is allowed past $addFields."""
+    from ers.commons.domain.cursor import encode_cursor
+    from ers.commons.domain.data_transfer_objects import (
+        DecisionFilters,
+        DecisionOrdering,
+    )
+
+    async def _aiter(self):
+        return
+        yield
+
+    agg_cursor = MagicMock()
+    agg_cursor.__aiter__ = lambda self: _aiter(self)
+    mock_collection.aggregate = AsyncMock(return_value=agg_cursor)
+    mock_collection.count_documents = AsyncMock(return_value=0)
+
+    await repo.find_with_filters(
+        filters=DecisionFilters(
+            ordering=DecisionOrdering.CLUSTER_SIZE_DESC,
+            entity_type="Person",
+            confidence_min=0.7,
+        ),
+        cursor_params=CursorParams(cursor=encode_cursor(5, "decision-x"), limit=10),
+        ever_reviewed=True,
+        reviewed_since_placement=False,
+    )
+
+    pipeline = mock_collection.aggregate.call_args[0][0]
+    stage_1_match = pipeline[0]["$match"]
+
+    # All stored-field predicates must be in stage 1 for index use.
+    assert stage_1_match.get("about_entity_mention.entity_type") == "Person"
+    assert stage_1_match.get("current_placement.confidence_score") == {"$gte": 0.7}
+    assert stage_1_match.get("previous_review_count") == {"$gt": 0}
+    assert stage_1_match.get("reviewed_since_placement") == {"$in": [False, None]}
+    # And cluster_size must NOT be — that's the derived field.
+    assert "cluster_size" not in stage_1_match

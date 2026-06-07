@@ -340,3 +340,33 @@ work; the rest remain or are re-scoped:
 **Cluster-size pagination bug (C1)** is **not** addressed by this milestone — it is
 the entire scope of milestone 2 (`feature/TEDSWS-524-2-cluster-size-cursor-fix` to
 come).
+
+---
+
+## Update — 2026-06-07 — TEDSWS-524-2 milestone 2 landed
+
+The cluster-size cursor placement bug (C1) is resolved on
+`feature/TEDSWS-524-2-review-state` (same branch as milestone 1, fast plan). The
+keyset cursor predicate on the derived `cluster_size` field is now applied as a
+post-`$addFields` `$match` stage instead of being merged into the stage-1
+`query`. Stored-field filters (entity_type, confidence, ever_reviewed,
+reviewed_since_placement, etc.) remain in stage 1 — they are still indexable.
+
+Resolved items from this spec:
+
+| Item | Status after TEDSWS-524-2 milestone 2 |
+|---|---|
+| C1 (cluster_size cursor in wrong stage) | **Resolved.** Cursor predicate runs after `$addFields cluster_size`. |
+| C2 (cluster_size + reviewed combined breaks pagination + count) | **Resolved.** The reviewed half was fixed in milestone 1; the cluster_size half is fixed here. |
+
+`cluster_size` remains a derived projection of `cluster_sizes` — no
+denormalisation onto the decision row. The trade-off is that cluster-size
+ordering still costs a per-page aggregation (one `$lookup` on PK), accepted
+at the 3k/day volume.
+
+Coverage added:
+- Unit: two pipeline-shape assertions on cursor placement, plus a
+  stored-field-filters-stay-in-stage-1 structural check.
+- Integration: cluster_size ASC/DESC pagination-across-pages tests (the test
+  class that would have caught C1 originally), plus a non-under-fill page-size
+  invariant test.

@@ -17,8 +17,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from erspec.models.core import ClusterReference, EntityMentionIdentifier
 
-from ers.commons.domain.data_transfer_objects import CursorParams
+from ers.commons.domain.data_transfer_objects import CursorParams, DecisionOrdering
 from ers.curation.domain.data_transfer_objects import DecisionFilters
+from ers.resolution_decision_store.adapters.cluster_size_index import (
+    MongoClusterSizeIndex,
+)
 from ers.resolution_decision_store.adapters.decision_repository import (
     MongoDecisionRepository,
 )
@@ -175,3 +178,118 @@ async def test_pagination_under_fills_only_on_final_page(repo, seeded):
         f"non-terminal pages must be full ({per_page}); got {pages}"
     )
     assert pages[-1] <= per_page
+
+
+# ── cluster_size sort pagination (M2 / C1 regression) ─────────────────────────
+
+
+@pytest.fixture()
+async def seeded_with_cluster_sizes(repo, mongo_db):
+    """20 decisions distributed across 5 clusters of varying sizes (1, 2, 3, 5, 9).
+
+    Total cluster-size sum equals the decision count so the cluster_sizes
+    projection is internally consistent. Each decision is placed in exactly
+    one cluster; ``cluster_sizes`` is populated alongside via the index.
+    """
+    size_layout: list[tuple[str, int]] = [
+        ("cs-1", 1),
+        ("cs-2", 2),
+        ("cs-3", 3),
+        ("cs-5", 5),
+        ("cs-9", 9),
+    ]
+    index = MongoClusterSizeIndex(mongo_db)
+
+    ids_by_cluster: dict[str, list[str]] = {}
+    counter = 0
+    for cluster_id, size in size_layout:
+        for _ in range(size):
+            ts = _T0 + timedelta(seconds=counter)
+            decision = await repo.upsert_decision(
+                _ident(f"cs-s-{counter:03d}"), _cluster(cluster_id), [], ts
+            )
+            await index.shift(from_cluster=None, to_cluster=cluster_id)
+            ids_by_cluster.setdefault(cluster_id, []).append(decision.id)
+            counter += 1
+
+    return {
+        "ids_by_cluster": ids_by_cluster,
+        "sizes": dict(size_layout),
+        "total": counter,
+    }
+
+
+async def _scan_cluster_size(
+    repo, *, per_page: int, ordering: DecisionOrdering
+) -> list[str]:
+    ids: list[str] = []
+    cursor: str | None = None
+    while True:
+        page = await repo.find_with_filters(
+            filters=DecisionFilters(ordering=ordering),
+            cursor_params=CursorParams(cursor=cursor, limit=per_page),
+        )
+        ids.extend(d.id for d in page.results)
+        if page.next_cursor is None:
+            break
+        cursor = page.next_cursor
+    return ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "ordering",
+    [DecisionOrdering.CLUSTER_SIZE_DESC, DecisionOrdering.CLUSTER_SIZE_ASC],
+    ids=["cluster_size_desc", "cluster_size_asc"],
+)
+async def test_cluster_size_sort_paginates_across_pages(
+    repo, seeded_with_cluster_sizes, ordering
+):
+    """C1 regression: paginating with cluster_size sort across multiple pages
+    must return the same set as an unpaged scan, with no row duplicated and
+    no row dropped. On `hotfix/TEDSWS-524-1`, page 2+ returned empty because
+    the cursor predicate landed in stage 1 before $addFields cluster_size."""
+    per_page = 4  # forces 5 pages over 20 decisions
+    paged_ids = await _scan_cluster_size(repo, per_page=per_page, ordering=ordering)
+
+    unpaged = await repo.find_with_filters(
+        filters=DecisionFilters(ordering=ordering),
+        cursor_params=CursorParams(limit=10_000),
+    )
+    unpaged_ids = [d.id for d in unpaged.results]
+
+    assert paged_ids == unpaged_ids, (
+        "paginated cluster_size traversal must match the unpaged scan exactly"
+    )
+    assert len(paged_ids) == seeded_with_cluster_sizes["total"], (
+        "every seeded decision must appear in the paginated scan"
+    )
+    assert len(set(paged_ids)) == len(paged_ids), "no row may appear on two pages"
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_cluster_size_sort_pages_do_not_under_fill(
+    repo, seeded_with_cluster_sizes
+):
+    """Every non-terminal page must be full when sorting by cluster_size — the
+    cursor predicate runs in the post-$addFields $match before $limit, so
+    pagination cannot under-fill."""
+    per_page = 6  # 20 rows / 6 → pages of 6, 6, 6, 2
+    cursor: str | None = None
+    page_sizes: list[int] = []
+    while True:
+        page = await repo.find_with_filters(
+            filters=DecisionFilters(ordering=DecisionOrdering.CLUSTER_SIZE_DESC),
+            cursor_params=CursorParams(cursor=cursor, limit=per_page),
+        )
+        page_sizes.append(len(page.results))
+        if page.next_cursor is None:
+            break
+        cursor = page.next_cursor
+
+    assert all(p == per_page for p in page_sizes[:-1]), (
+        f"non-terminal pages must be full ({per_page}); got {page_sizes}"
+    )
+    assert page_sizes[-1] <= per_page

@@ -755,18 +755,6 @@ class MongoDecisionRepository(
             sort_field, ascending = self._get_sort_info(filters.ordering)
             sort = self._build_sort(filters.ordering)
 
-        # Apply cursor condition (same logic for both modes)
-        if cursor_params.cursor is not None:
-            raw_value, last_id = decode_cursor(cursor_params.cursor)
-            sort_value = self._parse_cursor_sort_value(raw_value, sort_field)
-            cursor_condition = self._build_cursor_condition(
-                sort_field, sort_value, last_id, ascending
-            )
-            query = {"$and": [query, cursor_condition]} if query else cursor_condition
-
-        # Fetch page_size + 1 to detect if there are more results
-        fetch_limit = cursor_params.limit + 1
-
         # --- Execution path selection ---
         # Cluster-size orderings require aggregation because the sort field is
         # derived via $lookup + $addFields and is not stored on the decision doc.
@@ -778,11 +766,24 @@ class MongoDecisionRepository(
         is_cluster_size_ordering = (
             filters is not None and filters.ordering in self._AGGREGATION_ORDERINGS
         )
+
+        query, cursor_condition = self._apply_cursor_condition(
+            query=query,
+            cursor=cursor_params.cursor,
+            sort_field=sort_field,
+            ascending=ascending,
+            is_cluster_size_ordering=is_cluster_size_ordering,
+        )
+
+        # Fetch page_size + 1 to detect if there are more results
+        fetch_limit = cursor_params.limit + 1
+
         results, last_sort_raw_value = await self._fetch_page(
             query=query,
             sort=sort,
             fetch_limit=fetch_limit,
             is_cluster_size_ordering=is_cluster_size_ordering,
+            cursor_condition=cursor_condition,
         )
 
         # Encode next cursor if there are more results
@@ -801,6 +802,52 @@ class MongoDecisionRepository(
 
         return CursorPage(results=results, count=count, next_cursor=next_cursor)
 
+    def _apply_cursor_condition(
+        self,
+        *,
+        query: dict[str, Any],
+        cursor: str | None,
+        sort_field: str,
+        ascending: bool,
+        is_cluster_size_ordering: bool,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        """Decide where the keyset cursor predicate is applied.
+
+        - Plain ``find()`` path: cursor predicate is on a *stored* field, so it
+          merges into ``query`` and runs in stage 1 (indexable). Returns
+          ``(merged_query, None)``.
+        - Cluster-size aggregation path: cursor predicate is on the *derived*
+          ``cluster_size`` field, which only exists after ``$addFields``. It must
+          be deferred to a downstream ``$match`` (resolves C1). Returns
+          ``(original_query, cursor_condition)``.
+
+        When no cursor is supplied, ``cursor_condition`` is ``None`` and ``query``
+        is unchanged.
+
+        Args:
+            query: The stage-1 match expression assembled from filters/flags.
+            cursor: The opaque cursor string (or ``None`` for the first page).
+            sort_field: The MongoDB field name driving the sort order.
+            ascending: Sort direction; used to build the keyset predicate.
+            is_cluster_size_ordering: True when the active sort key is the
+                derived ``cluster_size`` field.
+
+        Returns:
+            ``(query, cursor_condition)``. ``cursor_condition`` is non-None only
+            for the cluster-size aggregation path; callers forward it to
+            ``_fetch_with_cluster_size_sort``.
+        """
+        if cursor is None:
+            return query, None
+
+        raw_value, last_id = decode_cursor(cursor)
+        sort_value = self._parse_cursor_sort_value(raw_value, sort_field)
+        cursor_condition = self._build_cursor_condition(sort_field, sort_value, last_id, ascending)
+        if is_cluster_size_ordering:
+            return query, cursor_condition
+        merged = {"$and": [query, cursor_condition]} if query else cursor_condition
+        return merged, None
+
     async def _fetch_page(
         self,
         *,
@@ -808,6 +855,7 @@ class MongoDecisionRepository(
         sort: list[tuple[str, int]],
         fetch_limit: int,
         is_cluster_size_ordering: bool,
+        cursor_condition: dict[str, Any] | None = None,
     ) -> tuple[list[Decision], Any]:
         """Select and run the read path; return ``(results, last_sort_raw_value)``.
 
@@ -816,12 +864,17 @@ class MongoDecisionRepository(
         Every other path uses a plain ``find()`` — the previous review-filter
         aggregation is gone now that ``reviewed_since_placement`` is a stored,
         indexable field.
+
+        ``cursor_condition`` is forwarded only on the cluster-size aggregation
+        path; the plain-find path has already merged its cursor condition into
+        ``query``.
         """
         if is_cluster_size_ordering:
             return await self._fetch_with_cluster_size_sort(
                 query=query,
                 sort=sort,
                 fetch_limit=fetch_limit,
+                cursor_condition=cursor_condition,
             )
         cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
         return [self._from_document(doc) async for doc in cursor], None
@@ -831,18 +884,28 @@ class MongoDecisionRepository(
         query: dict[str, Any],
         sort: list[tuple[str, int]],
         fetch_limit: int,
+        cursor_condition: dict[str, Any] | None = None,
     ) -> tuple[list[Decision], int | None]:
         """Execute an aggregation pipeline that joins cluster_sizes and sorts by cluster size.
 
         The pipeline:
 
-        1. ``$match``     — apply the pre-built filter query (indexes apply here).
-        2. ``$lookup``    — join ``cluster_sizes`` on ``current_placement.cluster_id == _id``.
-        3. ``$addFields`` — derive ``cluster_size`` as the first element of the joined array,
-                            defaulting to 0 for decisions whose cluster has no size record.
-        4. ``$project``   — remove the ``_cluster_meta`` helper array.
-        5. ``$sort``      — sort by ``cluster_size`` (±1) with ``_id`` tiebreaker.
-        6. ``$limit``     — limit to ``fetch_limit`` documents.
+        1. ``$match``      — apply the pre-built filter query (indexes apply here).
+                              This contains only stored-field predicates; the
+                              cursor predicate on the derived ``cluster_size``
+                              is **never** placed here (resolves C1).
+        2. ``$lookup``     — join ``cluster_sizes`` on ``current_placement.cluster_id == _id``.
+        3. ``$addFields``  — derive ``cluster_size`` as the first element of the joined
+                              array, defaulting to 0 for decisions whose cluster has no
+                              size record.
+        4. ``$project``    — remove the ``_cluster_meta`` helper array.
+        5. ``$match``      — (conditional) apply the cursor predicate on the now-materialised
+                              ``cluster_size`` field. Present iff a cursor was supplied.
+        6. ``$sort``       — sort by ``cluster_size`` (±1) with ``_id`` tiebreaker.
+        7. ``$limit``      — limit to ``fetch_limit`` documents.
+
+        Limiting after (not before) the cursor ``$match`` is essential: limiting
+        first would let the cursor filter under-fill the page.
 
         ``reviewed_since_placement`` filtering is **not** added here — when the
         filter is active it lives in the stage-1 ``$match`` via the stored field,
@@ -852,9 +915,14 @@ class MongoDecisionRepository(
         ``_from_document`` receives a clean decision doc after stripping it.
 
         Args:
-            query: Pre-built MongoDB match expression (may include cursor condition).
+            query: Pre-built MongoDB match expression covering stored-field
+                predicates only (filters, mention_identifiers, ever_reviewed,
+                reviewed_since_placement).
             sort: Sort specification — should be ``[(cluster_size, ±1), (_id, ±1)]``.
             fetch_limit: Number of documents to fetch (page size + 1).
+            cursor_condition: Optional keyset cursor predicate on the derived
+                ``cluster_size`` field. Inserted as a post-``$addFields`` ``$match``
+                when non-None.
 
         Returns:
             A tuple of ``(decisions, last_cluster_size)`` where ``last_cluster_size``
@@ -881,6 +949,14 @@ class MongoDecisionRepository(
                 }
             },
             {"$project": {"_cluster_meta": 0}},
+        ]
+
+        if cursor_condition is not None:
+            # cluster_size only exists from $addFields onwards; the cursor
+            # predicate references it, so it must run here — never in stage 1.
+            pipeline.append({"$match": cursor_condition})
+
+        pipeline += [
             {"$sort": sort_stage},
             {"$limit": fetch_limit},
         ]
