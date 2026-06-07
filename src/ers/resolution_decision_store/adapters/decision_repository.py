@@ -140,28 +140,47 @@ class DecisionRepository(BaseDecisionRepository):
         """
 
     @abstractmethod
-    async def record_review(self, decision_id: str, action_created_at: datetime) -> None:
-        """Atomically record a curator action against the given decision.
+    async def record_review(self, decision_id: str, action_created_at: datetime) -> bool:
+        """Atomically claim a curator-action slot for the current placement.
 
-        Performs two updates in a single atomic write:
+        Single ``update_one`` against the decision row, gated on
+        ``reviewed_since_placement`` not already being ``True``. The write
+        atomically (in one MongoDB operation):
 
-        - Increments ``previous_review_count`` unconditionally — the curator
-          action did happen regardless of how it relates to the current placement.
-        - Conditionally sets ``reviewed_since_placement`` to ``True`` **only**
-          when ``action_created_at`` is strictly greater than the stored
-          placement boundary (``updated_at`` if non-null, else ``created_at``).
-          When the action predates the current placement (e.g. delayed or
-          out-of-order delivery), the flag is preserved at its current value —
-          stale actions never regress an already-reset flag.
+        - Increments ``previous_review_count`` — the curator action happened
+          and the counter ticks once per claimed slot.
+        - Sets ``reviewed_since_placement`` to ``True`` when
+          ``action_created_at`` is strictly greater than the stored placement
+          boundary (``updated_at`` if non-null, else ``created_at``). When the
+          action predates the current placement (delayed/out-of-order
+          delivery), the flag is preserved at its current value via ``$cond``
+          — stale actions never regress an already-reset flag.
 
-        No-op if the document is missing — the action save is the canonical
-        write, the materialised primitives are a denormalised mirror.
+        The filter ``reviewed_since_placement != True`` is the **concurrency
+        guard**: it matches documents whose flag is ``false``, ``null``, or
+        absent. The first concurrent caller to win the conditional update
+        flips the flag and gets ``True``; every other concurrent caller sees
+        ``modified_count == 0`` and gets ``False``. Callers MUST treat a
+        ``False`` return as "this placement is already curated" and react
+        accordingly (typically: roll back the just-saved ``user_action`` row
+        and raise ``AlreadyCuratedError``). This closes the TOCTOU race that
+        a separate read-then-write idempotency check could not.
+
+        A missing document also returns ``False`` (``modified_count == 0``).
+        The action save is the canonical write — the materialised primitives
+        on the decision row are a denormalised mirror — so a missing decision
+        leaves the database untouched.
 
         Args:
             decision_id: The ``_id`` of the decision document to update.
             action_created_at: The ``created_at`` of the user action being
                 recorded. Compared against the stored placement boundary to
                 decide whether to flip ``reviewed_since_placement``.
+
+        Returns:
+            ``True`` iff the slot was claimed (document matched and was
+            updated). ``False`` iff another concurrent caller already claimed
+            this placement's slot, or the decision does not exist.
         """
 
     @abstractmethod
@@ -575,10 +594,15 @@ class MongoDecisionRepository(
         triad_hash = derive_provisional_cluster_id(identifier)
         return await self.find_by_id(triad_hash)
 
-    async def record_review(self, decision_id: str, action_created_at: datetime) -> None:
-        """Atomically record a curator action against the given decision.
+    async def record_review(self, decision_id: str, action_created_at: datetime) -> bool:
+        """Atomically claim a curator-action slot for the current placement.
 
-        Single ``update_one`` using an aggregation-update pipeline that:
+        Single ``update_one`` against the decision row using an aggregation-
+        update pipeline. The filter requires ``reviewed_since_placement`` to
+        not already be ``True`` — this is the concurrency guard that makes
+        the call serializable at the database level.
+
+        On a successful claim (filter matched), the write atomically:
 
         - Increments ``previous_review_count`` (initialising from 0 when the
           field is absent on legacy documents).
@@ -589,18 +613,35 @@ class MongoDecisionRepository(
           flag is preserved at its current value via ``$cond`` — stale actions
           never regress a flag that the integrator has already reset.
 
-        No upsert is performed — a missing document is silently ignored (the
-        action save is the canonical write; these primitives are a denormalised
-        mirror).
+        On a lost race (filter did not match — flag is already ``True``) **or**
+        a missing document, ``modified_count`` is 0 and the method returns
+        ``False``. Callers MUST treat ``False`` as "this placement is already
+        curated" and react accordingly — typically by rolling back the
+        just-saved ``user_action`` row and raising ``AlreadyCuratedError`` at
+        the service layer.
+
+        The filter ``{"$ne": True}`` matches ``false``, ``null``, and absent
+        values — covering legacy documents that pre-date the materialisation
+        of ``reviewed_since_placement``. No upsert is performed; the action
+        save in ``user_actions`` is the canonical write, and the materialised
+        primitives on the decision row are a denormalised mirror.
 
         Args:
             decision_id: The ``_id`` of the decision document to update.
             action_created_at: ``UserAction.created_at`` of the action being
                 recorded. Compared against the stored placement boundary by the
                 aggregation pipeline.
+
+        Returns:
+            ``True`` iff the slot was claimed (document matched and was
+            updated). ``False`` iff another concurrent caller already claimed
+            this placement's slot, or the decision document does not exist.
         """
-        await self._collection.update_one(
-            {"_id": decision_id},
+        result = await self._collection.update_one(
+            {
+                "_id": decision_id,
+                _FIELD_REVIEWED_SINCE_PLACEMENT: {"$ne": True},
+            },
             [
                 {
                     "$set": {
@@ -636,6 +677,7 @@ class MongoDecisionRepository(
                 }
             ],
         )
+        return result.modified_count > 0
 
     async def find_review_metadata(self, decision_ids: list[str]) -> dict[str, ReviewMetadata]:
         """Return materialised review state for the given decision IDs.
@@ -723,33 +765,12 @@ class MongoDecisionRepository(
         else:
             # Filtered curation mode
             query = self._build_query(filters)
-
-            if mention_identifiers is not None:
-                id_docs = [
-                    {
-                        "source_id": mi.source_id,
-                        "request_id": mi.request_id,
-                        "entity_type": mi.entity_type,
-                    }
-                    for mi in mention_identifiers
-                ]
-                query[_FIELD_ABOUT_ENTITY_MENTION] = {"$in": id_docs}
-
-            if ever_reviewed is not None:
-                # ``$in: [0, None]`` treats a missing/null counter as never-reviewed
-                # and avoids ``$not`` for DocumentDB / FerretDB portability.
-                query[_FIELD_PREVIOUS_REVIEW_COUNT] = (
-                    {"$gt": 0} if ever_reviewed else {"$in": [0, None]}
-                )
-
-            if reviewed_since_placement is not None:
-                # Stored boolean — ``False`` matches both ``false`` and absent
-                # (legacy/un-backfilled) values via ``$in`` for the same
-                # cross-engine reason as the counter.
-                query[_FIELD_REVIEWED_SINCE_PLACEMENT] = (
-                    True if reviewed_since_placement else {"$in": [False, None]}
-                )
-
+            self._augment_query_with_curation_filters(
+                query,
+                mention_identifiers=mention_identifiers,
+                ever_reviewed=ever_reviewed,
+                reviewed_since_placement=reviewed_since_placement,
+            )
             count = await self._collection.count_documents(query)
 
             sort_field, ascending = self._get_sort_info(filters.ordering)
@@ -801,6 +822,48 @@ class MongoDecisionRepository(
             next_cursor = encode_cursor(sort_value, last.id)
 
         return CursorPage(results=results, count=count, next_cursor=next_cursor)
+
+    @staticmethod
+    def _augment_query_with_curation_filters(
+        query: dict[str, Any],
+        *,
+        mention_identifiers: list[EntityMentionIdentifier] | None,
+        ever_reviewed: bool | None,
+        reviewed_since_placement: bool | None,
+    ) -> None:
+        """Add the curation-specific predicates to the stage-1 ``$match`` query.
+
+        Mutates ``query`` in place. All three predicates are stored-field
+        ``$match`` clauses, so each is index-eligible. Predicates with engine-
+        portability constraints (``$in`` instead of ``$not``) follow the same
+        rules as documented on the abstract method.
+        """
+        if mention_identifiers is not None:
+            query[_FIELD_ABOUT_ENTITY_MENTION] = {
+                "$in": [
+                    {
+                        "source_id": mi.source_id,
+                        "request_id": mi.request_id,
+                        "entity_type": mi.entity_type,
+                    }
+                    for mi in mention_identifiers
+                ]
+            }
+
+        if ever_reviewed is not None:
+            # ``$in: [0, None]`` treats a missing/null counter as never-reviewed
+            # and avoids ``$not`` for DocumentDB / FerretDB portability.
+            query[_FIELD_PREVIOUS_REVIEW_COUNT] = (
+                {"$gt": 0} if ever_reviewed else {"$in": [0, None]}
+            )
+
+        if reviewed_since_placement is not None:
+            # Stored boolean — ``False`` matches both ``false`` and absent
+            # (legacy/un-backfilled) values via ``$in`` for the same
+            # cross-engine reason as the counter.
+            query[_FIELD_REVIEWED_SINCE_PLACEMENT] = (
+                True if reviewed_since_placement else {"$in": [False, None]}
+            )
 
     def _apply_cursor_condition(
         self,

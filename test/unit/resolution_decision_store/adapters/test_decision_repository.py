@@ -596,14 +596,14 @@ async def test_average_cluster_size_returns_zero_when_no_decisions(
 @pytest.mark.asyncio
 async def test_record_review_issues_aggregation_pipeline_update(repo, mock_collection):
     """record_review uses an aggregation-update pipeline (list of stages)."""
-    mock_collection.update_one = AsyncMock()
+    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
     action_ts = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
 
     await repo.record_review("decision-abc", action_ts)
 
     args, _ = mock_collection.update_one.call_args
     filter_doc, update_arg = args
-    assert filter_doc == {"_id": "decision-abc"}
+    assert filter_doc["_id"] == "decision-abc"
     assert isinstance(update_arg, list), "update must be a pipeline (list of stages)"
     assert len(update_arg) == 1
     assert "$set" in update_arg[0]
@@ -613,14 +613,51 @@ async def test_record_review_issues_aggregation_pipeline_update(repo, mock_colle
 
 
 @pytest.mark.asyncio
-async def test_record_review_no_upsert(repo, mock_collection):
-    """record_review must NOT upsert — missing doc is a silent no-op."""
-    mock_collection.update_one = AsyncMock()
+async def test_record_review_filter_includes_concurrency_guard(repo, mock_collection):
+    """The filter must require ``reviewed_since_placement != True`` so a concurrent
+    second caller hits ``modified_count == 0`` (closes the TOCTOU race)."""
+    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
 
-    await repo.record_review("decision-xyz", datetime(2026, 6, 5, tzinfo=UTC))
+    await repo.record_review("decision-abc", datetime(2026, 6, 5, tzinfo=UTC))
 
-    call_kwargs = mock_collection.update_one.call_args.kwargs
-    assert call_kwargs.get("upsert", False) is False
+    filter_doc = mock_collection.update_one.call_args.args[0]
+    assert filter_doc.get("reviewed_since_placement") == {"$ne": True}, (
+        "filter must gate the claim on ``reviewed_since_placement != True``"
+    )
+
+
+@pytest.mark.asyncio
+async def test_record_review_returns_true_when_claim_succeeds(repo, mock_collection):
+    """Modified one document → claim succeeded → return True."""
+    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
+
+    result = await repo.record_review("decision-abc", datetime(2026, 6, 5, tzinfo=UTC))
+
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_record_review_returns_false_when_race_lost(repo, mock_collection):
+    """Modified zero documents → another concurrent caller won the claim → return False."""
+    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=0))
+
+    result = await repo.record_review("decision-abc", datetime(2026, 6, 5, tzinfo=UTC))
+
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_record_review_returns_false_when_document_missing(repo, mock_collection):
+    """Missing decision → ``modified_count == 0`` → return False (no upsert)."""
+    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=0))
+
+    result = await repo.record_review(
+        "nonexistent-id", datetime(2026, 6, 5, tzinfo=UTC)
+    )
+
+    assert result is False
+    # And no upsert was attempted.
+    assert mock_collection.update_one.call_args.kwargs.get("upsert", False) is False
 
 
 @pytest.mark.asyncio
@@ -629,7 +666,7 @@ async def test_record_review_pipeline_compares_action_timestamp_to_placement_bou
 ):
     """The $cond inside the pipeline compares action_created_at against
     ``$ifNull(updated_at, created_at)`` — the stored placement boundary."""
-    mock_collection.update_one = AsyncMock()
+    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
     action_ts = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
 
     await repo.record_review("decision-abc", action_ts)

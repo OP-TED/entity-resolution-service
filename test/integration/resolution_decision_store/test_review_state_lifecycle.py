@@ -7,13 +7,16 @@ Proves on the real engine (FerretDB) that the two writers (integrator and
 - a curator action after placement flips ``flag=True`` and increments the counter,
 - a material placement advance resets ``flag=False`` and preserves the counter,
 - a stale/out-of-order curator action (``created_at < stored placement boundary``)
-  increments the counter but does NOT flip the flag back to ``True``,
+  is rejected by the atomic claim (returns False) — counter and flag unchanged,
 - an identical re-integration (no material change) leaves the materialised state
-  untouched.
+  untouched,
+- concurrent ``record_review`` calls serialise — exactly one wins.
 
-These are the acceptance scenarios for TEDSWS-524-2 milestone 1.
+These are the acceptance scenarios for TEDSWS-524-2 milestones 1, 2, and the
+post-empirical TOCTOU-race fix.
 """
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -148,3 +151,60 @@ async def test_identical_replay_does_not_touch_materialised_state(repo) -> None:
 
     post = await _metadata(repo, decision.id)
     assert post == pre, "rejected replay must not touch the materialised primitives"
+
+
+# ── concurrency: atomic claim closes the TOCTOU race ──────────────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_concurrent_record_review_only_one_succeeds(repo) -> None:
+    """Empirically the TOCTOU race produced 2 user_actions 1 ms apart for a
+    single curator (2026-06-07). With the atomic claim, ``record_review``'s
+    filter ``reviewed_since_placement != True`` makes the conditional update
+    serializable at the single-document level. Fire N concurrent claims;
+    exactly one must return True and the rest must return False."""
+    decision = await repo.upsert_decision(_ident(), _cluster(), [], _T0)
+    action_ts = _T0 + timedelta(seconds=1)
+
+    results = await asyncio.gather(
+        *(repo.record_review(decision.id, action_ts) for _ in range(8))
+    )
+
+    winners = sum(1 for r in results if r is True)
+    losers = sum(1 for r in results if r is False)
+    assert winners == 1, f"exactly one concurrent claim must succeed; got {winners}"
+    assert losers == 7, f"the other 7 must lose; got {losers}"
+
+    metadata = await _metadata(repo, decision.id)
+    assert metadata.previous_review_count == 1, (
+        "counter must increment exactly once across all concurrent attempts"
+    )
+    assert metadata.reviewed_since_placement is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_record_review_returns_false_when_already_claimed(repo) -> None:
+    """Sequential second claim against the same placement must return False
+    without modifying any field. This is the non-race version of the same
+    concurrency property — easy to debug in isolation."""
+    decision = await repo.upsert_decision(_ident(), _cluster(), [], _T0)
+
+    first = await repo.record_review(decision.id, _T0 + timedelta(seconds=1))
+    second = await repo.record_review(decision.id, _T0 + timedelta(seconds=2))
+
+    assert first is True
+    assert second is False
+    metadata = await _metadata(repo, decision.id)
+    assert metadata.previous_review_count == 1
+    assert metadata.reviewed_since_placement is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_record_review_returns_false_when_decision_missing(repo) -> None:
+    """A missing decision document also yields ``modified_count == 0`` and
+    therefore ``False`` — no upsert, no error, idempotent."""
+    result = await repo.record_review("nonexistent-decision-id", _T0)
+    assert result is False
