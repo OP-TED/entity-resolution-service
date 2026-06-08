@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -37,10 +38,34 @@ _FIELD_ABOUT_ENTITY_MENTION = "about_entity_mention"
 _FIELD_CREATED_AT = "created_at"
 _FIELD_UPDATED_AT = "updated_at"
 _FIELD_PREVIOUS_REVIEW_COUNT = "previous_review_count"
-_COLLECTION_USER_ACTIONS = "user_actions"
+_FIELD_REVIEWED_SINCE_PLACEMENT = "reviewed_since_placement"
 # Derived field added by the cluster-size aggregation pipeline branch.
 # Not stored on decision documents; computed via $lookup + $addFields.
 _FIELD_CLUSTER_SIZE = "cluster_size"
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewMetadata:
+    """Denormalised review-state primitives read off a decision document.
+
+    Both fields are materialised on the ``decisions`` document by the
+    integrator (placement reset) and the curation user-action service
+    (``record_review``). Read together in a single projection by
+    ``find_review_metadata`` so the curation list endpoint can build
+    ``DecisionSummary`` rows without a second collection read.
+
+    Attributes:
+        previous_review_count: Lifetime count of curator actions ever
+            recorded against the decision. Defaults to 0 for missing
+            documents or absent field.
+        reviewed_since_placement: ``True`` iff a curator action exists
+            whose ``created_at`` is strictly after the decision's current
+            placement boundary. Defaults to ``False`` for missing documents
+            or absent field.
+    """
+
+    previous_review_count: int = 0
+    reviewed_since_placement: bool = False
 
 
 class DecisionRepository(BaseDecisionRepository):
@@ -70,13 +95,13 @@ class DecisionRepository(BaseDecisionRepository):
             ever_reviewed: When True, return only decisions with at least one
                 recorded curator action (``previous_review_count > 0``); when
                 False, only decisions never reviewed. None disables the filter.
-            reviewed_since_placement: When True, return only decisions where a
-                user_action exists with ``created_at`` after the decision's
-                current placement timestamp (``updated_at`` or ``created_at``);
-                when False, only decisions with no such action. None disables
-                the filter. The two flags are orthogonal: combine
-                ``ever_reviewed=True`` with ``reviewed_since_placement=False`` to
-                select decisions that need re-visiting after an ERE update.
+            reviewed_since_placement: When True/False, filter on the stored
+                boolean materialised by the integrator (reset on placement
+                advance) and ``record_review`` (conditionally set on curator
+                action). None disables the filter. The two flags are
+                orthogonal: combine ``ever_reviewed=True`` with
+                ``reviewed_since_placement=False`` to select decisions that
+                need re-visiting after an ERE update.
         """
 
     @abstractmethod
@@ -115,32 +140,68 @@ class DecisionRepository(BaseDecisionRepository):
         """
 
     @abstractmethod
-    async def increment_review_count(self, decision_id: str) -> None:
-        """Atomically increment the previous_review_count field on the given decision.
+    async def record_review(self, decision_id: str, action_created_at: datetime) -> bool:
+        """Atomically claim a curator-action slot for the current placement.
 
-        No-op if the document is missing — the action save is the canonical write,
-        the counter is a denormalised mirror (see spec §3.1 R8).
+        Single ``update_one`` against the decision row, gated on
+        ``reviewed_since_placement`` not already being ``True``. The write
+        atomically (in one MongoDB operation):
+
+        - Increments ``previous_review_count`` — the curator action happened
+          and the counter ticks once per claimed slot.
+        - Sets ``reviewed_since_placement`` to ``True`` when
+          ``action_created_at`` is strictly greater than the stored placement
+          boundary (``updated_at`` if non-null, else ``created_at``). When the
+          action predates the current placement (delayed/out-of-order
+          delivery), the flag is preserved at its current value via ``$cond``
+          — stale actions never regress an already-reset flag.
+
+        The filter ``reviewed_since_placement != True`` is the **concurrency
+        guard**: it matches documents whose flag is ``false``, ``null``, or
+        absent. The first concurrent caller to win the conditional update
+        flips the flag and gets ``True``; every other concurrent caller sees
+        ``modified_count == 0`` and gets ``False``. Callers MUST treat a
+        ``False`` return as "this placement is already curated" and react
+        accordingly (typically: roll back the just-saved ``user_action`` row
+        and raise ``AlreadyCuratedError``). This closes the TOCTOU race that
+        a separate read-then-write idempotency check could not.
+
+        A missing document also returns ``False`` (``modified_count == 0``).
+        The action save is the canonical write — the materialised primitives
+        on the decision row are a denormalised mirror — so a missing decision
+        leaves the database untouched.
 
         Args:
-            decision_id: The ``_id`` of the decision document to increment.
+            decision_id: The ``_id`` of the decision document to update.
+            action_created_at: The ``created_at`` of the user action being
+                recorded. Compared against the stored placement boundary to
+                decide whether to flip ``reviewed_since_placement``.
+
+        Returns:
+            ``True`` iff the slot was claimed (document matched and was
+            updated). ``False`` iff another concurrent caller already claimed
+            this placement's slot, or the decision does not exist.
         """
 
     @abstractmethod
-    async def find_review_counts(self, decision_ids: list[str]) -> dict[str, int]:
-        """Return previous_review_count values for the given decision IDs.
+    async def find_review_metadata(self, decision_ids: list[str]) -> dict[str, ReviewMetadata]:
+        """Return ``(previous_review_count, reviewed_since_placement)`` for the IDs.
 
-        Used by the curation service to attach counts to ``DecisionSummary`` rows
-        without changing the ``find_with_filters`` signature (which is shared with
-        the Decision Store sync path).  Missing documents or documents without the
-        field are treated as 0.
+        Used by the curation service to attach review state to ``DecisionSummary``
+        rows in a single round-trip — both primitives live on the decision row
+        as stored fields. Missing documents or absent fields default to
+        ``ReviewMetadata(0, False)`` — the same semantics as the per-document
+        defaults documented on ``DecisionSummary``.
 
         Args:
             decision_ids: List of decision ``_id`` values to look up.
 
         Returns:
-            Mapping of ``{decision_id: count}``.  IDs absent from the collection
-            are omitted (callers should default-to-0 on missing keys).
+            Mapping of ``{decision_id: ReviewMetadata}``. IDs absent from the
+            collection are omitted (callers default missing keys to
+            ``ReviewMetadata(count=0, reviewed_since_placement=False)``).
         """
+
 
 class MongoDecisionRepository(
     BaseMongoDecisionRepository,
@@ -173,14 +234,18 @@ class MongoDecisionRepository(
         through other channels:
 
         - ``previous_review_count`` — a denormalised counter written by
-          ``increment_review_count`` and read via ``find_review_counts``;
+          ``record_review`` and read via ``find_review_metadata``;
+        - ``reviewed_since_placement`` — a denormalised boolean materialised by
+          the integrator (reset on placement advance) and ``record_review``
+          (conditionally set on curator action), read via ``find_review_metadata``;
         - ``cluster_size`` — a value derived by the cluster-size ordering
           aggregation (``$lookup`` on ``cluster_sizes``).
 
-        Stripping both here is the single funnel for every read path, so callers
-        never hand a polluted document to ``model_validate``.
+        Stripping all three here is the single funnel for every read path, so
+        callers never hand a polluted document to ``model_validate``.
         """
         doc.pop(_FIELD_PREVIOUS_REVIEW_COUNT, None)
+        doc.pop(_FIELD_REVIEWED_SINCE_PLACEMENT, None)
         doc.pop(_FIELD_CLUSTER_SIZE, None)
         return super()._from_document(doc)
 
@@ -275,6 +340,11 @@ class MongoDecisionRepository(
         absent (None) in the stored document, per R1. ``$setOnInsert`` ensures
         these immutable fields are only written on genuine inserts.
 
+        The denormalised ``reviewed_since_placement`` flag is initialised to
+        ``False`` here — a brand-new decision has no curator action against the
+        current placement. The counter is left out so the curator-side writer
+        owns its lifecycle exclusively.
+
         Args:
             identifier: Entity mention triad (immutable once inserted).
             current: Initial cluster assignment.
@@ -290,6 +360,7 @@ class MongoDecisionRepository(
                 "about_entity_mention": identifier.model_dump(),
                 "current_placement": current.model_dump(),
                 "candidates": [c.model_dump() for c in candidates],
+                _FIELD_REVIEWED_SINCE_PLACEMENT: False,
             },
         }
 
@@ -306,6 +377,11 @@ class MongoDecisionRepository(
         ``about_entity_mention`` is written in ``$set`` to ensure it is present
         on all docs (defensive against legacy missing-field docs).
 
+        ``reviewed_since_placement`` is reset to ``False`` in the same ``$set``:
+        every material placement advance invalidates whatever curator state was
+        attached to the previous placement, and resetting in the same atomic
+        write keeps the denormalised flag synchronous with ``updated_at``.
+
         Args:
             identifier: Entity mention triad.
             current: New cluster assignment.
@@ -321,6 +397,7 @@ class MongoDecisionRepository(
                 "current_placement": current.model_dump(),
                 "candidates": [c.model_dump() for c in candidates],
                 "updated_at": updated_at,
+                _FIELD_REVIEWED_SINCE_PLACEMENT: False,
             },
         }
 
@@ -517,44 +594,123 @@ class MongoDecisionRepository(
         triad_hash = derive_provisional_cluster_id(identifier)
         return await self.find_by_id(triad_hash)
 
-    async def increment_review_count(self, decision_id: str) -> None:
-        """Atomically increment the previous_review_count field on the given decision.
+    async def record_review(self, decision_id: str, action_created_at: datetime) -> bool:
+        """Atomically claim a curator-action slot for the current placement.
 
-        Uses ``$inc`` so the field is initialised from zero on the first call even
-        when the field is absent from legacy documents.  No upsert is performed —
-        a missing document is silently ignored (the action save is the canonical
-        write; this counter is a denormalised mirror).
+        Single ``update_one`` against the decision row using an aggregation-
+        update pipeline. The filter requires ``reviewed_since_placement`` to
+        not already be ``True`` — this is the concurrency guard that makes
+        the call serializable at the database level.
+
+        On a successful claim (filter matched), the write atomically:
+
+        - Increments ``previous_review_count`` (initialising from 0 when the
+          field is absent on legacy documents).
+        - Sets ``reviewed_since_placement = True`` **only** when
+          ``action_created_at`` is strictly after the stored placement boundary
+          (``updated_at`` if non-null, else ``created_at``). When the action
+          predates the current placement (delayed/out-of-order delivery), the
+          flag is preserved at its current value via ``$cond`` — stale actions
+          never regress a flag that the integrator has already reset.
+
+        On a lost race (filter did not match — flag is already ``True``) **or**
+        a missing document, ``modified_count`` is 0 and the method returns
+        ``False``. Callers MUST treat ``False`` as "this placement is already
+        curated" and react accordingly — typically by rolling back the
+        just-saved ``user_action`` row and raising ``AlreadyCuratedError`` at
+        the service layer.
+
+        The filter ``{"$ne": True}`` matches ``false``, ``null``, and absent
+        values — covering legacy documents that pre-date the materialisation
+        of ``reviewed_since_placement``. No upsert is performed; the action
+        save in ``user_actions`` is the canonical write, and the materialised
+        primitives on the decision row are a denormalised mirror.
 
         Args:
-            decision_id: The ``_id`` of the decision document to increment.
+            decision_id: The ``_id`` of the decision document to update.
+            action_created_at: ``UserAction.created_at`` of the action being
+                recorded. Compared against the stored placement boundary by the
+                aggregation pipeline.
+
+        Returns:
+            ``True`` iff the slot was claimed (document matched and was
+            updated). ``False`` iff another concurrent caller already claimed
+            this placement's slot, or the decision document does not exist.
         """
-        await self._collection.update_one(
-            {"_id": decision_id},
-            {"$inc": {"previous_review_count": 1}},
+        result = await self._collection.update_one(
+            {
+                "_id": decision_id,
+                _FIELD_REVIEWED_SINCE_PLACEMENT: {"$ne": True},
+            },
+            [
+                {
+                    "$set": {
+                        _FIELD_PREVIOUS_REVIEW_COUNT: {
+                            "$add": [
+                                {"$ifNull": [f"${_FIELD_PREVIOUS_REVIEW_COUNT}", 0]},
+                                1,
+                            ]
+                        },
+                        _FIELD_REVIEWED_SINCE_PLACEMENT: {
+                            "$cond": [
+                                {
+                                    "$gt": [
+                                        action_created_at,
+                                        {
+                                            "$ifNull": [
+                                                f"${_FIELD_UPDATED_AT}",
+                                                f"${_FIELD_CREATED_AT}",
+                                            ]
+                                        },
+                                    ]
+                                },
+                                True,
+                                {
+                                    "$ifNull": [
+                                        f"${_FIELD_REVIEWED_SINCE_PLACEMENT}",
+                                        False,
+                                    ]
+                                },
+                            ]
+                        },
+                    }
+                }
+            ],
         )
+        return result.modified_count > 0
 
-    async def find_review_counts(self, decision_ids: list[str]) -> dict[str, int]:
-        """Return previous_review_count values for the given decision IDs.
+    async def find_review_metadata(self, decision_ids: list[str]) -> dict[str, ReviewMetadata]:
+        """Return materialised review state for the given decision IDs.
 
-        Fetches only the ``_id`` and ``previous_review_count`` fields in a single
-        ``find`` query.  Documents where the field is absent are treated as 0.
+        Fetches only ``_id``, ``previous_review_count`` and
+        ``reviewed_since_placement`` in a single ``find`` query — both fields
+        are stored on the decision row, no cross-collection join needed.
+
+        Documents where a field is absent default to the field's documented
+        zero value (``0`` for the counter, ``False`` for the flag).
 
         Args:
             decision_ids: List of decision ``_id`` values to look up.
 
         Returns:
-            Mapping of ``{decision_id: count}`` for all found documents.
+            Mapping of ``{decision_id: ReviewMetadata}`` for all found documents.
         """
         if not decision_ids:
             return {}
 
         cursor = self._collection.find(
             {"_id": {"$in": decision_ids}},
-            projection={"previous_review_count": 1},
+            projection={
+                _FIELD_PREVIOUS_REVIEW_COUNT: 1,
+                _FIELD_REVIEWED_SINCE_PLACEMENT: 1,
+            },
         )
-        result: dict[str, int] = {}
+        result: dict[str, ReviewMetadata] = {}
         async for doc in cursor:
-            result[doc["_id"]] = doc.get("previous_review_count", 0)
+            result[doc["_id"]] = ReviewMetadata(
+                previous_review_count=doc.get(_FIELD_PREVIOUS_REVIEW_COUNT, 0),
+                reviewed_since_placement=doc.get(_FIELD_REVIEWED_SINCE_PLACEMENT, False),
+            )
         return result
 
     async def find_with_filters(
@@ -573,11 +729,10 @@ class MongoDecisionRepository(
         2. Decision Store bulk sync use case: no filters, fixed (updated_at ASC, _id ASC)
 
         When ``filters`` is None, performs unfiltered traversal in Decision Store mode.
-        ``ever_reviewed`` is a plain ``$match`` on the stored ``previous_review_count``.
-        When ``reviewed_since_placement`` is not None, the curation path switches to an
-        aggregation that ``$lookup``s ``user_actions`` and applies the review-state
-        predicate *before* sort/limit (so pagination never under-fills).  The bulk-sync
-        path (``filters=None``) ignores both flags.
+        Both review primitives (``ever_reviewed``, ``reviewed_since_placement``) are
+        plain ``$match`` predicates on stored fields — the previous correlated
+        ``$lookup`` against ``user_actions`` is gone. The bulk-sync path
+        (``filters=None``) ignores both flags.
 
         Args:
             filters: Optional filter criteria. None for unfiltered traversal.
@@ -586,17 +741,15 @@ class MongoDecisionRepository(
                 ``about_entity_mention`` is in this list.
             ever_reviewed: When True/False, filter on whether any curator action has
                 ever been recorded (``previous_review_count > 0``). None disables it.
-            reviewed_since_placement: When True/False, filter on whether a user_action
-                exists since the current placement. None disables it.
+            reviewed_since_placement: When True/False, filter on the stored boolean
+                materialised by the integrator + ``record_review``. None disables it.
 
         Returns:
             A ``CursorPage`` containing results and an optional ``next_cursor``.
-            ``count`` reflects only the stored-field query (field filters,
-            ``mention_identifiers``, and ``ever_reviewed``); it does **not** account
-            for the ``reviewed_since_placement`` lookup filter, which is applied
-            inside the aggregation after the count is taken (A3). When
-            ``reviewed_since_placement`` is set, treat ``count`` as an upper bound on
-            the filtered total, not an exact count.
+            ``count`` is the exact match count for every combination of stored-field
+            filters (field filters, ``mention_identifiers``, ``ever_reviewed``, and
+            ``reviewed_since_placement``). The previous A3 upper-bound caveat no
+            longer applies — all filters now run as ``$match`` on stored fields.
         """
         if cursor_params is None:
             cursor_params = CursorParams()
@@ -612,61 +765,46 @@ class MongoDecisionRepository(
         else:
             # Filtered curation mode
             query = self._build_query(filters)
-
-            if mention_identifiers is not None:
-                id_docs = [
-                    {
-                        "source_id": mi.source_id,
-                        "request_id": mi.request_id,
-                        "entity_type": mi.entity_type,
-                    }
-                    for mi in mention_identifiers
-                ]
-                query[_FIELD_ABOUT_ENTITY_MENTION] = {"$in": id_docs}
-
-            if ever_reviewed is not None:
-                # ``$in: [0, None]`` treats a missing/null counter as never-reviewed
-                # and avoids ``$not`` for DocumentDB / FerretDB portability.
-                query[_FIELD_PREVIOUS_REVIEW_COUNT] = (
-                    {"$gt": 0} if ever_reviewed else {"$in": [0, None]}
-                )
-
-            # NOTE (A3): counts the stored-field query only. The
-            # ``reviewed_since_placement`` lookup filter is applied later in the
-            # aggregation, so this count is an upper bound when that filter is set.
+            self._augment_query_with_curation_filters(
+                query,
+                mention_identifiers=mention_identifiers,
+                ever_reviewed=ever_reviewed,
+                reviewed_since_placement=reviewed_since_placement,
+            )
             count = await self._collection.count_documents(query)
 
             sort_field, ascending = self._get_sort_info(filters.ordering)
             sort = self._build_sort(filters.ordering)
 
-        # Apply cursor condition (same logic for both modes)
-        if cursor_params.cursor is not None:
-            raw_value, last_id = decode_cursor(cursor_params.cursor)
-            sort_value = self._parse_cursor_sort_value(raw_value, sort_field)
-            cursor_condition = self._build_cursor_condition(
-                sort_field, sort_value, last_id, ascending
-            )
-            query = {"$and": [query, cursor_condition]} if query else cursor_condition
+        # --- Execution path selection ---
+        # Cluster-size orderings require aggregation because the sort field is
+        # derived via $lookup + $addFields and is not stored on the decision doc.
+        # Every other filter — including ``reviewed_since_placement`` — runs as
+        # a plain ``$match`` on a stored field and uses the simple ``find()`` path.
+        # ``last_sort_raw_value`` captures the cluster_size integer for cursor
+        # encoding when the aggregation path is active; it stays None for all
+        # other paths.
+        is_cluster_size_ordering = (
+            filters is not None and filters.ordering in self._AGGREGATION_ORDERINGS
+        )
+
+        query, cursor_condition = self._apply_cursor_condition(
+            query=query,
+            cursor=cursor_params.cursor,
+            sort_field=sort_field,
+            ascending=ascending,
+            is_cluster_size_ordering=is_cluster_size_ordering,
+        )
 
         # Fetch page_size + 1 to detect if there are more results
         fetch_limit = cursor_params.limit + 1
 
-        # --- Execution path selection ---
-        # Cluster-size orderings require aggregation because the sort field is
-        # derived via $lookup + $addFields and is not stored on the decision doc.
-        # ``last_sort_raw_value`` captures the cluster_size integer for cursor
-        # encoding when that path is active; it stays None for all other paths.
-        is_cluster_size_ordering = (
-            filters is not None
-            and filters.ordering in self._AGGREGATION_ORDERINGS
-        )
         results, last_sort_raw_value = await self._fetch_page(
             query=query,
             sort=sort,
             fetch_limit=fetch_limit,
-            filters=filters,
-            reviewed_since_placement=reviewed_since_placement,
             is_cluster_size_ordering=is_cluster_size_ordering,
+            cursor_condition=cursor_condition,
         )
 
         # Encode next cursor if there are more results
@@ -685,163 +823,169 @@ class MongoDecisionRepository(
 
         return CursorPage(results=results, count=count, next_cursor=next_cursor)
 
+    @staticmethod
+    def _augment_query_with_curation_filters(
+        query: dict[str, Any],
+        *,
+        mention_identifiers: list[EntityMentionIdentifier] | None,
+        ever_reviewed: bool | None,
+        reviewed_since_placement: bool | None,
+    ) -> None:
+        """Add the curation-specific predicates to the stage-1 ``$match`` query.
+
+        Mutates ``query`` in place. All three predicates are stored-field
+        ``$match`` clauses, so each is index-eligible. Predicates with engine-
+        portability constraints (``$in`` instead of ``$not``) follow the same
+        rules as documented on the abstract method.
+        """
+        if mention_identifiers is not None:
+            query[_FIELD_ABOUT_ENTITY_MENTION] = {
+                "$in": [
+                    {
+                        "source_id": mi.source_id,
+                        "request_id": mi.request_id,
+                        "entity_type": mi.entity_type,
+                    }
+                    for mi in mention_identifiers
+                ]
+            }
+
+        if ever_reviewed is not None:
+            # ``$in: [0, None]`` treats a missing/null counter as never-reviewed
+            # and avoids ``$not`` for DocumentDB / FerretDB portability.
+            query[_FIELD_PREVIOUS_REVIEW_COUNT] = (
+                {"$gt": 0} if ever_reviewed else {"$in": [0, None]}
+            )
+
+        if reviewed_since_placement is not None:
+            # Stored boolean — ``False`` matches both ``false`` and absent
+            # (legacy/un-backfilled) values via ``$in`` for the same
+            # cross-engine reason as the counter.
+            query[_FIELD_REVIEWED_SINCE_PLACEMENT] = (
+                True if reviewed_since_placement else {"$in": [False, None]}
+            )
+
+    def _apply_cursor_condition(
+        self,
+        *,
+        query: dict[str, Any],
+        cursor: str | None,
+        sort_field: str,
+        ascending: bool,
+        is_cluster_size_ordering: bool,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        """Decide where the keyset cursor predicate is applied.
+
+        - Plain ``find()`` path: cursor predicate is on a *stored* field, so it
+          merges into ``query`` and runs in stage 1 (indexable). Returns
+          ``(merged_query, None)``.
+        - Cluster-size aggregation path: cursor predicate is on the *derived*
+          ``cluster_size`` field, which only exists after ``$addFields``. It must
+          be deferred to a downstream ``$match`` (resolves C1). Returns
+          ``(original_query, cursor_condition)``.
+
+        When no cursor is supplied, ``cursor_condition`` is ``None`` and ``query``
+        is unchanged.
+
+        Args:
+            query: The stage-1 match expression assembled from filters/flags.
+            cursor: The opaque cursor string (or ``None`` for the first page).
+            sort_field: The MongoDB field name driving the sort order.
+            ascending: Sort direction; used to build the keyset predicate.
+            is_cluster_size_ordering: True when the active sort key is the
+                derived ``cluster_size`` field.
+
+        Returns:
+            ``(query, cursor_condition)``. ``cursor_condition`` is non-None only
+            for the cluster-size aggregation path; callers forward it to
+            ``_fetch_with_cluster_size_sort``.
+        """
+        if cursor is None:
+            return query, None
+
+        raw_value, last_id = decode_cursor(cursor)
+        sort_value = self._parse_cursor_sort_value(raw_value, sort_field)
+        cursor_condition = self._build_cursor_condition(sort_field, sort_value, last_id, ascending)
+        if is_cluster_size_ordering:
+            return query, cursor_condition
+        merged = {"$and": [query, cursor_condition]} if query else cursor_condition
+        return merged, None
+
     async def _fetch_page(
         self,
         *,
         query: dict[str, Any],
         sort: list[tuple[str, int]],
         fetch_limit: int,
-        filters: DecisionFilters | None,
-        reviewed_since_placement: bool | None,
         is_cluster_size_ordering: bool,
+        cursor_condition: dict[str, Any] | None = None,
     ) -> tuple[list[Decision], Any]:
         """Select and run the read path; return ``(results, last_sort_raw_value)``.
 
         ``last_sort_raw_value`` is the derived ``cluster_size`` of the final row
         for cluster-size orderings (used to encode the next cursor), else None.
+        Every other path uses a plain ``find()`` — the previous review-filter
+        aggregation is gone now that ``reviewed_since_placement`` is a stored,
+        indexable field.
+
+        ``cursor_condition`` is forwarded only on the cluster-size aggregation
+        path; the plain-find path has already merged its cursor condition into
+        ``query``.
         """
         if is_cluster_size_ordering:
             return await self._fetch_with_cluster_size_sort(
                 query=query,
                 sort=sort,
                 fetch_limit=fetch_limit,
-                reviewed=reviewed_since_placement,
+                cursor_condition=cursor_condition,
             )
-        if reviewed_since_placement is not None and filters is not None:
-            results = await self._fetch_with_review_filter(
-                query=query,
-                sort=sort,
-                fetch_limit=fetch_limit,
-                reviewed=reviewed_since_placement,
-            )
-            return results, None
         cursor = self._collection.find(query).sort(sort).limit(fetch_limit)
         return [self._from_document(doc) async for doc in cursor], None
-
-    async def _fetch_with_review_filter(
-        self,
-        query: dict[str, Any],
-        sort: list[tuple[str, int]],
-        fetch_limit: int,
-        reviewed: bool,
-    ) -> list[Decision]:
-        """Execute an aggregation pipeline that joins user_actions to filter by review state.
-
-        A decision is considered *reviewed* when there exists at least one user_action
-        whose ``about_entity_mention`` triad matches the decision's triad and whose
-        ``created_at`` is strictly after the decision's current-placement timestamp
-        (``updated_at`` if non-null, else ``created_at``).
-
-        The pipeline filters **before** limiting, so a page never under-fills:
-
-        1. ``$match`` — apply the pre-built filter query (same predicates as ``find()``).
-        2. ``$lookup`` — correlated sub-pipeline against ``user_actions`` joining on
-           the embedded ``about_entity_mention`` triad and the temporal predicate.
-        3. ``$match`` — keep only documents where ``_has_recent_action`` is non-empty
-           (``reviewed=True``) or empty (``reviewed=False``).
-        4. ``$sort`` — apply the requested ordering so cursor pagination is stable.
-        5. ``$limit`` — limit to ``fetch_limit`` after the review filter.
-        6. ``$project`` — remove the temporary ``_has_recent_action`` array so that
-           ``_from_document`` receives clean decision documents.
-
-        Limiting after (not before) the review ``$match`` is essential: limiting
-        first would let the review filter drop most of a fetched page, returning a
-        short page and prematurely ending pagination.
-
-        Args:
-            query: Pre-built MongoDB match expression (may include cursor condition).
-            sort: Sort specification as a list of ``(field, direction)`` pairs.
-            fetch_limit: Number of documents to fetch (page size + 1).
-            reviewed: True to keep reviewed decisions; False to keep pending ones.
-
-        Returns:
-            List of ``Decision`` domain objects.
-        """
-        sort_stage = {field: direction for field, direction in sort}
-
-        review_match: dict[str, Any] = (
-            {"_has_recent_action": {"$ne": []}}
-            if reviewed
-            else {"_has_recent_action": {"$eq": []}}
-        )
-
-        pipeline: list[dict[str, Any]] = [
-            {"$match": query if query else {}},
-            self._recent_action_lookup_stage(),
-            {"$match": review_match},
-            {"$sort": sort_stage},
-            {"$limit": fetch_limit},
-            {"$project": {"_has_recent_action": 0}},
-        ]
-
-        agg_cursor = await self._collection.aggregate(pipeline)
-        return [self._from_document(doc) async for doc in agg_cursor]
-
-    @staticmethod
-    def _recent_action_lookup_stage() -> dict[str, Any]:
-        """Build the correlated ``$lookup`` that flags a user_action since placement.
-
-        Adds ``_has_recent_action`` (non-empty iff such an action exists), joining
-        ``user_actions`` on the embedded ``about_entity_mention`` triad and the
-        temporal predicate ``created_at > (updated_at, else created_at)``.  Shared
-        by the review filter and the cluster-size sort path.
-        """
-        return {
-            "$lookup": {
-                "from": _COLLECTION_USER_ACTIONS,
-                "let": {
-                    "triad": f"${_FIELD_ABOUT_ENTITY_MENTION}",
-                    "since": {"$ifNull": [f"${_FIELD_UPDATED_AT}", f"${_FIELD_CREATED_AT}"]},
-                },
-                "pipeline": [
-                    {
-                        "$match": {
-                            "$expr": {
-                                "$and": [
-                                    {"$eq": [f"${_FIELD_ABOUT_ENTITY_MENTION}", "$$triad"]},
-                                    {"$gt": [f"${_FIELD_CREATED_AT}", "$$since"]},
-                                ]
-                            }
-                        }
-                    },
-                    {"$limit": 1},
-                    {"$project": {"_id": 1}},
-                ],
-                "as": "_has_recent_action",
-            }
-        }
 
     async def _fetch_with_cluster_size_sort(
         self,
         query: dict[str, Any],
         sort: list[tuple[str, int]],
         fetch_limit: int,
-        reviewed: bool | None,
+        cursor_condition: dict[str, Any] | None = None,
     ) -> tuple[list[Decision], int | None]:
         """Execute an aggregation pipeline that joins cluster_sizes and sorts by cluster size.
 
         The pipeline:
 
-        1. ``$match``     — apply the pre-built filter query (indexes apply here).
-        2. ``$lookup``    — join ``cluster_sizes`` on ``current_placement.cluster_id == _id``.
-        3. ``$addFields`` — derive ``cluster_size`` as the first element of the joined array,
-                            defaulting to 0 for decisions whose cluster has no size record.
-        4. ``$project``   — remove the ``_cluster_meta`` helper array.
-        5. ``$lookup``    — (conditional) join ``user_actions`` when ``reviewed`` is not None.
-        6. ``$match``     — (conditional) filter by review state.
-        7. ``$project``   — (conditional) remove ``_has_recent_action``.
-        8. ``$sort``      — sort by ``cluster_size`` (±1) with ``_id`` tiebreaker.
-        9. ``$limit``     — limit to ``fetch_limit`` documents.
+        1. ``$match``      — apply the pre-built filter query (indexes apply here).
+                              This contains only stored-field predicates; the
+                              cursor predicate on the derived ``cluster_size``
+                              is **never** placed here (resolves C1).
+        2. ``$lookup``     — join ``cluster_sizes`` on ``current_placement.cluster_id == _id``.
+        3. ``$addFields``  — derive ``cluster_size`` as the first element of the joined
+                              array, defaulting to 0 for decisions whose cluster has no
+                              size record.
+        4. ``$project``    — remove the ``_cluster_meta`` helper array.
+        5. ``$match``      — (conditional) apply the cursor predicate on the now-materialised
+                              ``cluster_size`` field. Present iff a cursor was supplied.
+        6. ``$sort``       — sort by ``cluster_size`` (±1) with ``_id`` tiebreaker.
+        7. ``$limit``      — limit to ``fetch_limit`` documents.
+
+        Limiting after (not before) the cursor ``$match`` is essential: limiting
+        first would let the cursor filter under-fill the page.
+
+        ``reviewed_since_placement`` filtering is **not** added here — when the
+        filter is active it lives in the stage-1 ``$match`` via the stored field,
+        same as every other filter.
 
         The raw document still contains ``cluster_size`` after the pipeline so that
         ``_from_document`` receives a clean decision doc after stripping it.
 
         Args:
-            query: Pre-built MongoDB match expression (may include cursor condition).
+            query: Pre-built MongoDB match expression covering stored-field
+                predicates only (filters, mention_identifiers, ever_reviewed,
+                reviewed_since_placement).
             sort: Sort specification — should be ``[(cluster_size, ±1), (_id, ±1)]``.
             fetch_limit: Number of documents to fetch (page size + 1).
-            reviewed: When not None, adds the user_actions join and review-state
-                match; True keeps reviewed decisions, False keeps pending ones.
+            cursor_condition: Optional keyset cursor predicate on the derived
+                ``cluster_size`` field. Inserted as a post-``$addFields`` ``$match``
+                when non-None.
 
         Returns:
             A tuple of ``(decisions, last_cluster_size)`` where ``last_cluster_size``
@@ -870,17 +1014,10 @@ class MongoDecisionRepository(
             {"$project": {"_cluster_meta": 0}},
         ]
 
-        if reviewed is not None:
-            review_match: dict[str, Any] = (
-                {"_has_recent_action": {"$ne": []}}
-                if reviewed
-                else {"_has_recent_action": {"$eq": []}}
-            )
-            pipeline += [
-                self._recent_action_lookup_stage(),
-                {"$match": review_match},
-                {"$project": {"_has_recent_action": 0}},
-            ]
+        if cursor_condition is not None:
+            # cluster_size only exists from $addFields onwards; the cursor
+            # predicate references it, so it must run here — never in stage 1.
+            pipeline.append({"$match": cursor_condition})
 
         pipeline += [
             {"$sort": sort_stage},
@@ -940,9 +1077,7 @@ class MongoDecisionRepository(
         if cursor_params.cursor is not None:
             raw_value, last_id = decode_cursor(cursor_params.cursor)
             sort_value = self._parse_cursor_sort_value(raw_value, sort_field)
-            cursor_condition = self._build_cursor_condition(
-                sort_field, sort_value, last_id, True
-            )
+            cursor_condition = self._build_cursor_condition(sort_field, sort_value, last_id, True)
             query = {"$and": [query, cursor_condition]}
 
         fetch_limit = cursor_params.limit + 1

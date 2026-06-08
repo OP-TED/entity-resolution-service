@@ -8,10 +8,7 @@ from erspec.models.ere import EntityMentionResolutionRequest
 
 from ers.commons.domain.data_transfer_objects import CursorPage, CursorParams
 from ers.commons.services.exceptions import NotFoundError
-from ers.curation.adapters import (
-    EntityMentionCurationRepository,
-    ReviewStateReader,
-)
+from ers.curation.adapters import EntityMentionCurationRepository
 from ers.curation.domain.data_transfer_objects import (
     BulkActionResponse,
     BulkItemStatus,
@@ -21,7 +18,10 @@ from ers.curation.domain.data_transfer_objects import (
 from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.services import DecisionCurationService, UserActionService
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
-from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
+from ers.resolution_decision_store.adapters.decision_repository import (
+    DecisionRepository,
+    ReviewMetadata,
+)
 from test.unit.factories import (
     ClusterReferenceFactory,
     DecisionFactory,
@@ -33,16 +33,9 @@ from test.unit.factories import (
 @pytest.fixture
 def decision_repository() -> MagicMock:
     mock = create_autospec(DecisionRepository, instance=True)
-    # Default: no review counts — list_decisions defaults to 0 for missing keys.
-    mock.find_review_counts.return_value = {}
-    return mock
-
-
-@pytest.fixture
-def review_state_reader() -> MagicMock:
-    mock = create_autospec(ReviewStateReader, instance=True)
-    # Default: no review states — list_decisions defaults to False for missing keys.
-    mock.reviewed_since_placement.return_value = {}
+    # Default: no review metadata — list_decisions defaults to (0, False) per
+    # ReviewMetadata's defaults for missing keys.
+    mock.find_review_metadata.return_value = {}
     return mock
 
 
@@ -71,14 +64,12 @@ def service(
     entity_mention_repository: MagicMock,
     user_action_service: MagicMock,
     ere_publish_service: MagicMock,
-    review_state_reader: MagicMock,
 ) -> DecisionCurationService:
     return DecisionCurationService(
         decision_repository=decision_repository,
         entity_mention_repository=entity_mention_repository,
         user_action_service=user_action_service,
         ere_publish_service=ere_publish_service,
-        review_state_reader=review_state_reader,
     )
 
 
@@ -110,24 +101,28 @@ class TestListDecisions:
         summary = result.results[0]
         assert isinstance(summary, DecisionSummary)
         assert summary.id == decision.id
-        assert summary.about_entity_mention.identified_by == decision.about_entity_mention
+        assert (
+            summary.about_entity_mention.identified_by == decision.about_entity_mention
+        )
         assert summary.about_entity_mention.parsed_representation == json.loads(
             entity_mention.parsed_representation
         )
 
-    async def test_list_decisions_sets_reviewed_since_placement_from_states(
+    async def test_list_decisions_sets_reviewed_since_placement_from_metadata(
         self,
         service: DecisionCurationService,
         decision_repository: MagicMock,
         entity_mention_repository: MagicMock,
-        review_state_reader: MagicMock,
     ) -> None:
         decision = DecisionFactory.build()
         decision_repository.find_with_filters.return_value = CursorPage(
             results=[decision], next_cursor=None
         )
-        decision_repository.find_review_counts.return_value = {decision.id: 2}
-        review_state_reader.reviewed_since_placement.return_value = {decision.id: True}
+        decision_repository.find_review_metadata.return_value = {
+            decision.id: ReviewMetadata(
+                previous_review_count=2, reviewed_since_placement=True
+            )
+        }
         entity_mention_repository.find_by_identifiers.return_value = []
 
         result = await service.list_decisions(
@@ -144,7 +139,6 @@ class TestListDecisions:
         service: DecisionCurationService,
         decision_repository: MagicMock,
         entity_mention_repository: MagicMock,
-        review_state_reader: MagicMock,
     ) -> None:
         decision = DecisionFactory.build()
         decision_repository.find_with_filters.return_value = CursorPage(
@@ -152,8 +146,11 @@ class TestListDecisions:
         )
         # Never reviewed: count 0 AND no action since placement — the fourth state,
         # distinct from "needs revisit" (count > 0, same flag value).
-        decision_repository.find_review_counts.return_value = {decision.id: 0}
-        review_state_reader.reviewed_since_placement.return_value = {decision.id: False}
+        decision_repository.find_review_metadata.return_value = {
+            decision.id: ReviewMetadata(
+                previous_review_count=0, reviewed_since_placement=False
+            )
+        }
         entity_mention_repository.find_by_identifiers.return_value = []
 
         summary = (
@@ -443,7 +440,9 @@ class TestAssignDecision:
         )
         decision_repository.find_by_id.return_value = decision
 
-        await service.assign_decision(decision.id, cluster_id=target.cluster_id, actor="curator-1")
+        await service.assign_decision(
+            decision.id, cluster_id=target.cluster_id, actor="curator-1"
+        )
 
         user_action_service.record_assign.assert_called_once_with(
             actor="curator-1",
@@ -463,7 +462,9 @@ class TestAssignDecision:
         )
         decision_repository.find_by_id.return_value = decision
 
-        await service.assign_decision(decision.id, cluster_id=target.cluster_id, actor="curator-1")
+        await service.assign_decision(
+            decision.id, cluster_id=target.cluster_id, actor="curator-1"
+        )
 
         decision_repository.save.assert_not_called()
 
@@ -490,7 +491,9 @@ class TestBulkAcceptDecisions:
         decisions = DecisionFactory.batch(3)
         decision_repository.find_by_id.side_effect = decisions
 
-        result = await service.bulk_accept_decisions([d.id for d in decisions], actor="curator-1")
+        result = await service.bulk_accept_decisions(
+            [d.id for d in decisions], actor="curator-1"
+        )
 
         assert isinstance(result, BulkActionResponse)
         assert len(result.results) == 3
@@ -548,7 +551,9 @@ class TestBulkRejectDecisions:
         decisions = DecisionFactory.batch(3)
         decision_repository.find_by_id.side_effect = decisions
 
-        result = await service.bulk_reject_decisions([d.id for d in decisions], actor="curator-1")
+        result = await service.bulk_reject_decisions(
+            [d.id for d in decisions], actor="curator-1"
+        )
 
         assert len(result.results) == 3
         assert all(r.status == BulkItemStatus.SUCCESS for r in result.results)
@@ -563,7 +568,9 @@ class TestBulkRejectDecisions:
         decision_repository.find_by_id.side_effect = [decision, None]
         user_action_service.record_reject.return_value = None
 
-        result = await service.bulk_reject_decisions([decision.id, "missing-id"], actor="curator-1")
+        result = await service.bulk_reject_decisions(
+            [decision.id, "missing-id"], actor="curator-1"
+        )
 
         assert result.results[0].status == BulkItemStatus.SUCCESS
         assert result.results[1].status == BulkItemStatus.NOT_FOUND
@@ -663,7 +670,9 @@ class TestAssignDecisionPublishesERE:
         decision_repository.find_by_id.return_value = decision
         entity_mention_repository.find_by_identifiers.return_value = [entity_mention]
 
-        await service.assign_decision(decision.id, cluster_id=target_cluster, actor="curator")
+        await service.assign_decision(
+            decision.id, cluster_id=target_cluster, actor="curator"
+        )
 
         ere_publish_service.publish_request.assert_awaited_once()
         request: EntityMentionResolutionRequest = (

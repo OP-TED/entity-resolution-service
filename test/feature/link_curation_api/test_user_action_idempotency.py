@@ -60,8 +60,8 @@ def fresh_decision_with_accept_recorded(
     """
     decision = DecisionFactory.build(id="fresh-decision-1", updated_at=None)
     decision_repository.find_by_id.return_value = decision
-    # Simulate an existing action recorded after created_at
-    user_action_repository.has_current_action.return_value = True
+    # Simulate the atomic claim losing the race (placement already claimed).
+    decision_repository.record_review.return_value = False
     ctx["decision_id"] = "fresh-decision-1"
     return ctx
 
@@ -80,7 +80,7 @@ def fresh_decision_with_reject_recorded(
     """
     decision = DecisionFactory.build(id="fresh-decision-2", updated_at=None)
     decision_repository.find_by_id.return_value = decision
-    user_action_repository.has_current_action.return_value = True
+    decision_repository.record_review.return_value = False
     ctx["decision_id"] = "fresh-decision-2"
     return ctx
 
@@ -101,9 +101,11 @@ def decision_after_reintegration(
 
 
 @given("no action has been recorded since the latest re-integration")
-def no_action_since_reintegration(user_action_repository: Any) -> None:
-    """No action exists in the trail after updated_at."""
-    user_action_repository.has_current_action.return_value = False
+def no_action_since_reintegration(
+    decision_repository: Any, user_action_repository: Any
+) -> None:
+    """No action exists in the trail after updated_at — the atomic claim succeeds."""
+    decision_repository.record_review.return_value = True
     user_action_repository.save.return_value = None
 
 

@@ -317,3 +317,56 @@ still valid.
 3. **A** — review-driven hardening (coupling refactor, FerretDB integration tests,
    count semantics, concurrency, boundary alignment).
 
+
+---
+
+## Update — 2026-06-05 — TEDSWS-524-2 milestone 1 landed
+
+The `feature/TEDSWS-524-2-review-state` branch materialises `reviewed_since_placement`
+as a stored field on the decision row (joining the existing `previous_review_count`
+counter). The following follow-up items from this spec are **resolved** by that
+work; the rest remain or are re-scoped:
+
+| Item | Status after TEDSWS-524-2 milestone 1 |
+|---|---|
+| A1 (cross-module data coupling) | **Resolved on the read side only.** The read predicate moved from `ReviewStateReader` into the writer (`record_review`); both materialised primitives are now read from the decision row. The decision-row placement of curation-derived data is accepted as the project's working convention. A future milestone could move both to a curation-owned collection. |
+| A2 (real-DB integration coverage) | **Resolved.** New `test_review_state_lifecycle.py` and `test_decision_repository_pagination_across_pages.py` cover the new writers/filters end-to-end on FerretDB. |
+| A3 (`CursorPage.count` under-counts with review filter) | **Resolved.** The review predicate is a stored-field `$match` and runs through `count_documents` like every other filter. The paginated-across-pages tests assert exact counts. |
+| A4 (concurrent fan-out reads) | **Improved.** `find_review_counts` + `ReviewStateReader.reviewed_since_placement` are folded into a single `find_review_metadata`; `list_decisions` now issues two concurrent reads instead of three. |
+| A5 (`$gt` vs `$gte` boundary alignment) | **Confirmed.** Both writers compare with strict `$gt`; `has_current_action` already uses `$gt`. |
+| B (re-integration store impact) | **Tested.** New lifecycle tests cover `material change resets flag preserves counter`, `stale outcome rejected leaves materialised state untouched`, `cluster_sizes shift behavior is unchanged`. |
+| C (TEDSWS-530 reach-ERE on reject) | Unchanged — already shipped on TEDSWS-524-1. |
+
+**Cluster-size pagination bug (C1)** is **not** addressed by this milestone — it is
+the entire scope of milestone 2 (`feature/TEDSWS-524-2-cluster-size-cursor-fix` to
+come).
+
+---
+
+## Update — 2026-06-07 — TEDSWS-524-2 milestone 2 landed
+
+The cluster-size cursor placement bug (C1) is resolved on
+`feature/TEDSWS-524-2-review-state` (same branch as milestone 1, fast plan). The
+keyset cursor predicate on the derived `cluster_size` field is now applied as a
+post-`$addFields` `$match` stage instead of being merged into the stage-1
+`query`. Stored-field filters (entity_type, confidence, ever_reviewed,
+reviewed_since_placement, etc.) remain in stage 1 — they are still indexable.
+
+Resolved items from this spec:
+
+| Item | Status after TEDSWS-524-2 milestone 2 |
+|---|---|
+| C1 (cluster_size cursor in wrong stage) | **Resolved.** Cursor predicate runs after `$addFields cluster_size`. |
+| C2 (cluster_size + reviewed combined breaks pagination + count) | **Resolved.** The reviewed half was fixed in milestone 1; the cluster_size half is fixed here. |
+
+`cluster_size` remains a derived projection of `cluster_sizes` — no
+denormalisation onto the decision row. The trade-off is that cluster-size
+ordering still costs a per-page aggregation (one `$lookup` on PK), accepted
+at the 3k/day volume.
+
+Coverage added:
+- Unit: two pipeline-shape assertions on cursor placement, plus a
+  stored-field-filters-stay-in-stage-1 structural check.
+- Integration: cluster_size ASC/DESC pagination-across-pages tests (the test
+  class that would have caught C1 originally), plus a non-under-fill page-size
+  invariant test.

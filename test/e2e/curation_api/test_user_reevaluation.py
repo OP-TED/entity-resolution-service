@@ -14,14 +14,18 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import pytest
-from erspec.models.core import ClusterReference, Decision, EntityMention, EntityMentionIdentifier
+from erspec.models.core import (
+    ClusterReference,
+    Decision,
+    EntityMention,
+    EntityMentionIdentifier,
+)
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from ers.commons.adapters.redis_client import AbstractClient
 from ers.curation.adapters import (
     EntityMentionCurationRepository,
-    ReviewStateReader,
     UserActionCurationRepository,
 )
 from ers.curation.entrypoints.api.app import create_app
@@ -29,7 +33,9 @@ from ers.curation.entrypoints.api.auth import get_current_user
 from ers.curation.entrypoints.api.dependencies import get_decision_curation_service
 from ers.curation.services import DecisionCurationService, UserActionService
 from ers.ere_contract_client.services.ere_publish_service import EREPublishService
-from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
+from ers.resolution_decision_store.adapters.decision_repository import (
+    DecisionRepository,
+)
 from ers.users.domain.data_transfer_objects import UserContext
 
 pytestmark = pytest.mark.e2e
@@ -81,7 +87,9 @@ def _make_decision(
         cluster_ids = ["cl-001", "cl-002"]
     now = datetime.now(UTC)
     candidates = [
-        ClusterReference(cluster_id=cid, confidence_score=0.9 - i * 0.1, similarity_score=0.8)
+        ClusterReference(
+            cluster_id=cid, confidence_score=0.9 - i * 0.1, similarity_score=0.8
+        )
         for i, cid in enumerate(cluster_ids)
     ]
     return Decision(
@@ -113,8 +121,8 @@ def _build_service(
     user_action_repository: MagicMock,
     ere_adapter: MagicMock,
 ) -> tuple[DecisionCurationService, EREPublishService]:
-    decision_repository.increment_review_count = AsyncMock()
-    decision_repository.find_review_counts = AsyncMock(return_value={})
+    decision_repository.record_review = AsyncMock()
+    decision_repository.find_review_metadata = AsyncMock(return_value={})
     user_action_service = UserActionService(
         user_action_repository=user_action_repository,
         entity_mention_repository=entity_mention_repository,
@@ -127,7 +135,6 @@ def _build_service(
         entity_mention_repository=entity_mention_repository,
         user_action_service=user_action_service,
         ere_publish_service=ere_publish_service,
-        review_state_reader=create_autospec(ReviewStateReader, instance=True),
     )
     return service, ere_publish_service
 
@@ -146,7 +153,9 @@ async def test_placement_recommendation() -> None:
     decision = _make_decision(decision_id, identifier, cluster_ids=["cl-top", "cl-alt"])
 
     decision_repo = create_autospec(DecisionRepository, instance=True)
-    entity_mention_repo = create_autospec(EntityMentionCurationRepository, instance=True)
+    entity_mention_repo = create_autospec(
+        EntityMentionCurationRepository, instance=True
+    )
     user_action_repo = create_autospec(UserActionCurationRepository, instance=True)
     ere_adapter = create_autospec(AbstractClient, instance=True)
 
@@ -157,10 +166,14 @@ async def test_placement_recommendation() -> None:
     ere_adapter.push_request = AsyncMock(return_value=1)
     ere_adapter.request_channel_id = "ere_requests"
 
-    service, _ = _build_service(decision_repo, entity_mention_repo, user_action_repo, ere_adapter)
+    service, _ = _build_service(
+        decision_repo, entity_mention_repo, user_action_repo, ere_adapter
+    )
     app = _build_app(service)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         response = await client.post(
             f"{_API_PREFIX}/curation/decisions/{decision_id}/assign",
             json={"cluster_id": "cl-top"},
@@ -184,7 +197,9 @@ async def test_exclusion_recommendation() -> None:
     decision = _make_decision(decision_id, identifier, cluster_ids=cluster_ids)
 
     decision_repo = create_autospec(DecisionRepository, instance=True)
-    entity_mention_repo = create_autospec(EntityMentionCurationRepository, instance=True)
+    entity_mention_repo = create_autospec(
+        EntityMentionCurationRepository, instance=True
+    )
     user_action_repo = create_autospec(UserActionCurationRepository, instance=True)
     ere_adapter = create_autospec(AbstractClient, instance=True)
 
@@ -195,11 +210,17 @@ async def test_exclusion_recommendation() -> None:
     ere_adapter.push_request = AsyncMock(return_value=1)
     ere_adapter.request_channel_id = "ere_requests"
 
-    service, _ = _build_service(decision_repo, entity_mention_repo, user_action_repo, ere_adapter)
+    service, _ = _build_service(
+        decision_repo, entity_mention_repo, user_action_repo, ere_adapter
+    )
     app = _build_app(service)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post(f"{_API_PREFIX}/curation/decisions/{decision_id}/reject")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            f"{_API_PREFIX}/curation/decisions/{decision_id}/reject"
+        )
 
     assert response.status_code == 204
     ere_adapter.push_request.assert_awaited_once()

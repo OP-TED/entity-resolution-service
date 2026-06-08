@@ -55,7 +55,10 @@ def test_recommend_top_not_found():
     pass
 
 
-@scenario(FEATURE, "Recommend top candidate for a decision already curated on its current version")
+@scenario(
+    FEATURE,
+    "Recommend top candidate for a decision already curated on its current version",
+)
 def test_recommend_top_already_curated():
     pass
 
@@ -99,7 +102,9 @@ def test_recommend_invalid_cluster():
     pass
 
 
-@scenario(FEATURE, "Recommend alternative cluster placement for a non-existent decision")
+@scenario(
+    FEATURE, "Recommend alternative cluster placement for a non-existent decision"
+)
 def test_recommend_alternative_not_found():
     pass
 
@@ -144,7 +149,7 @@ def decision_not_curated(
 ) -> None:
     decision = DecisionFactory.build(id="decision-1")
     decision_repository.find_by_id.return_value = decision
-    user_action_repository.has_current_action.return_value = False
+    decision_repository.record_review.return_value = True
     user_action_repository.save.return_value = None
     ctx["decision_id"] = "decision-1"
 
@@ -162,7 +167,7 @@ def decision_with_alternative(
         candidates=[ClusterReferenceFactory.build(), alt_candidate],
     )
     decision_repository.find_by_id.return_value = decision
-    user_action_repository.has_current_action.return_value = False
+    decision_repository.record_review.return_value = True
     user_action_repository.save.return_value = None
     ctx["decision_id"] = "decision-1"
     ctx["alt_cluster"] = cluster_id
@@ -187,7 +192,7 @@ def decision_with_known_placement_and_candidates(
     mention = EntityMentionFactory.build(identifiedBy=identifier)
 
     decision_repository.find_by_id.return_value = decision
-    user_action_repository.has_current_action.return_value = False
+    decision_repository.record_review.return_value = True
     user_action_repository.save.return_value = None
     # Mention must be found, otherwise _publish_reevaluation skips silently.
     entity_mention_repository.find_by_identifiers.return_value = [mention]
@@ -210,7 +215,7 @@ def decision_already_curated(
 ) -> None:
     decision = DecisionFactory.build(id="decision-1")
     decision_repository.find_by_id.return_value = decision
-    user_action_repository.has_current_action.return_value = True
+    decision_repository.record_review.return_value = False
     ctx["decision_id"] = "decision-1"
 
 

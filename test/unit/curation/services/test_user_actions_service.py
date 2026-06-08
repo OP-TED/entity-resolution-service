@@ -17,7 +17,10 @@ from ers.curation.adapters import (
     EntityMentionCurationRepository,
     UserActionCurationRepository,
 )
-from ers.curation.domain.data_transfer_objects import CanonicalEntityPreview, UserActionFilters
+from ers.curation.domain.data_transfer_objects import (
+    CanonicalEntityPreview,
+    UserActionFilters,
+)
 from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.services import CanonicalEntityService, UserActionService
 from ers.users.adapters.user_repository import UserRepository
@@ -49,8 +52,8 @@ def user_repository() -> MagicMock:
 @pytest.fixture
 def decision_repository() -> MagicMock:
     mock = create_autospec(DecisionRepository, instance=True)
-    mock.increment_review_count = AsyncMock()
-    mock.find_review_counts.return_value = {}
+    mock.record_review = AsyncMock()
+    mock.find_review_metadata.return_value = {}
     return mock
 
 
@@ -80,76 +83,120 @@ def user_action_service(
     )
 
 
-class TestCheckNotAlreadyCurated:
-    """Unit tests for the idempotency guard _check_not_already_curated.
+class TestRaceSafeRecord:
+    """Unit tests for the atomic claim-based idempotency.
 
-    TEDSWS-522 regression: guard must fire even when decision.updated_at is
-    None (fresh decision that was never re-integrated by ERE).
+    ``record_review`` returns ``bool`` — True iff the conditional update on
+    the decision row matched. The service treats False as "lost the race",
+    deletes the just-saved user_action (compensation), and raises
+    ``AlreadyCuratedError``. This closes the TOCTOU race the previous
+    read-then-write guard left open.
     """
 
-    async def test_guard_fires_on_fresh_decision_when_action_exists(
+    async def test_record_accept_claim_succeeds_no_compensation(
         self,
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
+        decision_repository: MagicMock,
     ) -> None:
-        """AlreadyCuratedError must be raised for a fresh decision (updated_at=None)
-        when an action is already recorded since created_at.
-        """
-        decision = DecisionFactory.build(updated_at=None)
-        user_action_repository.has_current_action.return_value = True
+        """When record_review returns True, the audit row stays and no delete fires."""
+        decision = DecisionFactory.build()
+        user_action_repository.save = AsyncMock()
+        user_action_repository.delete_by_id = AsyncMock()
+        decision_repository.record_review = AsyncMock(return_value=True)
+
+        await user_action_service.record_accept(actor="curator-1", decision=decision)
+
+        user_action_repository.save.assert_awaited_once()
+        decision_repository.record_review.assert_awaited_once()
+        user_action_repository.delete_by_id.assert_not_called()
+
+    async def test_record_accept_claim_lost_compensates_and_raises(
+        self,
+        user_action_service: UserActionService,
+        user_action_repository: MagicMock,
+        decision_repository: MagicMock,
+    ) -> None:
+        """When record_review returns False, the just-saved audit row is deleted
+        and AlreadyCuratedError is raised."""
+        decision = DecisionFactory.build()
+        user_action_repository.save = AsyncMock()
+        user_action_repository.delete_by_id = AsyncMock()
+        decision_repository.record_review = AsyncMock(return_value=False)
 
         with pytest.raises(AlreadyCuratedError) as exc_info:
-            await user_action_service.record_accept(actor="curator-1", decision=decision)
+            await user_action_service.record_accept(
+                actor="curator-1", decision=decision
+            )
 
         assert exc_info.value.decision_id == decision.id
+        # Compensation: the action passed to save must be the one passed to delete_by_id.
+        saved_action = user_action_repository.save.await_args.args[0]
+        user_action_repository.delete_by_id.assert_awaited_once_with(saved_action.id)
 
-    async def test_guard_calls_repository_with_created_at_when_updated_at_is_none(
+    async def test_record_accept_order_is_save_then_claim(
         self,
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
+        decision_repository: MagicMock,
     ) -> None:
-        """When updated_at is None, has_current_action must be called with created_at
-        as the since boundary (TEDSWS-522 fix).
-        """
-        decision = DecisionFactory.build(updated_at=None)
-        user_action_repository.has_current_action.return_value = False
+        """save → record_review (claim) order is essential: only by saving first do
+        we have an audit row to compensate when the claim fails."""
+        decision = DecisionFactory.build()
+        call_order: list[str] = []
+
+        async def _save_side_effect(_action):
+            call_order.append("save")
+
+        async def _claim_side_effect(*_a, **_k):
+            call_order.append("claim")
+            return True
+
+        user_action_repository.save = AsyncMock(side_effect=_save_side_effect)
+        decision_repository.record_review = AsyncMock(side_effect=_claim_side_effect)
 
         await user_action_service.record_accept(actor="curator-1", decision=decision)
 
-        user_action_repository.has_current_action.assert_called_once_with(
-            about_entity_mention=decision.about_entity_mention,
-            since=decision.created_at,
-        )
+        assert call_order == ["save", "claim"]
 
-    async def test_guard_calls_repository_with_updated_at_when_set(
+    async def test_record_reject_claim_lost_compensates_and_raises(
         self,
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
+        decision_repository: MagicMock,
     ) -> None:
-        """When updated_at is set, has_current_action uses updated_at as boundary."""
-        updated = datetime(2026, 1, 2, 12, 0, tzinfo=UTC)
-        decision = DecisionFactory.build(updated_at=updated)
-        user_action_repository.has_current_action.return_value = False
+        decision = DecisionFactory.build()
+        user_action_repository.save = AsyncMock()
+        user_action_repository.delete_by_id = AsyncMock()
+        decision_repository.record_review = AsyncMock(return_value=False)
 
-        await user_action_service.record_accept(actor="curator-1", decision=decision)
+        with pytest.raises(AlreadyCuratedError):
+            await user_action_service.record_reject(
+                actor="curator-1", decision=decision
+            )
 
-        user_action_repository.has_current_action.assert_called_once_with(
-            about_entity_mention=decision.about_entity_mention,
-            since=updated,
-        )
+        saved_action = user_action_repository.save.await_args.args[0]
+        user_action_repository.delete_by_id.assert_awaited_once_with(saved_action.id)
 
-    async def test_guard_allows_action_when_no_action_exists_for_fresh_decision(
+    async def test_record_assign_claim_lost_compensates_and_raises(
         self,
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
+        decision_repository: MagicMock,
     ) -> None:
-        """A fresh decision with no prior action must succeed (not raise)."""
-        decision = DecisionFactory.build(updated_at=None)
-        user_action_repository.has_current_action.return_value = False
+        decision = DecisionFactory.build()
+        target_cluster = decision.candidates[0].cluster_id
+        user_action_repository.save = AsyncMock()
+        user_action_repository.delete_by_id = AsyncMock()
+        decision_repository.record_review = AsyncMock(return_value=False)
 
-        await user_action_service.record_accept(actor="curator-1", decision=decision)
+        with pytest.raises(AlreadyCuratedError):
+            await user_action_service.record_assign(
+                actor="curator-1", decision=decision, cluster_id=target_cluster
+            )
 
-        user_action_repository.save.assert_called_once()
+        saved_action = user_action_repository.save.await_args.args[0]
+        user_action_repository.delete_by_id.assert_awaited_once_with(saved_action.id)
 
 
 class TestRecordAccept:
@@ -157,9 +204,10 @@ class TestRecordAccept:
         self,
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
+        decision_repository: MagicMock,
     ) -> None:
         decision = DecisionFactory.build()
-        user_action_repository.has_current_action.return_value = False
+        decision_repository.record_review = AsyncMock(return_value=True)
 
         await user_action_service.record_accept(actor="curator-1", decision=decision)
 
@@ -169,14 +217,18 @@ class TestRecordAccept:
         self,
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
+        decision_repository: MagicMock,
     ) -> None:
         decision = DecisionFactory.build(
             updated_at=datetime.now(UTC),
         )
-        user_action_repository.has_current_action.return_value = True
+        user_action_repository.delete_by_id = AsyncMock()
+        decision_repository.record_review = AsyncMock(return_value=False)
 
         with pytest.raises(AlreadyCuratedError) as exc_info:
-            await user_action_service.record_accept(actor="curator-1", decision=decision)
+            await user_action_service.record_accept(
+                actor="curator-1", decision=decision
+            )
 
         assert exc_info.value.decision_id == decision.id
 
@@ -205,14 +257,21 @@ class TestListUserActions:
         assert len(result.results) == 1
         assert result.count == 1
         assert result.results[0].id == action.id
-        assert result.results[0].about_entity_mention.identified_by == action.about_entity_mention
-        assert result.results[0].about_entity_mention.parsed_representation == json.loads(
+        assert (
+            result.results[0].about_entity_mention.identified_by
+            == action.about_entity_mention
+        )
+        assert result.results[
+            0
+        ].about_entity_mention.parsed_representation == json.loads(
             entity_mention.parsed_representation
         )
         assert result.results[0].actor.id == user.id
         assert result.results[0].actor.email == user.email
         assert result.next_cursor is None
-        user_action_repository.find_with_cursor.assert_called_once_with(cursor_params, None)
+        user_action_repository.find_with_cursor.assert_called_once_with(
+            cursor_params, None
+        )
         entity_mention_repository.find_by_identifiers.assert_called_once_with(
             [action.about_entity_mention],
         )
@@ -224,9 +283,10 @@ class TestRecordReject:
         self,
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
+        decision_repository: MagicMock,
     ) -> None:
         decision = DecisionFactory.build()
-        user_action_repository.has_current_action.return_value = False
+        decision_repository.record_review = AsyncMock(return_value=True)
 
         await user_action_service.record_reject(actor="curator-1", decision=decision)
 
@@ -238,10 +298,11 @@ class TestRecordAssign:
         self,
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
+        decision_repository: MagicMock,
     ) -> None:
         decision = DecisionFactory.build()
         target_id = decision.candidates[0].cluster_id
-        user_action_repository.has_current_action.return_value = False
+        decision_repository.record_review = AsyncMock(return_value=True)
 
         await user_action_service.record_assign(
             actor="curator-1", decision=decision, cluster_id=target_id
@@ -253,11 +314,13 @@ class TestRecordAssign:
         self,
         user_action_service: UserActionService,
         user_action_repository: MagicMock,
+        decision_repository: MagicMock,
     ) -> None:
         decision = DecisionFactory.build(
             updated_at=datetime.now(UTC),
         )
-        user_action_repository.has_current_action.return_value = True
+        user_action_repository.delete_by_id = AsyncMock()
+        decision_repository.record_review = AsyncMock(return_value=False)
 
         with pytest.raises(AlreadyCuratedError):
             await user_action_service.record_assign(
@@ -285,7 +348,9 @@ class TestListUserActionsFiltered:
 
         await user_action_service.list_user_actions(cursor_params, filters)
 
-        user_action_repository.find_with_cursor.assert_called_once_with(cursor_params, filters)
+        user_action_repository.find_with_cursor.assert_called_once_with(
+            cursor_params, filters
+        )
 
     async def test_filter_by_actor(
         self,
@@ -427,7 +492,9 @@ class TestGetCandidatePreviews:
         decision_repository.find_mention_ids_by_cluster.return_value = (
             EntityMentionIdentifierFactory.batch(2)
         )
-        entity_mention_repository.find_by_identifiers.return_value = EntityMentionFactory.batch(2)
+        entity_mention_repository.find_by_identifiers.return_value = (
+            EntityMentionFactory.batch(2)
+        )
 
         result = await user_action_service.get_candidate_previews(
             action.id, PaginationParams(page=1, per_page=10), canonical_entity_service
@@ -454,7 +521,9 @@ class TestGetCandidatePreviews:
         decision_repository.find_mention_ids_by_cluster.return_value = (
             EntityMentionIdentifierFactory.batch(2)
         )
-        entity_mention_repository.find_by_identifiers.return_value = EntityMentionFactory.batch(2)
+        entity_mention_repository.find_by_identifiers.return_value = (
+            EntityMentionFactory.batch(2)
+        )
 
         result = await user_action_service.get_candidate_previews(
             action.id, PaginationParams(page=1, per_page=2), canonical_entity_service
@@ -480,7 +549,9 @@ class TestGetCandidatePreviews:
         decision_repository.find_mention_ids_by_cluster.return_value = (
             EntityMentionIdentifierFactory.batch(1)
         )
-        entity_mention_repository.find_by_identifiers.return_value = EntityMentionFactory.batch(1)
+        entity_mention_repository.find_by_identifiers.return_value = (
+            EntityMentionFactory.batch(1)
+        )
 
         result = await user_action_service.get_candidate_previews(
             action.id, PaginationParams(page=2, per_page=2), canonical_entity_service
@@ -515,7 +586,9 @@ class TestGetCandidatePreviews:
         low = ClusterReferenceFactory.build(confidence_score=0.3)
         high = ClusterReferenceFactory.build(confidence_score=0.9)
         mid = ClusterReferenceFactory.build(confidence_score=0.6)
-        action = UserActionFactory.build(candidates=[low, high, mid], selected_cluster=None)
+        action = UserActionFactory.build(
+            candidates=[low, high, mid], selected_cluster=None
+        )
 
         user_action_repository.find_by_id.return_value = action
         decision_repository.find_mention_ids_by_cluster.return_value = []
@@ -655,18 +728,23 @@ class TestListUserActionsByDecisionId:
         assert call_filters.action_type == UserActionType.ACCEPT_TOP
 
 
-class TestIncrementReviewCountOnRecord:
-    """record_* methods must call decision_repository.increment_review_count exactly
-    once after a successful action save (TEDSWS-528 Phase 2).
+class TestRecordReviewOnRecord:
+    """record_* methods must call ``decision_repository.record_review`` exactly
+    once after a successful action save, passing ``(decision.id,
+    user_action.created_at)``.
 
-    The action save is canonical; the counter is a denormalised mirror.
-    Order matters: increment is called only after the save succeeds.
+    The action save is canonical; the materialised primitives (counter + flag)
+    are a denormalised mirror updated through ``record_review``. Order matters:
+    ``record_review`` is called only after the save succeeds.
     """
 
     @pytest.fixture
     def decision_repository_mock(self) -> MagicMock:
         mock = create_autospec(DecisionRepository, instance=True)
-        mock.increment_review_count = AsyncMock()
+        # Default to "claim succeeded" so the happy-path tests in this class
+        # don't trip the compensation branch. Race-lost behaviour is covered
+        # explicitly by TestRaceSafeRecord above.
+        mock.record_review = AsyncMock(return_value=True)
         return mock
 
     @pytest.fixture
@@ -684,14 +762,20 @@ class TestIncrementReviewCountOnRecord:
             decision_repository=decision_repository_mock,
         )
 
+    @staticmethod
+    def _saved_action(save_mock: AsyncMock):
+        """Return the UserAction handed to ``user_action_repository.save``."""
+        assert save_mock.await_count == 1
+        return save_mock.await_args.args[0]
+
     @pytest.mark.asyncio
-    async def test_record_accept_increments_review_count(
+    async def test_record_accept_calls_record_review_with_action_timestamp(
         self,
         user_action_service_with_decision_repo: UserActionService,
         user_action_repository: MagicMock,
         decision_repository_mock: MagicMock,
     ) -> None:
-        """record_accept must call increment_review_count once after save."""
+        """record_accept must call record_review(decision.id, action.created_at)."""
         decision = DecisionFactory.build()
         user_action_repository.has_current_action = AsyncMock(return_value=False)
         user_action_repository.save = AsyncMock()
@@ -700,42 +784,50 @@ class TestIncrementReviewCountOnRecord:
             actor="curator-1", decision=decision
         )
 
-        decision_repository_mock.increment_review_count.assert_called_once_with(decision.id)
+        action = self._saved_action(user_action_repository.save)
+        decision_repository_mock.record_review.assert_called_once_with(
+            decision.id, action.created_at
+        )
 
     @pytest.mark.asyncio
-    async def test_record_accept_increments_after_save(
+    async def test_record_accept_calls_record_review_after_save(
         self,
         user_action_service_with_decision_repo: UserActionService,
         user_action_repository: MagicMock,
         decision_repository_mock: MagicMock,
     ) -> None:
-        """increment_review_count must be called only after the action save succeeds."""
+        """record_review must be called only after the action save succeeds."""
         decision = DecisionFactory.build()
         call_order: list[str] = []
         user_action_repository.has_current_action = AsyncMock(return_value=False)
         user_action_repository.save = AsyncMock(
             side_effect=lambda _: call_order.append("save")
         )
-        decision_repository_mock.increment_review_count = AsyncMock(
-            side_effect=lambda _: call_order.append("increment")
+
+        def _record_review_side_effect(*_args, **_kwargs):
+            call_order.append("record_review")
+            return True  # claim succeeds → no compensation
+
+        decision_repository_mock.record_review = AsyncMock(
+            side_effect=_record_review_side_effect
         )
 
         await user_action_service_with_decision_repo.record_accept(
             actor="curator-1", decision=decision
         )
 
-        assert call_order == ["save", "increment"], (
-            "increment_review_count must be called after save, not before"
+        assert call_order == ["save", "record_review"], (
+            "record_review must be called after save, not before"
         )
 
     @pytest.mark.asyncio
-    async def test_record_reject_increments_review_count(
+    async def test_record_reject_calls_record_review(
         self,
         user_action_service_with_decision_repo: UserActionService,
         user_action_repository: MagicMock,
         decision_repository_mock: MagicMock,
     ) -> None:
-        """record_reject must call increment_review_count once after save."""
+        """record_reject must call record_review with the action timestamp."""
         decision = DecisionFactory.build()
         user_action_repository.has_current_action = AsyncMock(return_value=False)
         user_action_repository.save = AsyncMock()
@@ -744,16 +836,19 @@ class TestIncrementReviewCountOnRecord:
             actor="curator-1", decision=decision
         )
 
-        decision_repository_mock.increment_review_count.assert_called_once_with(decision.id)
+        action = self._saved_action(user_action_repository.save)
+        decision_repository_mock.record_review.assert_called_once_with(
+            decision.id, action.created_at
+        )
 
     @pytest.mark.asyncio
-    async def test_record_assign_increments_review_count(
+    async def test_record_assign_calls_record_review(
         self,
         user_action_service_with_decision_repo: UserActionService,
         user_action_repository: MagicMock,
         decision_repository_mock: MagicMock,
     ) -> None:
-        """record_assign must call increment_review_count once after save."""
+        """record_assign must call record_review with the action timestamp."""
         decision = DecisionFactory.build()
         target_id = decision.candidates[0].cluster_id
         user_action_repository.has_current_action = AsyncMock(return_value=False)
@@ -763,22 +858,14 @@ class TestIncrementReviewCountOnRecord:
             actor="curator-1", decision=decision, cluster_id=target_id
         )
 
-        decision_repository_mock.increment_review_count.assert_called_once_with(decision.id)
+        action = self._saved_action(user_action_repository.save)
+        decision_repository_mock.record_review.assert_called_once_with(
+            decision.id, action.created_at
+        )
 
-    @pytest.mark.asyncio
-    async def test_record_accept_does_not_increment_when_already_curated(
-        self,
-        user_action_service_with_decision_repo: UserActionService,
-        user_action_repository: MagicMock,
-        decision_repository_mock: MagicMock,
-    ) -> None:
-        """increment_review_count must NOT be called when AlreadyCuratedError is raised."""
-        decision = DecisionFactory.build(updated_at=datetime.now(UTC))
-        user_action_repository.has_current_action = AsyncMock(return_value=True)
-
-        with pytest.raises(AlreadyCuratedError):
-            await user_action_service_with_decision_repo.record_accept(
-                actor="curator-1", decision=decision
-            )
-
-        decision_repository_mock.increment_review_count.assert_not_called()
+    # NOTE: the previous "record_review must NOT be called when AlreadyCuratedError
+    # is raised" test was removed. After the TOCTOU-race fix, ``record_review``
+    # IS the atomic idempotency guard — there is no pre-check that could short-
+    # circuit before it. The race-lost behaviour (claim returns False → audit
+    # row deleted → AlreadyCuratedError raised) is covered in TestRaceSafeRecord
+    # at the top of this file.
