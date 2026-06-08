@@ -36,6 +36,7 @@ from ers.request_registry.adapters.records_repository import (
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 from ers.users.adapters.user_repository import MongoUserRepository
 from ers.users.domain.users import User
+from scripts.backfill_cluster_sizes import _run_backfill as _backfill_cluster_sizes
 
 ENTITY_TYPES = ["ORGANISATION", "PROCEDURE"]
 ACTION_TYPES = list(UserActionType)
@@ -264,6 +265,7 @@ async def seed(
         db,
     )
     action_count = await _create_user_actions(decisions, action_repo, decision_repo, user_ids)
+    await _backfill_cluster_sizes(db, dry_run=False, batch_size=500)
 
     print(f"Seeded database '{config.MONGO_DATABASE_NAME}':")
     print(f"  {len(users)} users ({', '.join(u.email for u in users)})")
