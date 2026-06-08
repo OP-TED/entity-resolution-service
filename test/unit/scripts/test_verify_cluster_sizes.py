@@ -5,7 +5,6 @@ import pytest
 
 from scripts.verify_cluster_sizes import _verify
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
