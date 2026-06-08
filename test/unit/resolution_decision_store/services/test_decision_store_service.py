@@ -229,8 +229,8 @@ async def test_different_placement_calls_upsert():
 
 
 @pytest.mark.asyncio
-async def test_short_circuit_ignores_candidates_difference():
-    """R1: candidates are NOT part of change-detection; same cluster_id → no-op."""
+async def test_same_cluster_different_candidates_writes_through():
+    """D3: candidates ARE part of the outcome; same cluster + different candidates → write."""
     mock_repo = create_autospec(MongoDecisionRepository, instance=True)
     now = datetime.now(UTC)
     existing = Decision(
@@ -242,11 +242,64 @@ async def test_short_circuit_ignores_candidates_difference():
         updated_at=None,
     )
     mock_repo.find_by_triad.return_value = existing
+    mock_repo.upsert_decision.return_value = make_decision(now)
 
     svc = DecisionStoreService(repository=mock_repo)
-    # Different candidates list but same cluster_id — must be a no-op
+    # Same cluster_id but a different candidate list — outcome changed → must write through
     many_candidates = [make_cluster(f"c{i}") for i in range(5)]
-    result = await svc.store_decision(make_identifier(), make_cluster("c1"), many_candidates, now)
+    await svc.store_decision(make_identifier(), make_cluster("c1"), many_candidates, now)
+
+    mock_repo.upsert_decision.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_same_cluster_different_confidence_writes_through():
+    """D3: same cluster but a lower confidence is a material change → write + bump updated_at."""
+    mock_repo = create_autospec(MongoDecisionRepository, instance=True)
+    now = datetime.now(UTC)
+    existing = Decision(
+        id="hash123",
+        about_entity_mention=make_identifier(),
+        current_placement=ClusterReference(
+            cluster_id="c1", confidence_score=0.9, similarity_score=0.85
+        ),
+        candidates=[],
+        created_at=now,
+        updated_at=None,
+    )
+    mock_repo.find_by_triad.return_value = existing
+    mock_repo.upsert_decision.return_value = make_decision(now)
+
+    svc = DecisionStoreService(repository=mock_repo)
+    lower_confidence = ClusterReference(
+        cluster_id="c1", confidence_score=0.55, similarity_score=0.85
+    )
+    await svc.store_decision(make_identifier(), lower_confidence, [], now)
+
+    mock_repo.upsert_decision.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_identical_outcome_short_circuits():
+    """D3: identical placement AND candidates → idempotent no-op (no write)."""
+    mock_repo = create_autospec(MongoDecisionRepository, instance=True)
+    now = datetime.now(UTC)
+    candidates = [make_cluster("c2"), make_cluster("c3")]
+    existing = Decision(
+        id="hash123",
+        about_entity_mention=make_identifier(),
+        current_placement=make_cluster("c1"),
+        candidates=candidates,
+        created_at=now,
+        updated_at=None,
+    )
+    mock_repo.find_by_triad.return_value = existing
+
+    svc = DecisionStoreService(repository=mock_repo)
+    # Exact same outcome replayed — must be a no-op
+    result = await svc.store_decision(
+        make_identifier(), make_cluster("c1"), [make_cluster("c2"), make_cluster("c3")], now
+    )
 
     mock_repo.upsert_decision.assert_not_awaited()
     assert result is existing

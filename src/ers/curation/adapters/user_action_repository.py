@@ -30,7 +30,28 @@ class UserActionCurationRepository(UserActionRepository):
         about_entity_mention: EntityMentionIdentifier,
         since: datetime,
     ) -> bool:
-        """Check if a UserAction exists for this entity mention since the given timestamp."""
+        """Check if a UserAction exists for this entity mention since the given timestamp.
+
+        Pure read-only query. **Not** used for write-path idempotency anymore
+        — the curation service relies on ``DecisionRepository.record_review``'s
+        atomic conditional update for that (closes the TOCTOU race). Kept here
+        as a repository-level utility for diagnostics and read-only checks.
+        """
+
+    @abstractmethod
+    async def delete_by_id(self, action_id: str) -> None:
+        """Remove a user action by its ``_id``.
+
+        Used solely by the curation service's save-then-claim compensation
+        path: when ``record_review`` reports a lost race, the just-saved
+        audit row is deleted to keep the user-action log consistent with
+        the decision-row state. No error is raised when the document is
+        missing — the caller has already lost the race; idempotent cleanup
+        is the desired behaviour.
+
+        Args:
+            action_id: ``UserAction.id`` of the row to remove.
+        """
 
 
 class MongoUserActionCurationRepository(
@@ -105,14 +126,27 @@ class MongoUserActionCurationRepository(
         count = await self._collection.count_documents(
             {
                 "about_entity_mention": about_entity_mention.model_dump(mode="python"),
-                "created_at": {"$gte": since},
+                # Strict ``$gt`` aligns with ``DecisionRepository.record_review``
+                # (A5): an action at the exact placement instant is not "since placement".
+                "created_at": {"$gt": since},
             },
             limit=1,
         )
         return count > 0
 
+    async def delete_by_id(self, action_id: str) -> None:
+        await self._collection.delete_one({"_id": action_id})
+
     @staticmethod
     def _build_filter_query(filters: UserActionFilters | None) -> dict:
+        """Build a MongoDB query document from the given filter criteria.
+
+        Args:
+            filters: The filter criteria to apply.  ``None`` means no filter.
+
+        Returns:
+            A MongoDB query document suitable for ``collection.find()``.
+        """
         if filters is None:
             return {}
         query: dict = {}
@@ -127,4 +161,6 @@ class MongoUserActionCurationRepository(
             time_constraint["$lte"] = filters.time_range_end
         if time_constraint:
             query["created_at"] = time_constraint
+        if filters.about_entity_mention is not None:
+            query["about_entity_mention"] = filters.about_entity_mention.model_dump(mode="python")
         return query

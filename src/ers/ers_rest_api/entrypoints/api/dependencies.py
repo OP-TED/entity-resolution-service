@@ -32,6 +32,7 @@ from ers.resolution_coordinator.services.bulk_refresh_coordinator_service import
 from ers.resolution_coordinator.services.resolution_coordinator_service import (
     ResolutionCoordinatorService,
 )
+from ers.resolution_decision_store.adapters.cluster_size_index import MongoClusterSizeIndex
 from ers.resolution_decision_store.adapters.decision_repository import (
     MongoDecisionRepository,
 )
@@ -79,7 +80,10 @@ def get_rdf_config(request: Request) -> RDFMappingConfig:
 async def _get_decision_store_service(
     db: Annotated[AsyncDatabase, Depends(_get_database)],
 ) -> DecisionStoreService:
-    return DecisionStoreService(repository=MongoDecisionRepository(db))
+    return DecisionStoreService(
+        repository=MongoDecisionRepository(db),
+        cluster_size_index=MongoClusterSizeIndex(db),
+    )
 
 
 async def _get_request_registry_service(

@@ -1,6 +1,6 @@
 from typing import Annotated, cast
 
-from fastapi import APIRouter, Depends, Path, Response, status
+from fastapi import APIRouter, Depends, Path, Query, Response, status
 
 from ers.commons.domain.data_transfer_objects import CursorPage, PaginatedResult
 from ers.curation.domain.data_transfer_objects import (
@@ -46,9 +46,59 @@ async def list_decisions(
     cursor_params: CursorPagination,
     user: VerifiedUser,
     service: Annotated[DecisionCurationService, Depends(get_decision_curation_service)],
+    ever_reviewed: Annotated[
+        bool | None,
+        Query(
+            description=(
+                "Filter on whether any curator action has ever been recorded against "
+                "the decision (previous_review_count > 0). Omit to disable."
+            )
+        ),
+    ] = None,
+    reviewed_since_placement: Annotated[
+        bool | None,
+        Query(
+            description=(
+                "Filter on whether a curator action exists since the current placement "
+                "(created_at after updated_at, else created_at). Omit to disable. "
+                "Combine ever_reviewed=true with reviewed_since_placement=false to list "
+                "decisions that need re-visiting after an ERE update."
+            )
+        ),
+    ] = None,
+    reviewed: Annotated[
+        bool | None,
+        Query(
+            deprecated=True,
+            description=(
+                "Deprecated alias of reviewed_since_placement. Ignored when "
+                "reviewed_since_placement is provided."
+            ),
+        ),
+    ] = None,
 ) -> CursorPage[DecisionSummary]:
-    """Retrieve cursor-paginated list of decisions with optional filtering."""
-    return await service.list_decisions(filters=filters, cursor_params=cursor_params)
+    """Retrieve cursor-paginated list of decisions with optional filtering.
+
+    The UI composes the four review states from the two row primitives
+    (``previous_review_count`` and ``reviewed_since_placement``) and filters via
+    the two orthogonal query parameters.
+
+    Args:
+        filters: Field-level filter criteria (entity type, confidence, etc.).
+        cursor_params: Cursor-based pagination parameters.
+        user: Authenticated and verified curator.
+        service: Decision curation service (injected).
+        ever_reviewed: Filter on lifetime review existence.
+        reviewed_since_placement: Filter on review since the current placement.
+        reviewed: Deprecated alias of ``reviewed_since_placement``.
+    """
+    return await service.list_decisions(
+        filters=filters,
+        cursor_params=cursor_params,
+        ever_reviewed=ever_reviewed,
+        reviewed_since_placement=reviewed_since_placement,
+        reviewed=reviewed,
+    )
 
 
 @router.get(

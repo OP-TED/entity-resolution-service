@@ -103,3 +103,55 @@ Feature: Decision browsing and filtering
     When the curator requests decisions with a limit of 20
     Then 5 decision summaries are returned
     And no next cursor is provided
+
+  # --- Review state filter ---
+
+  Scenario: List decisions pending review (no prior action against current placement)
+    Given a decision exists with no user_action recorded since its current placement
+    When I GET /api/v1/curation/decisions?reviewed=false
+    Then the response includes that decision
+
+  Scenario: Filter decisions already reviewed on current placement
+    Given a decision with a user_action whose created_at is after its current placement
+    When I GET /api/v1/curation/decisions?reviewed=true
+    Then the response includes that decision
+
+  Scenario: ERE re-integration returns a previously-reviewed decision to Pending
+    Given a decision was reviewed at T1 and ERE re-integrated a new outcome at T2 advancing updated_at past T1
+    When I GET /api/v1/curation/decisions?reviewed=false
+    Then the response includes that decision
+
+  Scenario: Omitting reviewed leaves the result set unchanged
+    Given multiple decisions exist in the decision store
+    When the curator requests the decision list
+    Then a paginated list of decision summaries is returned
+
+  # --- Four-state review surface (two primitives) ---
+
+  Scenario: Filter decisions that need re-visiting after an ERE update
+    Given a decision that was reviewed before a later ERE update
+    When I GET /api/v1/curation/decisions?ever_reviewed=true&reviewed_since_placement=false
+    Then the response includes that decision
+    And the repository was queried with ever_reviewed true and reviewed_since_placement false
+
+  Scenario: Each decision row carries both review primitives
+    Given a decision that was reviewed before a later ERE update
+    When the curator requests the decision list
+    Then each summary carries previous_review_count and reviewed_since_placement
+
+  # --- Cluster-size sort ---
+
+  Scenario: Sort decisions by cluster size ascending
+    Given multiple decisions exist in the decision store
+    When the curator requests decisions ordered by "cluster size ascending"
+    Then the decisions are returned in the specified order
+
+  Scenario: Sort decisions by cluster size descending
+    Given multiple decisions exist in the decision store
+    When the curator requests decisions ordered by "cluster size descending"
+    Then the decisions are returned in the specified order
+
+  Scenario: Cluster-size sort combined with reviewed filter
+    Given multiple decisions exist in the decision store
+    When I request decisions with ordering "cluster_size" and reviewed "false"
+    Then the response is 200 and results are present

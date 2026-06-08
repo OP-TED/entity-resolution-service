@@ -36,7 +36,11 @@ POPULATED_CURATION = CurationStatistics(
 POPULATED_REGISTRY = RegistryStatistics(
     total_entity_mentions=100,
     total_canonical_entities=50,
-    average_cluster_size=2.0,
+    cluster_size_average=2.0,
+    cluster_size_median=2.0,
+    cluster_size_p95=4,
+    cluster_size_max=10,
+    cluster_singletons_count=5,
     resolution_requests=10,
 )
 
@@ -50,7 +54,11 @@ EMPTY_CURATION = CurationStatistics(
 EMPTY_REGISTRY = RegistryStatistics(
     total_entity_mentions=0,
     total_canonical_entities=0,
-    average_cluster_size=0.0,
+    cluster_size_average=0.0,
+    cluster_size_median=0.0,
+    cluster_size_p95=0,
+    cluster_size_max=0,
+    cluster_singletons_count=0,
     resolution_requests=0,
 )
 
@@ -183,11 +191,16 @@ def registry_has_mentions(response: Any) -> None:
     assert "total_canonical_entities" in reg
 
 
-@then("registry statistics contain average cluster size and resolution request count")
+@then("registry statistics contain cluster size distribution and resolution request count")
 def registry_has_averages(response: Any) -> None:
     reg = response.json()["registry"]
-    assert "average_cluster_size" in reg
+    assert "cluster_size_average" in reg
+    assert "cluster_size_median" in reg
+    assert "cluster_size_p95" in reg
+    assert "cluster_size_max" in reg
+    assert "cluster_singletons_count" in reg
     assert "resolution_requests" in reg
+    assert "average_cluster_size" not in reg
 
 
 @then(
@@ -233,9 +246,13 @@ def all_counts_zero(response: Any) -> None:
     assert data["registry"]["total_entity_mentions"] == 0
 
 
-@then("the average cluster size is zero")
+@then("the cluster size average is zero")
 def avg_cluster_zero(response: Any) -> None:
-    assert response.json()["registry"]["average_cluster_size"] == 0.0
+    reg = response.json()["registry"]
+    assert reg["cluster_size_average"] == 0.0
+    assert reg["cluster_size_median"] == 0.0
+    assert reg["cluster_size_max"] == 0
+    assert reg["cluster_singletons_count"] == 0
 
 
 @then("no system state is modified")

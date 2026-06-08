@@ -11,7 +11,7 @@ Feature: Curation statistics
     When the curator requests statistics
     Then the response includes registry statistics and curation statistics
     And registry statistics contain total entity mentions and canonical entities
-    And registry statistics contain average cluster size and resolution request count
+    And registry statistics contain cluster size distribution and resolution request count
     And curation statistics contain counts for accepted top, accepted alternative, and rejected all
 
   Scenario: Filter statistics by entity type
@@ -29,7 +29,7 @@ Feature: Curation statistics
     Given no decisions or user actions exist
     When the curator requests statistics
     Then all counts are zero
-    And the average cluster size is zero
+    And the cluster size average is zero
 
   Scenario: Statistics are read-only
     When the curator requests statistics
