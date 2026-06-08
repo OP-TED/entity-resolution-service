@@ -76,7 +76,7 @@ def _make_decision(decision_id: str, identifier: EntityMentionIdentifier) -> Dec
         id=decision_id,
         about_entity_mention=identifier,
         current_placement=current,
-        candidates=[current],
+        candidates=[],
         created_at=now,
         updated_at=now,
     )

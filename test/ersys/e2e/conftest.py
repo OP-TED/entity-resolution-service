@@ -189,6 +189,7 @@ _MONGO_COLLECTIONS_TO_CLEAN: list[str] = [
     "decisions",
     "user_actions",
     "lookup_states",
+    "cluster_sizes",
 ]
 
 _REDIS_CHANNELS: list[str] = [

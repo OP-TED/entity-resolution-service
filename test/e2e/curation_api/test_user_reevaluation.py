@@ -86,17 +86,19 @@ def _make_decision(
     if cluster_ids is None:
         cluster_ids = ["cl-001", "cl-002"]
     now = datetime.now(UTC)
-    candidates = [
+    all_refs = [
         ClusterReference(
             cluster_id=cid, confidence_score=0.9 - i * 0.1, similarity_score=0.8
         )
         for i, cid in enumerate(cluster_ids)
     ]
+    # Domain model: Decision.candidates holds alternatives only — the placement
+    # is never included in candidates (mirrors the ERE response candidates[1:] split).
     return Decision(
         id=decision_id,
         about_entity_mention=identifier,
-        current_placement=candidates[0],
-        candidates=candidates,
+        current_placement=all_refs[0],
+        candidates=all_refs[1:],
         created_at=now,
         updated_at=now,
     )
@@ -146,7 +148,7 @@ def _build_service(
 
 @pytest.mark.asyncio
 async def test_placement_recommendation() -> None:
-    """POST /decisions/{id}/assign publishes resolveConsideringRecommendation to ERE."""
+    """POST /decisions/{id}/accept publishes resolveConsideringRecommendation to ERE."""
     decision_id = "decision-assign-001"
     identifier = _make_identifier()
     entity_mention = _make_entity_mention(identifier)
@@ -175,8 +177,7 @@ async def test_placement_recommendation() -> None:
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         response = await client.post(
-            f"{_API_PREFIX}/curation/decisions/{decision_id}/assign",
-            json={"cluster_id": "cl-top"},
+            f"{_API_PREFIX}/curation/decisions/{decision_id}/accept",
         )
 
     assert response.status_code == 204
