@@ -1,10 +1,14 @@
-"""Backfill script: set previous_review_count on each decision document.
+"""Backfill script: set review-state fields on each decision document.
 
 Counts all user actions per decision_id in the ``user_actions`` collection and
-writes the result to ``previous_review_count`` on the corresponding document in
-the ``decisions`` collection.
+writes two fields to the corresponding document in ``decisions``:
 
-This is a one-off operational utility — safe to re-run (idempotent).
+- ``previous_review_count`` -- total number of recorded actions.
+- ``reviewed_since_placement`` -- ``True`` if the latest action post-dates the
+  current placement boundary (``updated_at`` if present, else ``created_at``),
+  matching the logic in ``MongoDecisionRepository.record_review``.
+
+This is a one-off operational utility -- safe to re-run (idempotent).
 
 Usage:
     poetry run python -m scripts.backfill_previous_review_count
@@ -15,6 +19,7 @@ Usage:
 import argparse
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any
 
 from pymongo import AsyncMongoClient
@@ -56,7 +61,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def _count_actions_per_decision(db: AsyncDatabase[Any]) -> dict[str, int]:
+async def _count_actions_per_decision(
+    db: AsyncDatabase[Any],
+) -> dict[str, tuple[int, datetime | None]]:
     """Aggregate user_actions by about_entity_mention and map to decision _id.
 
     Each ``UserAction`` document stores ``about_entity_mention`` (the entity
@@ -65,21 +72,22 @@ async def _count_actions_per_decision(db: AsyncDatabase[Any]) -> dict[str, int]:
     groups actions by triad, then derives the decision _id for each group.
 
     Returns:
-        Mapping of ``{decision_id: action_count}`` for all decisions that
-        have at least one recorded action.
+        Mapping of ``{decision_id: (action_count, max_action_created_at)}`` for
+        all decisions that have at least one recorded action.
     """
     pipeline: list[dict[str, Any]] = [
         {
             "$group": {
                 "_id": "$about_entity_mention",
                 "count": {"$sum": 1},
+                "max_action_at": {"$max": "$created_at"},
             }
         }
     ]
     cursor = await db[_USER_ACTIONS_COLLECTION].aggregate(pipeline)
     rows = await cursor.to_list()
 
-    counts: dict[str, int] = {}
+    counts: dict[str, tuple[int, datetime | None]] = {}
     for row in rows:
         triad_doc = row.get("_id")
         if not triad_doc or not isinstance(triad_doc, dict):
@@ -87,32 +95,57 @@ async def _count_actions_per_decision(db: AsyncDatabase[Any]) -> dict[str, int]:
         try:
             identifier = EntityMentionIdentifier.model_validate(triad_doc)
         except Exception as exc:  # noqa: BLE001
-            log.warning("Skipping malformed about_entity_mention document: %s — %s", triad_doc, exc)
+            log.warning("Skipping malformed about_entity_mention document: %s -- %s", triad_doc, exc)
             continue
         decision_id = derive_provisional_cluster_id(identifier)
-        counts[decision_id] = row["count"]
+        counts[decision_id] = (int(row["count"]), row.get("max_action_at"))
 
     return counts
 
 
-async def _build_bulk_ops(counts: dict[str, int]) -> list[dict[str, Any]]:
+async def _build_bulk_ops(
+    counts: dict[str, tuple[int, datetime | None]],
+) -> list[Any]:
     """Build pymongo UpdateOne operations from the action counts.
 
+    Uses an aggregation-update pipeline (``update`` as a list) so that
+    ``reviewed_since_placement`` can be computed against the document's own
+    placement boundary fields (``updated_at`` / ``created_at``) in a single
+    round-trip, matching the logic in ``MongoDecisionRepository.record_review``.
+
     Args:
-        counts: Mapping of decision_id to action count.
+        counts: Mapping of decision_id to (action_count, max_action_created_at).
 
     Returns:
-        List of ``{filter, update}`` dicts suitable for ``bulk_write``.
+        List of ``UpdateOne`` operations suitable for ``bulk_write``.
     """
-    from pymongo import UpdateOne  # noqa: PLC0415 — lazy import for testability
+    from pymongo import UpdateOne  # noqa: PLC0415 -- lazy import for testability
 
     return [
         UpdateOne(
             filter={"_id": decision_id},
-            update={"$set": {"previous_review_count": count}},
+            update=[
+                {
+                    "$set": {
+                        "previous_review_count": count,
+                        "reviewed_since_placement": {
+                            "$cond": [
+                                {
+                                    "$gt": [
+                                        max_action_at,
+                                        {"$ifNull": ["$updated_at", "$created_at"]},
+                                    ]
+                                },
+                                True,
+                                False,
+                            ]
+                        },
+                    }
+                }
+            ],
             upsert=False,
         )
-        for decision_id, count in counts.items()
+        for decision_id, (count, max_action_at) in counts.items()
     ]
 
 
@@ -140,11 +173,12 @@ async def _run_backfill(
     ops = await _build_bulk_ops(counts)
 
     if dry_run:
-        for decision_id, count in counts.items():
+        for decision_id, (count, max_action_at) in counts.items():
             log.info(
-                "[DRY-RUN] Would set previous_review_count=%d on decision _id=%s",
-                count,
+                "[DRY-RUN] Would update decision _id=%s: previous_review_count=%d, max_action_at=%s",
                 decision_id,
+                count,
+                max_action_at,
             )
         log.info("[DRY-RUN] Total operations that would be issued: %d", len(ops))
         return
