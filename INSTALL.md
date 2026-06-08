@@ -116,6 +116,11 @@ curl http://localhost:8000/health    # Curation API
 curl http://localhost:8001/health    # ERS REST API
 ```
 
+> **Deploying onto an existing database?** If v1.1.0 is being deployed over an
+> existing database (not a fresh install), run the
+> [operational scripts](#operational-scripts) after the services are healthy to
+> backfill projections introduced in this release.
+
 ---
 
 ## Running ERS in multi-node mode
@@ -194,60 +199,6 @@ curation-api:
     seed:
       condition: service_completed_successfully
 ```
-
-### Operational scripts (run after initial deployment of v1.1.0)
-
-After deploying a version that introduces the `cluster_sizes` projection or the
-`previous_review_count` field, run the following one-off scripts to backfill
-existing data. All scripts are idempotent — safe to re-run. Use `--dry-run`
-first on any production environment to preview changes without writing.
-
-**Run order: backfills first, then verify.**
-
-#### Rebuild the `cluster_sizes` projection
-
-```bash
-# Preview (no writes):
-cd src && poetry run python -m scripts.backfill_cluster_sizes --dry-run
-
-# Apply:
-make backfill-cluster-sizes
-```
-
-**When to run:** after the initial deployment of v1.1.0 (projection starts
-empty), after any data migration that moves decisions between clusters, or
-whenever `make verify-cluster-sizes` reports drift.
-
-> **Live-system warning:** this script uses `$set` (absolute overwrite). If run
-> while decisions are actively being integrated, a concurrent `$inc` write from
-> the integrator can be lost. Run during a maintenance window or quiet period.
-
-#### Seed `previous_review_count` on existing decisions
-
-```bash
-# Preview:
-cd src && poetry run python -m scripts.backfill_previous_review_count --dry-run
-
-# Apply:
-make backfill-review-counts
-```
-
-**When to run:** once, after the initial deployment of v1.1.0, for decisions
-curated before `previous_review_count` was introduced.
-
-#### Verify the `cluster_sizes` projection
-
-```bash
-make verify-cluster-sizes
-# or: cd src && poetry run python -m scripts.verify_cluster_sizes --verbose
-```
-
-Exits `0` if consistent, `1` if drift detected (logs each discrepancy).
-Run after either backfill to confirm the projection is clean.
-
-> **`--batch-size` note:** controls write-batch size in the backfill scripts,
-> not the read chunk size. The full aggregation is loaded into memory before
-> writes begin.
 
 ### Load balancer configuration
 
@@ -590,6 +541,83 @@ make down-volumes
 # Remove the shared network
 docker network rm ersys-local
 ```
+
+---
+
+## Operational scripts
+
+These scripts backfill and verify projections introduced in v1.1.0. They are
+idempotent — safe to re-run. On a fresh (empty) database the live service
+maintains these projections automatically; the scripts are only needed when
+deploying onto an existing database or repairing drift.
+
+**Run order: backfills first, then verify.**
+
+### Rebuild the `cluster_sizes` projection
+
+```bash
+# Preview (no writes):
+cd src && poetry run python -m scripts.backfill_cluster_sizes --dry-run
+
+# Apply:
+make backfill-cluster-sizes
+```
+
+**When to run:** after the initial deployment of v1.1.0 onto an existing
+database (the projection starts empty), after any data migration that moves
+decisions between clusters, or whenever `make verify-cluster-sizes` reports
+drift.
+
+> **Live-system warning:** this script uses `$set` (absolute overwrite). If run
+> while decisions are actively being integrated, a concurrent `$inc` write from
+> the integrator can be lost. Run during a maintenance window or quiet period.
+
+### Seed `previous_review_count` on existing decisions
+
+```bash
+# Preview:
+cd src && poetry run python -m scripts.backfill_previous_review_count --dry-run
+
+# Apply:
+make backfill-review-counts
+```
+
+**When to run:** once, after the initial deployment of v1.1.0 onto an existing
+database, for decisions curated before `previous_review_count` was introduced.
+
+### Verify the `cluster_sizes` projection
+
+```bash
+make verify-cluster-sizes
+# or: cd src && poetry run python -m scripts.verify_cluster_sizes --verbose
+```
+
+Exits `0` if consistent, `1` if drift detected (logs each discrepancy). Run
+after either backfill to confirm the projection is clean, or as a periodic
+health check.
+
+**Repair loop — what to do when drift is detected:**
+
+```bash
+# 1. Confirm the drift and review the log output
+make verify-cluster-sizes
+
+# 2. Preview what the repair will write or delete
+cd src && poetry run python -m scripts.backfill_cluster_sizes --dry-run
+
+# 3. Run during a maintenance window or quiet period (see live-system warning above)
+make backfill-cluster-sizes
+
+# 4. Confirm the projection is clean
+make verify-cluster-sizes   # should exit 0
+```
+
+If step 4 still reports drift, a concurrent write raced with the backfill —
+wait for the system to quiesce and repeat from step 2.
+
+> **`--batch-size` note:** controls write-batch size in the backfill scripts,
+> not the read chunk size. The full aggregation is loaded into memory before
+> writes begin.
 
 ---
 
