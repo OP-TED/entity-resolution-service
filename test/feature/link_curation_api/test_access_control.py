@@ -178,7 +178,11 @@ def verified_client(
     statistics_repository.get_registry_statistics.return_value = RegistryStatistics(
         total_entity_mentions=0,
         total_canonical_entities=0,
-        average_cluster_size=0.0,
+        cluster_size_average=0.0,
+        cluster_size_median=0.0,
+        cluster_size_p95=0,
+        cluster_size_max=0,
+        cluster_singletons_count=0,
         resolution_requests=0,
     )
     user_action_repository.find_with_cursor.return_value = CursorPage(

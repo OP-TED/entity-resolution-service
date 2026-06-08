@@ -2,9 +2,9 @@
 
 ## Introduction
 
-This code of conduct applies to all spaces the Meaningfy community manages, including GitHub repositories, issue trackers, pull requests, discussion threads, and any other communication channels used by contributors and maintainers of the Entity Resolution Service.
+This code of conduct applies to all spaces the Entity Resolution Service community manages, including GitHub repositories, issue trackers, pull requests, discussion threads, and any other communication channels used by contributors and maintainers of the Entity Resolution Service.
 
-We expect everyone who participates in this community — formally or informally, or who claims any affiliation with Meaningfy — to honour this code of conduct in all project-related activities.
+We expect everyone who participates in this community — formally or informally — to honour this code of conduct in all project-related activities.
 
 This code is not exhaustive or complete. It distils our common understanding of a collaborative, shared environment. We expect all members of the community to follow it in spirit as much as in the letter.
 
@@ -43,7 +43,7 @@ We strive to:
 
 ## Reporting
 
-If you witness or experience unacceptable behaviour, please report it by contacting the maintainers at **hi@meaningfy.ws**. All reports will be handled with discretion and confidentiality.
+If you witness or experience unacceptable behaviour, please report it by opening a new issue on the repository, or by contacting a maintainer directly via GitHub. All reports will be handled with discretion and confidentiality.
 
 ---
 

@@ -4,13 +4,13 @@ This is the main repository for the Entity Resolution
 project. It uses Antora (AsciiDoc) for technical documentation and serves as the planning hub for AI-assisted development.
 
 - **Main branch:** `develop` (PR target)
-- **Global instructions:** The user-level `~/.claude/CLAUDE.md` contains Meaningfy-wide
+- **Global instructions:** The user-level `~/.claude/CLAUDE.md` contains global
   coding practices (Clean Code, SOLID, Cosmic Python, testing strategy). It
   complements this project-level file and is loaded into every conversation.
 
 ## Methodology
 
-This project follows the **Meaningfy AI-Assisted Coding** methodology:
+This project follows the **AI-Assisted Coding** methodology:
 - **Runbook:** `docs/ai-coding/ai-coding-runbook.md`
 - **Setup guide:** `docs/ai-coding/ai-coding-setup-guide.md`
 
@@ -210,7 +210,7 @@ make clean-docs       # Remove build artifacts
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **entity-resolution-service** (4168 symbols, 10093 relationships, 156 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **entity-resolution-service** (4845 symbols, 11439 relationships, 160 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

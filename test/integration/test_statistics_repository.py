@@ -22,6 +22,21 @@ def repo(mongo_db: AsyncDatabase) -> MongoStatisticsRepository:
     return MongoStatisticsRepository(mongo_db)
 
 
+async def _seed_cluster_sizes(db: AsyncDatabase, sizes: dict[str, int]) -> None:
+    """Insert cluster_sizes documents: {_id: cluster_id, size: n}."""
+    from datetime import UTC
+    from datetime import datetime as _dt
+
+    now = _dt.now(UTC)
+    collection = db["cluster_sizes"]
+    for cluster_id, size in sizes.items():
+        await collection.update_one(
+            {"_id": cluster_id},
+            {"$set": {"size": size, "updated_at": now}},
+            upsert=True,
+        )
+
+
 async def _seed_data(db: AsyncDatabase) -> None:
     """Insert a realistic dataset across all collections."""
     from ers.curation.adapters.user_action_repository import (
@@ -121,18 +136,27 @@ class TestGetRegistryStatistics:
         self, repo: MongoStatisticsRepository, mongo_db: AsyncDatabase
     ) -> None:
         await _seed_data(mongo_db)
+        # cluster-a has 2 decisions, cluster-b has 1 — seed cluster_sizes to match
+        await _seed_cluster_sizes(mongo_db, {"cluster-a": 2, "cluster-b": 1})
 
         stats = await repo.get_registry_statistics(StatisticsFilters())
 
         assert stats.total_entity_mentions == 4
         assert stats.total_canonical_entities == 2
-        assert stats.average_cluster_size == 1.5
         assert stats.resolution_requests > 0
+        # cluster distribution from cluster_sizes: sizes = [1, 2]
+        assert stats.cluster_size_average == pytest.approx(1.5, abs=0.001)
+        assert stats.cluster_size_median == 1.5  # even n=2: avg(1,2)
+        assert stats.cluster_size_max == 2
+        assert stats.cluster_singletons_count == 1  # cluster-b has size 1
 
     async def test_empty_database(self, repo: MongoStatisticsRepository) -> None:
         stats = await repo.get_registry_statistics(StatisticsFilters())
 
         assert stats.total_entity_mentions == 0
         assert stats.total_canonical_entities == 0
-        assert stats.average_cluster_size == 0.0
+        assert stats.cluster_size_average == 0.0
+        assert stats.cluster_size_median == 0.0
+        assert stats.cluster_size_max == 0
+        assert stats.cluster_singletons_count == 0
         assert stats.resolution_requests == 0

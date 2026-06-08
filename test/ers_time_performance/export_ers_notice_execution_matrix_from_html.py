@@ -26,7 +26,7 @@ from export_notice_execution_matrix_postgres import (
 
 DEFAULT_HTML_PATH = Path("test/test_data/ers_time_performance/02-12-2025-ers-enabled.html")
 DEFAULT_GRID_URL = (
-    "https://airflow.tedsws-testing.meaningfy.ws/dags/notice_processing_pipeline/grid?num_runs=365"
+    "https://<your-airflow-host>/dags/notice_processing_pipeline/grid?num_runs=365"
 )
 RUN_CLASS_PATTERN = re.compile(r'class="js-([^"\s]+)')
 DAG_ID_PATTERN = re.compile(r'<meta\s+name="dag_id"\s+content="([^"]+)"')
