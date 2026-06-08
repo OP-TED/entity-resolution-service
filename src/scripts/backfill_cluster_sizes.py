@@ -1,10 +1,17 @@
 """Backfill script: (re)build the cluster_sizes projection from decisions.
 
 Aggregates ``decisions`` by ``current_placement.cluster_id``, then upserts each
-resulting count into ``cluster_sizes``.  The script is idempotent — running it
-multiple times produces the same result.  Use it after a data migration, after
-the initial deployment of the cluster-size feature, or whenever manual
-verification indicates drift.
+resulting count into ``cluster_sizes`` and removes any stale entries.
+The script is idempotent -- running it multiple times produces the same result.
+Use it after a data migration, after the initial deployment of the cluster-size
+feature, or whenever manual verification indicates drift.
+
+Warning:
+    This script uses ``$set`` (absolute overwrite) to write each cluster's count.
+    Running it while decisions are actively being integrated can cause a
+    ``$inc`` write from ``DecisionStoreService.store_decision`` to be lost if it
+    races with the ``$set``. Run during a maintenance window or at a time when
+    ERE is not actively delivering outcomes.
 
 Usage::
 
@@ -49,7 +56,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=500,
         metavar="N",
-        help="Number of upsert operations per bulk_write batch (default: 500).",
+        help=(
+            "Number of write operations per bulk_write call (default: 500). "
+            "Controls write-batch size only; the full aggregation result is "
+            "loaded into memory before writes begin."
+        ),
     )
     return parser
 
@@ -83,6 +94,36 @@ async def _aggregate_cluster_counts(db: AsyncDatabase[Any]) -> dict[str, int]:
         counts[cluster_id] = int(row["count"])
 
     return counts
+
+
+async def _delete_stale_entries(
+    db: AsyncDatabase[Any],
+    *,
+    live_cluster_ids: set[str],
+    dry_run: bool,
+) -> int:
+    """Delete cluster_sizes documents whose cluster_id is no longer in decisions.
+
+    Args:
+        db: Connected async MongoDB database.
+        live_cluster_ids: Set of cluster IDs currently present in decisions.
+        dry_run: When True, log what would be deleted without executing.
+
+    Returns:
+        Number of documents deleted (or that would be deleted in dry-run mode).
+    """
+    stale_filter: dict[str, Any] = {"_id": {"$nin": sorted(live_cluster_ids)}}
+    collection = db[_CLUSTER_SIZES_COLLECTION]
+
+    if dry_run:
+        stale_count = await collection.count_documents(stale_filter)
+        log.info("[DRY-RUN] Stale entries that would be deleted: %d", stale_count)
+        return stale_count
+
+    result = await collection.delete_many(stale_filter)
+    if result.deleted_count:
+        log.info("Deleted %d stale cluster_sizes entries.", result.deleted_count)
+    return result.deleted_count
 
 
 def _build_upsert_ops(counts: dict[str, int]) -> list[UpdateOne]:
@@ -134,10 +175,13 @@ async def _run_backfill(
 
     ops = _build_upsert_ops(counts)
 
+    live_cluster_ids = set(counts.keys())
+
     if dry_run:
         for cluster_id, count in sorted(counts.items()):
             log.info("[DRY-RUN] Would upsert cluster_sizes[%r] = %d", cluster_id, count)
         log.info("[DRY-RUN] Total operations that would be issued: %d", len(ops))
+        await _delete_stale_entries(db, live_cluster_ids=live_cluster_ids, dry_run=True)
         return
 
     total_upserted = 0
@@ -164,6 +208,8 @@ async def _run_backfill(
         total_upserted,
         total_modified,
     )
+
+    await _delete_stale_entries(db, live_cluster_ids=live_cluster_ids, dry_run=False)
 
 
 async def main() -> None:

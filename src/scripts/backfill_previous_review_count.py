@@ -47,7 +47,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=500,
         metavar="N",
-        help="Number of decisions to update per bulk write batch (default: 500).",
+        help=(
+            "Number of write operations per bulk_write call (default: 500). "
+            "Controls write-batch size only; the full aggregation result is "
+            "loaded into memory before writes begin."
+        ),
     )
     return parser
 
