@@ -41,6 +41,12 @@ class MongoClientManager:
             name="decisions_about_entity_mention",
         )
 
+        await db["decisions"].create_index(
+            [("reviewed_since_placement", 1), ("_id", 1)],
+            name="decisions_reviewed_since_placement_id",
+            background=True,
+        )
+
         await db["users"].create_index(
             "email",
             unique=True,
@@ -50,4 +56,14 @@ class MongoClientManager:
         await db["resolution_requests"].create_index(
             [("identifiedBy.source_id", 1), ("received_at", 1)],
             name="resolution_requests_source_received_at",
+        )
+
+        await db["user_actions"].create_index(
+            "about_entity_mention",
+            name="user_actions_about_entity_mention",
+        )
+
+        await db["cluster_sizes"].create_index(
+            "size",
+            name="idx_cluster_sizes_size",
         )

@@ -35,6 +35,23 @@ Feature: Idempotent Decision Storage with Placement-Change Detection
       | T-RECONFIRM2 | cluster-B | 2026-04-01T00:00:00Z    | 2026-05-01T12:00:00Z    |
 
   # ---------------------------------------------------------------------------
+  # Material outcome change on the SAME cluster — confidence drop writes through
+  # (so the decision re-surfaces for curator review)
+  # ---------------------------------------------------------------------------
+
+  Scenario Outline: Same cluster with a changed confidence is a material change and writes through
+    Given a decision exists for triad "<triad>" with placement "<placement>" created_at "<created_at>" and updated_at unset
+    When a decision is stored for triad "<triad>" with the same cluster "<placement>" but confidence "<new_confidence>" and a later outcome timestamp "<later_ts>"
+    Then the stored decision has placement "<placement>"
+    And the stored updated_at is "<later_ts>"
+    And the stored created_at is still "<created_at>"
+
+    Examples:
+      | triad         | placement | created_at           | new_confidence | later_ts             |
+      | T-RECONF-LOW1 | cluster-A | 2026-05-01T08:00:00Z | 0.55           | 2026-05-05T10:00:00Z |
+      | T-RECONF-LOW2 | cluster-B | 2026-04-01T00:00:00Z | 0.40           | 2026-05-01T12:00:00Z |
+
+  # ---------------------------------------------------------------------------
   # Genuine placement change — updated_at set, created_at preserved
   # ---------------------------------------------------------------------------
 

@@ -136,4 +136,4 @@ By participating in this project you agree to abide by our [Code of Conduct](COD
 
 ## Questions
 
-Open a GitHub issue or reach us at **hi@meaningfy.ws**.
+Open a GitHub issueor start a discussion.

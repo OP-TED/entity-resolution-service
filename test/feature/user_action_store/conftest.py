@@ -4,11 +4,12 @@ Tests at the service layer with mocked repositories.
 """
 
 from typing import Any
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import pytest
 
 from ers.curation.adapters import (
+    DecisionRepository,
     EntityMentionCurationRepository,
     UserActionCurationRepository,
 )
@@ -38,13 +39,23 @@ def user_repository() -> MagicMock:
 
 
 @pytest.fixture
+def decision_repository() -> MagicMock:
+    mock = create_autospec(DecisionRepository, instance=True)
+    mock.record_review = AsyncMock()
+    mock.find_review_metadata.return_value = {}
+    return mock
+
+
+@pytest.fixture
 def user_action_service(
     user_action_repository: MagicMock,
     entity_mention_repository: MagicMock,
     user_repository: MagicMock,
+    decision_repository: MagicMock,
 ) -> UserActionService:
     return UserActionService(
         user_action_repository=user_action_repository,
         entity_mention_repository=entity_mention_repository,
         user_repository=user_repository,
+        decision_repository=decision_repository,
     )
