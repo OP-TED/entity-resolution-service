@@ -1,4 +1,5 @@
 """Unit tests for scripts.backfill_previous_review_count."""
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -50,26 +51,29 @@ def _make_db(aggregate_rows: list, bulk_write_result=None) -> MagicMock:
 # ── _count_actions_per_decision ────────────────────────────────────────────────
 
 
+_T0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_count_actions_per_decision_derives_correct_id():
-    """A well-formed triad is mapped to its derive_provisional_cluster_id with count."""
+    """A well-formed triad is mapped to its derive_provisional_cluster_id with (count, max_action_at)."""
     triad = {"source_id": "s1", "request_id": "r1", "entity_type": "Person"}
-    rows = [{"_id": triad, "count": 4}]
+    rows = [{"_id": triad, "count": 4, "max_action_at": _T0}]
     db = _make_db(aggregate_rows=rows)
 
     result = await _count_actions_per_decision(db)
 
     identifier = EntityMentionIdentifier(source_id="s1", request_id="r1", entity_type="Person")
     expected_id = derive_provisional_cluster_id(identifier)
-    assert result == {expected_id: 4}
+    assert result == {expected_id: (4, _T0)}
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_count_actions_per_decision_skips_malformed_triad():
     """A plain string _id (not a dict) is skipped and the result is empty."""
-    rows = [{"_id": "not-a-dict", "count": 2}]
+    rows = [{"_id": "not-a-dict", "count": 2, "max_action_at": _T0}]
     db = _make_db(aggregate_rows=rows)
 
     result = await _count_actions_per_decision(db)
@@ -94,22 +98,42 @@ async def test_count_actions_per_decision_empty_returns_empty():
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_build_bulk_ops_creates_update_for_each_decision():
-    """Each decision_id produces an UpdateOne with $set.previous_review_count, upsert=False."""
-    counts = {"decision_abc": 5, "decision_xyz": 2}
+    """Each decision produces an UpdateOne aggregation-pipeline op with both review fields, upsert=False."""
+    counts = {"decision_abc": (5, _T0), "decision_xyz": (2, _T0)}
 
     ops = await _build_bulk_ops(counts)
 
     assert len(ops) == 2
     for op in ops:
         assert isinstance(op, UpdateOne)
-        assert "previous_review_count" in op._doc["$set"]
         assert op._upsert is False
+        # Aggregation-update pipeline is stored as a list; first stage is $set.
+        assert isinstance(op._doc, list)
+        set_stage = op._doc[0]["$set"]
+        assert "previous_review_count" in set_stage
+        assert "reviewed_since_placement" in set_stage
 
-    values = {
-        op._filter["_id"]: op._doc["$set"]["previous_review_count"]
-        for op in ops
-    }
+    values = {op._filter["_id"]: op._doc[0]["$set"]["previous_review_count"] for op in ops}
     assert values == {"decision_abc": 5, "decision_xyz": 2}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_build_bulk_ops_reviewed_since_placement_uses_boundary_cond():
+    """reviewed_since_placement is a $cond comparing max_action_at against the placement boundary."""
+    counts = {"decision_abc": (1, _T0)}
+
+    ops = await _build_bulk_ops(counts)
+
+    cond_expr = ops[0]._doc[0]["$set"]["reviewed_since_placement"]
+    assert "$cond" in cond_expr
+    gt_expr = cond_expr["$cond"][0]
+    assert "$gt" in gt_expr
+    # max_action_at literal is the first operand
+    assert gt_expr["$gt"][0] == _T0
+    # placement boundary is ifNull(updated_at, created_at)
+    boundary = gt_expr["$gt"][1]
+    assert boundary == {"$ifNull": ["$updated_at", "$created_at"]}
 
 
 # ── _run_backfill ──────────────────────────────────────────────────────────────
@@ -120,7 +144,7 @@ async def test_build_bulk_ops_creates_update_for_each_decision():
 async def test_run_backfill_dry_run_makes_no_writes():
     """In dry-run mode bulk_write is never called."""
     triad = {"source_id": "s1", "request_id": "r1", "entity_type": "Person"}
-    rows = [{"_id": triad, "count": 3}]
+    rows = [{"_id": triad, "count": 3, "max_action_at": _T0}]
     db = _make_db(aggregate_rows=rows)
     decisions_col = db["decisions"]
 

@@ -572,7 +572,7 @@ drift.
 > while decisions are actively being integrated, a concurrent `$inc` write from
 > the integrator can be lost. Run during a maintenance window or quiet period.
 
-### Seed `previous_review_count` on existing decisions
+### Seed review-state fields on existing decisions
 
 ```bash
 # Preview:
@@ -582,8 +582,12 @@ cd src && poetry run python -m scripts.backfill_previous_review_count --dry-run
 make backfill-review-counts
 ```
 
+Sets two fields on each decision that has recorded user actions:
+`previous_review_count` (total action count) and `reviewed_since_placement`
+(`true` if the latest action post-dates the current placement boundary).
+
 **When to run:** once, after the initial deployment of v1.1.0 onto an existing
-database, for decisions curated before `previous_review_count` was introduced.
+database, for decisions curated before these fields were introduced.
 
 ### Verify the `cluster_sizes` projection
 
