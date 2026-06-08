@@ -582,7 +582,9 @@ class TestRejectDecisionPublishesERE:
         request: EntityMentionResolutionRequest = (
             ere_publish_service.publish_request.call_args[0][0]
         )
-        expected_exclusions = [c.cluster_id for c in decision.candidates]
+        expected_exclusions = {decision.current_placement.cluster_id} | {
+            c.cluster_id for c in decision.candidates
+        }
         assert request.entity_mention == entity_mention
-        assert request.excluded_cluster_ids == expected_exclusions
+        assert set(request.excluded_cluster_ids) == expected_exclusions
         assert request.proposed_cluster_ids == []

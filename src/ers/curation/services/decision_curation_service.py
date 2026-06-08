@@ -177,7 +177,10 @@ class DecisionCurationService:
         await self._user_action_service.record_reject(actor=actor, decision=decision)
         await self._publish_reevaluation(
             decision,
-            excluded_cluster_ids=[c.cluster_id for c in decision.candidates],
+            excluded_cluster_ids=list(
+                {decision.current_placement.cluster_id}
+                | {c.cluster_id for c in decision.candidates}
+            ),
         )
 
     async def assign_decision(self, decision_id: str, cluster_id: str, actor: str) -> None:
