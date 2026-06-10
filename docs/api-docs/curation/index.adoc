@@ -620,7 +620,7 @@ List Decisions
 
 ===== Description
 
-Retrieve cursor-paginated list of decisions with optional filtering.
+Retrieve cursor-paginated list of decisions with optional filtering.  The UI composes the four review states from the two row primitives (``previous_review_count`` and ``reviewed_since_placement``) and filters via the two orthogonal query parameters.  Args:     filters: Field-level filter criteria (entity type, confidence, etc.).     cursor_params: Cursor-based pagination parameters.     user: Authenticated and verified curator.     service: Decision curation service (injected).     ever_reviewed: Filter on lifetime review existence.     reviewed_since_placement: Filter on review since the current placement.     reviewed: Deprecated alias of ``reviewed_since_placement``.
 
 
 ===== Parameters
@@ -634,6 +634,24 @@ Retrieve cursor-paginated list of decisions with optional filtering.
 .Query Parameters
 |===
 |Name| Description| Required| Default| Pattern
+
+| ever_reviewed
+| Filter on whether any curator action has ever been recorded against the decision (previous_review_count &gt; 0). Omit to disable. 
+| -
+| null
+| 
+
+| reviewed_since_placement
+| Filter on whether a curator action exists since the current placement (created_at after updated_at, else created_at). Omit to disable. Combine ever_reviewed&#x3D;true with reviewed_since_placement&#x3D;false to list decisions that need re-visiting after an ERE update. 
+| -
+| null
+| 
+
+| reviewed
+| Deprecated alias of reviewed_since_placement. Ignored when reviewed_since_placement is provided. 
+| -
+| null
+| 
 
 | entity_type
 | Filter by entity type 
@@ -1243,6 +1261,12 @@ List cursor-paginated user actions with optional filtering.
 | null
 | 
 
+| decision_id
+| Filter by the decision identifier.  Returns only user actions recorded against this decision (matched via the entity mention triad). 
+| -
+| null
+| 
+
 | cursor
 | Pagination cursor from previous response 
 | -
@@ -1795,6 +1819,13 @@ Cluster preview with top entity mentions for display.
 | Similarity score between the entity mention and the cluster.
 |     
 
+| cluster_size
+| X
+| 
+|  `Integer`
+| Total number of decisions (entity mentions) assigned to this cluster, sourced from the cluster_sizes projection.
+|     
+
 | top_entities
 | X
 | 
@@ -2099,6 +2130,8 @@ Allowed ordering options for decision listing.
 | -created_at
 | updated_at
 | -updated_at
+| cluster_size
+| -cluster_size
 
 |===
 
@@ -2148,6 +2181,20 @@ Decision summary for list display.
 |  `Date`
 | Timestamp of the last update to this decision.
 | date-time    
+
+| previous_review_count
+| 
+| 
+|  `Integer`
+| Lifetime count of curator actions ever recorded against this decision. Persists across ERE re-integrations. Drives the UI &#39;previously reviewed&#39; indicator.
+|     
+
+| reviewed_since_placement
+| 
+| 
+|  `Boolean`
+| True iff a curator action exists whose created_at is after the current placement boundary (updated_at, else created_at). Materialised on the decision row by two writers: the integrator resets it to False on every placement advance; record_review conditionally sets it to True when a curator action lands. With previous_review_count the UI composes the review state: count&#x3D;&#x3D;0 -&gt; not reviewed; count&gt;0 and not this flag -&gt; needs revisit; this flag -&gt; reviewed and up to date.
+|     
 
 |===
 
@@ -2481,11 +2528,39 @@ Statistics about the entity registry.
 | Total number of distinct canonical entity clusters.
 |     
 
-| average_cluster_size
+| cluster_size_average
 | X
 | 
 |  `BigDecimal`
-| Average number of entity mentions per canonical entity cluster.
+| Average decisions per cluster.
+|     
+
+| cluster_size_median
+| X
+| 
+|  `BigDecimal`
+| Median (p50) cluster size.
+|     
+
+| cluster_size_p95
+| X
+| 
+|  `Integer`
+| 95th-percentile cluster size — surfaces long-tail outliers.
+|     
+
+| cluster_size_max
+| X
+| 
+|  `Integer`
+| Largest cluster size.
+|     
+
+| cluster_singletons_count
+| X
+| 
+|  `Integer`
+| Number of clusters of size 1.
 |     
 
 | resolution_requests

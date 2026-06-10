@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock
 
+import pytest
 from httpx import AsyncClient
 
 from ers.curation.domain.data_transfer_objects import (
@@ -7,6 +8,8 @@ from ers.curation.domain.data_transfer_objects import (
     RegistryStatistics,
     Statistics,
 )
+
+pytestmark = pytest.mark.asyncio
 
 BASE_URL = "/api/v1/curation/stats"
 
@@ -21,7 +24,11 @@ class TestGetStatistics:
             registry=RegistryStatistics(
                 total_entity_mentions=100,
                 total_canonical_entities=50,
-                average_cluster_size=2.0,
+                cluster_size_average=2.0,
+                cluster_size_median=2.0,
+                cluster_size_p95=4,
+                cluster_size_max=10,
+                cluster_singletons_count=5,
                 resolution_requests=10,
             ),
             curation=CurationStatistics(
@@ -49,7 +56,11 @@ class TestGetStatistics:
             registry=RegistryStatistics(
                 total_entity_mentions=0,
                 total_canonical_entities=0,
-                average_cluster_size=0.0,
+                cluster_size_average=0.0,
+                cluster_size_median=0.0,
+                cluster_size_p95=0,
+                cluster_size_max=0,
+                cluster_singletons_count=0,
                 resolution_requests=0,
             ),
             curation=CurationStatistics(

@@ -101,6 +101,12 @@ minutes; subsequent starts are much faster.
 > so the database is populated with sample data on startup. The Webapp will have
 > something to display right away. You do not need to change anything in `.env`.
 
+> **Rebuilding with a clean cache:** If you have upgraded the source or made changes to
+> the Docker image and need to discard cached layers, run:
+> ```bash
+> make rebuild-clean
+> ```
+
 ### Verify
 
 Open these URLs in a browser — you should see a JSON response with
@@ -115,6 +121,11 @@ Alternatively, run from a terminal:
 curl http://localhost:8000/health    # Curation API
 curl http://localhost:8001/health    # ERS REST API
 ```
+
+> **Deploying onto an existing database?** If v1.1.0 is being deployed over an
+> existing database (not a fresh install), run the
+> [operational scripts](#operational-scripts) after the services are healthy to
+> backfill projections introduced in this release.
 
 ---
 
@@ -390,6 +401,12 @@ services:
 make infra-up
 ```
 
+> **Rebuilding with a clean cache:** To force a full rebuild of the ERE Docker image
+> without cached layers, run instead:
+> ```bash
+> make infra-rebuild-clean
+> ```
+
 ### Verify
 
 ```bash
@@ -430,11 +447,11 @@ The `.env` file has one variable:
 
 | Variable | Default | What it controls |
 |----------|---------|------------------|
-| `API_BACKEND_URL` | `http://curation-api:8000` | Address of the Curation API |
+| `API_BACKEND_URL` | `curation-api:8000` | Address of the Curation API (host and port only — no protocol prefix) |
 
 > The default value uses the Docker container name (`curation-api`) and works
-> as-is when the Webapp runs on the `ersys-local` network. Do not change it
-> unless you are running the Curation API on a different host.
+> as-is when the Webapp runs on the `ersys-local` network. The value must be
+> `host:port` only — without a protocol prefix. 
 
 ### Start the service
 
@@ -539,6 +556,87 @@ docker network rm ersys-local
 
 ---
 
+## Operational scripts
+
+These scripts backfill and verify projections introduced in v1.1.0. They are
+idempotent — safe to re-run. On a fresh (empty) database the live service
+maintains these projections automatically; the scripts are only needed when
+deploying onto an existing database or repairing drift.
+
+**Run order: backfills first, then verify.**
+
+### Rebuild the `cluster_sizes` projection
+
+```bash
+# Preview (no writes):
+cd src && poetry run python -m scripts.backfill_cluster_sizes --dry-run
+
+# Apply:
+make backfill-cluster-sizes
+```
+
+**When to run:** after the initial deployment of v1.1.0 onto an existing
+database (the projection starts empty), after any data migration that moves
+decisions between clusters, or whenever `make verify-cluster-sizes` reports
+drift.
+
+> **Live-system warning:** this script uses `$set` (absolute overwrite). If run
+> while decisions are actively being integrated, a concurrent `$inc` write from
+> the integrator can be lost. Run during a maintenance window or quiet period.
+
+### Seed review-state fields on existing decisions
+
+```bash
+# Preview:
+cd src && poetry run python -m scripts.backfill_previous_review_count --dry-run
+
+# Apply:
+make backfill-review-counts
+```
+
+Sets two fields on each decision that has recorded user actions:
+`previous_review_count` (total action count) and `reviewed_since_placement`
+(`true` if the latest action post-dates the current placement boundary).
+
+**When to run:** once, after the initial deployment of v1.1.0 onto an existing
+database, for decisions curated before these fields were introduced.
+
+### Verify the `cluster_sizes` projection
+
+```bash
+make verify-cluster-sizes
+# or: cd src && poetry run python -m scripts.verify_cluster_sizes --verbose
+```
+
+Exits `0` if consistent, `1` if drift detected (logs each discrepancy). Run
+after either backfill to confirm the projection is clean, or as a periodic
+health check.
+
+**Repair loop — what to do when drift is detected:**
+
+```bash
+# 1. Confirm the drift and review the log output
+make verify-cluster-sizes
+
+# 2. Preview what the repair will write or delete
+cd src && poetry run python -m scripts.backfill_cluster_sizes --dry-run
+
+# 3. Run during a maintenance window or quiet period (see live-system warning above)
+make backfill-cluster-sizes
+
+# 4. Confirm the projection is clean
+make verify-cluster-sizes   # should exit 0
+```
+
+If step 4 still reports drift, a concurrent write raced with the backfill —
+wait for the system to quiesce and repeat from step 2.
+
+> **`--batch-size` note:** controls write-batch size in the backfill scripts,
+> not the read chunk size. The full aggregation is loaded into memory before
+> writes begin.
+
+---
+
 ## Troubleshooting
 
 **Port conflict on 6379** — ERE's built-in Redis is still running. Make sure
@@ -550,7 +648,8 @@ you commented out the `ersys-redis` and `redisinsight` services in ERE's
 
 **Webapp shows API errors** — Confirm the Curation API is running by opening
 `http://localhost:8000/health`. If it works, check that `API_BACKEND_URL` in the
-Webapp's `.env` is set to `http://curation-api:8000`.
+Webapp's `.env` is set to `curation-api:8000` (host and port only, no `http://`
+prefix — Nginx adds the protocol when proxying requests).
 
 **ERE processes nothing** — This is normal if no entity mentions have been
 submitted. ERE only processes messages when ERS publishes them. Submit an entity
@@ -559,3 +658,15 @@ mention through the ERS REST API or the Webapp to trigger resolution.
 **Resolution never completes** — Verify ERE is running and connected to the same
 Redis instance. Check that `REDIS_PASSWORD` and queue names match between ERS
 and ERE `.env` files (see [Configuration reference](#configuration-reference)).
+
+**Entity schema changes cause errors** — If you have modified the entity type
+configuration (`src/config/rdf_mention_config.yaml`) and the database was already
+initialised with the previous schema, you may see errors on startup or during
+request processing. Remove the data volumes and restart to start fresh:
+
+```bash
+make down-volumes   # stop services and delete all data volumes
+make up
+```
+
+All previously ingested data will be lost. This is expected when the schema changes.

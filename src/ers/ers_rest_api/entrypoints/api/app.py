@@ -149,6 +149,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from ers.request_registry.services.request_registry_service import (
         RequestRegistryService,
     )
+    from ers.resolution_decision_store.adapters.cluster_size_index import MongoClusterSizeIndex
     from ers.resolution_decision_store.adapters.decision_repository import (
         MongoDecisionRepository,
     )
@@ -167,6 +168,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     decision_service = DecisionStoreService(
         repository=MongoDecisionRepository(db),
+        cluster_size_index=MongoClusterSizeIndex(db),
     )
 
     from ers.resolution_coordinator.entrypoints.notification_subscriber_worker import (

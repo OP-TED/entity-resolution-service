@@ -51,3 +51,27 @@ Feature: Canonical entity preview
     When the curator requests the proposed canonical entity
     Then a preview is returned for cluster "cluster-B"
     And the preview includes only the entity mention identifiers where parsed representations are absent
+
+  # --- Cluster size ---
+
+  Scenario: Proposed canonical entity preview includes cluster size
+    Given a decision exists with a current placement in cluster "cluster-X"
+    And cluster "cluster-X" has 7 decisions assigned to it in the projection
+    And cluster "cluster-X" contains 3 entity mentions
+    When the curator requests the proposed canonical entity
+    Then a preview is returned for cluster "cluster-X"
+    And the preview includes "cluster_size" equal to 7
+
+  Scenario: Alternative canonical entities each carry their own cluster size
+    Given a decision exists with 3 candidate clusters with known sizes
+    And the current placement is in the first candidate
+    When the curator requests alternative canonical entities
+    Then each alternative preview carries its own cluster_size from the projection
+
+  Scenario: Cluster size of an unknown cluster defaults to 0
+    Given a decision exists with a current placement in cluster "cluster-Q"
+    And cluster "cluster-Q" has 0 decisions assigned to it in the projection
+    And cluster "cluster-Q" contains 2 entity mentions
+    When the curator requests the proposed canonical entity
+    Then a preview is returned for cluster "cluster-Q"
+    And the preview includes "cluster_size" equal to 0

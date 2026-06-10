@@ -250,6 +250,57 @@ def stored_updated_at_still_unset(ctx):
 
 
 # ---------------------------------------------------------------------------
+# Scenario — Material outcome change on the same cluster (confidence drop)
+# ---------------------------------------------------------------------------
+
+
+@when(
+    parsers.re(
+        r'a decision is stored for triad "(?P<triad>[^"]+)"'
+        r' with the same cluster "(?P<placement>[^"]+)"'
+        r' but confidence "(?P<new_confidence>[^"]+)"'
+        r' and a later outcome timestamp "(?P<later_ts>[^"]+)"'
+    )
+)
+def store_same_cluster_lower_confidence(
+    ctx, mock_repo, service, triad, placement, new_confidence, later_ts
+):
+    """Same cluster but a changed confidence is a material change → must write through."""
+    ts = _parse_ts(later_ts)
+    changed_placement = ClusterReference(
+        cluster_id=placement,
+        confidence_score=float(new_confidence),
+        similarity_score=0.85,
+    )
+    updated = Decision(
+        id=f"hash-{triad}",
+        about_entity_mention=_make_identifier(triad),
+        current_placement=changed_placement,
+        candidates=[],
+        created_at=ctx["existing_created_at"],
+        updated_at=ts,
+    )
+    mock_repo.upsert_decision = AsyncMock(return_value=updated)
+    ctx["expected_new_placement"] = placement
+    ctx["expected_updated_at"] = ts
+    try:
+        ctx["result"] = asyncio.run(
+            store_decision(
+                _make_identifier(triad),
+                changed_placement,
+                [],
+                ts,
+                service=service,
+            )
+        )
+        ctx["raised_exception"] = None
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        ctx["result"] = None
+        ctx["raised_exception"] = exc
+    mock_repo.upsert_decision.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
 # Scenario 3 — Genuine placement change
 # ---------------------------------------------------------------------------
 

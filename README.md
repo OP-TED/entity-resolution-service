@@ -60,6 +60,12 @@ Note: `make up` creates a shared external network `ersys-local` used for cross-c
 To remove it manually: `docker network rm ersys-local`
 ```
 
+> **Rebuilding with a clean cache:** If you have upgraded the source or made changes to the
+> Docker image and suspect a stale build, force a full rebuild without Docker layer cache:
+> ```bash
+> make rebuild-clean
+> ```
+
 | Service | URL |
 |---------|-----|
 | Curation API | `http://localhost:8000` |
@@ -126,6 +132,14 @@ make test-ersys-all     # smoke + e2e
 ```
 
 See [docs/testing-ersys.md](docs/testing-ersys.md) for setup instructions, required env files, and which components each suite needs.
+
+> **Running tests from the host machine:** The default `REDIS_HOST=ersys-redis` in
+> `src/infra/.env` is a Docker-internal hostname not resolvable from the host.
+> Override it in your shell before running any test target:
+> ```bash
+> export REDIS_HOST=localhost
+> ```
+> Do not change `src/infra/.env` — Docker Compose reads that file at startup.
 
 ### Observability (optional)
 
