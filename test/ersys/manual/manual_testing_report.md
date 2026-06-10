@@ -1,6 +1,6 @@
 # Manual Testing Report
 
-**Last updated:** 2026-05-15
+**Last updated:** 2026-06-10
 
 ## Testing progress
 ### resolution_cycle.http
@@ -124,6 +124,18 @@
 | c1080 | `curation` · S4 · S4.4 — Assign to cluster not in candidates | POST /assign {cluster_id: 64×0} → 400 InvalidClusterError; no UserAction written, no ERE message published | ✅ |
 | c1090 | `curation` · S5 · S5.1–S5.2 — Login + stats filtered by entity type | Login → 200; GET /curation/stats?entity_type=ORGANISATION → 200 with registry + curation fields ≥ 0 | ✅ |
 | c1095 | `curation` · S5 · S5.3 — Stats unfiltered | GET /curation/stats → 200; total_entity_mentions ≥ filtered value from S5.2 | ✅ |
+| c1500 | `curation` · S6 · S6.1–S6.2 — Resolve + inject 2-cluster seed | POST /resolve → 200; POST /push → {"pushed":1}; current_placement=s6_c1, candidates=[s6_c2] | ✅ |
+| c1510 | `curation` · S6 · S6.3–S6.4 — Login + list decisions before accept | Login → 200; GET /decisions → decision present; reviewed_since_placement=false; previous_review_count=0 | ✅ |
+| c1520 | `curation` · S6 · S6.5 — Accept current placement | POST /decisions/{id}/accept (no body) → 204; ERE re-eval published with proposed_cluster_ids=[s6_c1] | ✅ |
+| c1530 | `curation` · S6 · S6.6 — List decisions after accept | GET /decisions → reviewed_since_placement=true; previous_review_count=1 | ✅ |
+| c1540 | `curation` · S6 · S6.7 — Inject confirming ERE response | POST /push proposed_cluster_ids=[s6_c1] → {"pushed":1}; reviewed_since_placement resets to false | ✅ |
+| c1550 | `curation` · S6 · S6.8 — Lookup after accept | GET /lookup → cluster_id == s6_c1 (unchanged; accept re-confirmed placement) | ✅ |
+| c1600 | `curation` · S7 · S7.1–S7.3 — Resolve + login + inject seed | POST /resolve → 200; login; POST /push → {"pushed":1}; decision created with reviewed_since_placement=false | ✅ |
+| c1610 | `curation` · S7 · S7.4–S7.5 — reviewed_since_placement filter (initial state) | GET ?reviewed_since_placement=false → decision present; GET ?reviewed_since_placement=true → decision absent | ✅ |
+| c1620 | `curation` · S7 · S7.6 — Reject (sets reviewed_since_placement=true) | POST /decisions/{id}/reject → 204 | ✅ |
+| c1630 | `curation` · S7 · S7.7–S7.8 — reviewed_since_placement filter after action | GET ?reviewed_since_placement=true → decision present; GET ?reviewed_since_placement=false → decision absent | ✅ |
+| c1640 | `curation` · S7 · S7.9 — Inject fresh ERE re-placement | POST /push (no proposed_cluster_ids → SHA-256 cluster) → {"pushed":1}; reviewed_since_placement resets to false | ✅ |
+| c1650 | `curation` · S7 · S7.10–S7.11 — reviewed_since_placement filter after re-placement | GET ?reviewed_since_placement=false → decision present again; GET ?reviewed_since_placement=true → absent; previous_review_count==1 (lifetime, not reset) | ✅ |
 
 ### refresh_bulk_with_updates.http — delta after external ERE update
 
