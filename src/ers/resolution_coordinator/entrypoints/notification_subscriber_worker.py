@@ -121,12 +121,16 @@ class NotificationSubscriberWorker:
                                 message.get("data"),
                             )
                             continue
-                        _log.debug("Cross-instance notification received for triad '%s'", triad_key)
+                        _log.debug("Pub/Sub notification received for triad '%s'", triad_key)
                         owned = await self._waiter.notify(triad_key)
                         if owned:
                             _log.debug("Triad '%s': local waiter found and unblocked", triad_key)
                         else:
-                            _log.debug("Triad '%s': not owned by this instance, notification discarded", triad_key)
+                            _log.debug(
+                                "Triad '%s': no local waiter - request originated on another"
+                                " instance or outcome is unsolicited (re-evaluation); discarded",
+                                triad_key,
+                            )
                     break  # listen() exhausted normally (tests / graceful shutdown)
                 except _RedisLibConnectionError as exc:
                     self._subscribed.clear()
