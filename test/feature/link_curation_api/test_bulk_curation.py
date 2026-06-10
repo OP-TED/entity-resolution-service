@@ -132,15 +132,24 @@ def _setup_bulk_repo_mocks(
             curated_identifiers.add((emi.source_id, emi.request_id, emi.entity_type))
 
     decision_repository.find_by_id.side_effect = lambda did: decisions.get(did)
-    user_action_repository.has_current_action.side_effect = lambda about_entity_mention, since: (
-        (
-            about_entity_mention.source_id,
-            about_entity_mention.request_id,
-            about_entity_mention.entity_type,
-        )
-        in curated_identifiers
-    )
+    # record_review returns False for already-curated decisions (race-lost
+    # / placement already claimed), True otherwise — replaces the previous
+    # has_current_action lookup that drove the same decision per-ID.
+
+    def _record_review_side_effect(decision_id: str, _action_created_at: Any) -> bool:
+        decision = decisions.get(decision_id)
+        if decision is None:
+            return False
+        emi = decision.about_entity_mention
+        return (
+            emi.source_id,
+            emi.request_id,
+            emi.entity_type,
+        ) not in curated_identifiers
+
+    decision_repository.record_review.side_effect = _record_review_side_effect
     user_action_repository.save.return_value = None
+    user_action_repository.delete_by_id.return_value = None
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +273,9 @@ def bulk_accept_over_limit(client: TestClient, limit: int) -> Any:
 # ---------------------------------------------------------------------------
 
 
-@then(parsers.parse('the response contains {count:d} results all with status "{status}"'))
+@then(
+    parsers.parse('the response contains {count:d} results all with status "{status}"')
+)
 def all_results_with_status(response: Any, count: int, status: str) -> None:
     api_status = STATUS_MAP.get(status, status)
     assert response.status_code == 200

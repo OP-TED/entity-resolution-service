@@ -1,18 +1,21 @@
 # ================================================================
 # Feature:  full_cycle/resolution_cycle.feature — curation feedback loop
-# Purpose:  Verify that curation actions (assign / reject) trigger ERE
-#           re-evaluation and that GET /lookup reflects the new decision.
+# Purpose:  Verify that curation actions (accept / assign / reject) trigger ERE
+#           re-evaluation, that GET /lookup reflects the new decision, and that
+#           the reviewed_since_placement flag is correctly set and filtered.
 #
 # Prerequisites:
 #   - Full stack running:  make up
-#   - Injector API running: poetry run python scripts/inject_ere_response_app.py
+#   - Injector API running: make redis-rest-api-start
 #   - Environment active:  local  (Ctrl+Alt+E in VS Code)
 #   - httpyac CLI:         httpyac --env local tests/manual/full_cycle/resolution_and_curation.http
 #
 # Curation mechanics:
-#   Calling /assign or /reject does two things in order:
+#   Calling /accept, /assign, or /reject does two things in order:
 #     1. Writes a UserAction to the audit log (synchronous — done before 204 is returned)
 #     2. Publishes an ERE re-evaluation request to Redis (fire-and-forget)
+#   All three actions also set reviewed_since_placement=true on the decision.
+#   A subsequent ERE placement (new inject) resets reviewed_since_placement=false.
 #
 # Why the injector API is used here:
 #   Basic ERE does not support proposed_cluster_ids or excluded_cluster_ids — it
@@ -23,8 +26,8 @@
 #
 #   Important: the outcome integrator stores candidates as ERE_response.candidates[1:]
 #   (the top candidate becomes current_placement and is excluded from the candidates
-#   list).  Curation assign requires a non-empty candidates list, so the seeding
-#   inject (S1.2) must propose at least 2 cluster IDs.
+#   list).  Curation assign/accept requires a non-empty candidates list or a known
+#   current_placement, so seeding injects (S1.2, S6.2, S7.3) propose at least 2 cluster IDs.
 #
 # All variable substitution is handled via response chaining — no manual steps required.
 #
@@ -34,6 +37,8 @@
 #   S3. Bulk re-evaluation with empty selection → 400/422, no side effects (UC-B2.2 minimal guarantee)
 #   S4. Assign to a cluster not in candidates → 400 InvalidClusterError; no side effects
 #   S5. Statistics — GET /curation/stats returns correct structure after prior activity
+#   S6. Curation accept  → inject confirming response → lookup cluster unchanged
+#   S7. reviewed_since_placement lifecycle — filter (false/true), set on action, reset on re-placement
 # ================================================================
 
 
@@ -59,15 +64,19 @@
 #   S1.5  POST /curation/decisions/{id}/assign     → 204
 #           ↳ publishes ERE re-evaluation with proposed_cluster_ids=[s1_c2]
 #   S1.5b [Conceptual] ERS publishes re-eval request to ERE
+#   S1.5c GET  /curation/decisions                 → 200
+#           ↳ reviewed_since_placement=true; previous_review_count=1
+#           ↳ (synchronous — no inject needed to observe this)
 #   S1.6  POST {{inject_ere_response_api}}/push    → {"pushed": 1}
 #           ↳ confirms assignment: proposed_cluster_ids=[s1_c2]
 #           ↳ outcome integrator sets current_placement = s1_c2
 #   S1.7  GET  /lookup                             → 200  { cluster_id == s1_c2 }
 #
 # Expected:
-#   S1.5 → 204 No Content
-#   S1.6 → {"pushed": 1}
-#   S1.7 → 200, cluster_reference.cluster_id == s1_c2
+#   S1.5  → 204 No Content
+#   S1.5c → reviewed_since_placement=true; previous_review_count=1
+#   S1.6  → {"pushed": 1}
+#   S1.7  → 200, cluster_reference.cluster_id == s1_c2
 # ================================================================
 
 @s1_source     = fc-cur-s1-manual
@@ -127,6 +136,7 @@ Accept: application/json
 
 ### S1.4 — List curation decisions (decision_id and s1_cluster_b extracted via chaining)
 # s1_cluster_b = candidates[0].cluster_id = s1_c2 (the alternative, not current_placement)
+# Expected: decision for s1_source/s1_request_id present; reviewed_since_placement=false; previous_review_count=0
 @s1_token = {{s1_login.response.body.$.access_token}}
 # @name s1_decisions
 GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?entity_type=ORGANISATION&limit=50 HTTP/1.1
@@ -147,6 +157,14 @@ Accept: application/json
 {
   "cluster_id": "{{s1_cluster_b}}"
 }
+
+
+### S1.5c — List decisions after assign (verify reviewed_since_placement flipped)
+# Expected: decision with id == s1_decision_id present; reviewed_since_placement=true; previous_review_count=1
+# Action is synchronous — reviewed_since_placement updates before 204 is returned; no inject needed.
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?reviewed_since_placement=true&entity_type=ORGANISATION&limit=50 HTTP/1.1
+Authorization: Bearer {{s1_token}}
+Accept: application/json
 
 
 ### S1.5b — [Conceptual] ERS publishes re-resolution request with placement hint to ERE
@@ -192,6 +210,9 @@ Accept: application/json
 #           ↳ decision_id and top candidate extracted via response chaining
 #   S2.4  POST /curation/decisions/{id}/reject     → 204
 #           ↳ publishes ERE re-evaluation with excluded_cluster_ids=[all candidates]
+#   S2.4b GET  /curation/decisions                 → 200
+#           ↳ reviewed_since_placement=true; previous_review_count=1
+#           ↳ (synchronous — no inject needed to observe this)
 #   S2.5  POST {{inject_ere_response_api}}/push    → {"pushed": 1}
 #           ↳ injects response with excluded_cluster_ids=[s2_candidate_0], no proposed_cluster_ids
 #           ↳ injector generates a fresh SHA-256 cluster id (guaranteed ≠ any existing candidate)
@@ -199,9 +220,10 @@ Accept: application/json
 #   S2.6  GET  /lookup                             → 200  { cluster_id ≠ s2_candidate_0 }
 #
 # Expected:
-#   S2.4 → 204 No Content
-#   S2.5 → {"pushed": 1}
-#   S2.6 → 200, cluster_reference.cluster_id ∉ {original candidates from S2.3}
+#   S2.4  → 204 No Content
+#   S2.4b → reviewed_since_placement=true; previous_review_count=1
+#   S2.5  → {"pushed": 1}
+#   S2.6  → 200, cluster_reference.cluster_id ∉ {original candidates from S2.3}
 #           Document the actual cluster_id returned on first run.
 # ================================================================
 
@@ -241,6 +263,7 @@ Accept: application/json
 
 
 ### S2.3 — List curation decisions (decision_id and top candidate extracted via chaining)
+# Expected: decision for s2_source/s2_request_id present; reviewed_since_placement=false; previous_review_count=0
 @s2_token = {{s2_login.response.body.$.access_token}}
 # @name s2_decisions
 GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?entity_type=ORGANISATION&limit=50 HTTP/1.1
@@ -259,6 +282,14 @@ Accept: application/json
 POST {{curation_api_url}}/api/{{api_version}}/curation/decisions/{{s2_decision_id}}/reject HTTP/1.1
 Authorization: Bearer {{s2_token}}
 Content-Type: application/json
+Accept: application/json
+
+
+### S2.4b — List decisions after reject (verify reviewed_since_placement flipped)
+# Expected: decision with id == s2_decision_id present; reviewed_since_placement=true; previous_review_count=1
+# Action is synchronous — reviewed_since_placement updates before 204 is returned; no inject needed.
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?reviewed_since_placement=true&entity_type=ORGANISATION&limit=50 HTTP/1.1
+Authorization: Bearer {{s2_token}}
 Accept: application/json
 
 
@@ -433,7 +464,11 @@ Accept: application/json
 #   registry:
 #     total_entity_mentions    ≥ 0
 #     total_canonical_entities ≥ 0
-#     average_cluster_size     ≥ 0.0
+#     cluster_size_average     ≥ 0.0
+#     cluster_size_median      ≥ 0.0
+#     cluster_size_p95         ≥ 0
+#     cluster_size_max         ≥ 0
+#     cluster_singletons_count ≥ 0
 #     resolution_requests      ≥ 0
 #   curation:
 #     total_decisions          ≥ 0
@@ -475,4 +510,321 @@ Accept: application/json
 # Expected: 200; total_entity_mentions ≥ value from S5.2 (includes PROCEDURE mentions from S3 batch)
 GET {{curation_api_url}}/api/{{api_version}}/curation/stats HTTP/1.1
 Authorization: Bearer {{s5_token}}
+Accept: application/json
+
+
+
+# ================================================================
+# SCENARIO S6 — Accept current placement → ERE re-evaluation re-confirms same cluster
+#
+# Covers UC-B2.1 via /accept: the third single-decision curation path, complementing
+# S1 (assign alternative) and S2 (reject all).  /accept re-proposes the current
+# placement to ERE — the assignment must not change.
+#
+# Unlike /assign, /accept takes no request body; it always proposes the
+# decision's current_placement.cluster_id.
+#
+# Also verifies the reviewed_since_placement and previous_review_count fields
+# returned by GET /curation/decisions (added in PR 120/121).
+#
+# Steps:
+#   S6.1  POST /resolve                            → 200
+#   S6.2  POST /push (inject 2-cluster seed)       → {"pushed": 1}
+#           ↳ current_placement = s6_c1, candidates = [s6_c2]
+#   S6.3  POST /auth/login                         → 200  { access_token }
+#   S6.4  GET  /curation/decisions                 → 200
+#           ↳ decision present; reviewed_since_placement=false; previous_review_count=0
+#   S6.5  POST /curation/decisions/{id}/accept     → 204
+#           ↳ no body; publishes ERE re-eval with proposed_cluster_ids=[s6_c1]
+#   S6.6  GET  /curation/decisions                 → 200
+#           ↳ reviewed_since_placement=true; previous_review_count=1
+#   S6.7  POST /push (inject confirming response)  → {"pushed": 1}
+#           ↳ re-confirms s6_c1; reviewed_since_placement resets to false
+#   S6.8  GET  /lookup                             → 200, cluster_id == s6_c1 (unchanged)
+#
+# Expected:
+#   S6.5 → 204 No Content
+#   S6.6 → reviewed_since_placement=true; previous_review_count=1
+#   S6.8 → cluster_reference.cluster_id == s6_c1 (accept did not change assignment)
+# ================================================================
+
+@s6_source     = fc-cur-s6-manual
+@s6_request_id = fc-cur-s6-req-01
+@s6_c1         = cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+@s6_c2         = dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+
+
+### S6.1 — Submit resolution request
+# @name s6_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s6_source}}",
+      "request_id": "{{s6_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org001006 a org:Organization ;\n    epo:hasLegalName \"Wasserwerke Köln GmbH\" ."
+  }
+}
+
+
+### S6.2 — Inject initial ERE response with two candidates
+# After this: current_placement = s6_c1, candidates = [s6_c2]
+# Expected: {"pushed": 1}
+POST {{inject_ere_response_api}}/push HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "entity_mention": {
+    "source_id": "{{s6_source}}",
+    "request_id": "{{s6_request_id}}",
+    "entity_type": "ORGANISATION"
+  },
+  "proposed_cluster_ids": ["{{s6_c1}}", "{{s6_c2}}"]
+}
+
+
+### S6.3 — Authenticate as admin (Curation API)
+# @name s6_login
+POST {{curation_api_url}}/api/{{api_version}}/auth/login HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "{{admin_email}}",
+  "password": "{{admin_password}}"
+}
+
+
+### S6.4 — List decisions before accept
+# Expected: 200; decision with id == s6_decision_id is present.
+#   reviewed_since_placement == false  (not yet curated)
+#   previous_review_count == 0  (no prior review cycles)
+@s6_token = {{s6_login.response.body.$.access_token}}
+@s6_decision_id = {{s6_resolve.response.body.$.canonical_entity_id}}
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?entity_type=ORGANISATION&limit=50 HTTP/1.1
+Authorization: Bearer {{s6_token}}
+Accept: application/json
+
+
+### S6.5 — Accept current placement (no body)
+# Expected: 204 No Content
+# Effect: record_accept writes UserAction; publishes ERE re-eval with
+#         proposed_cluster_ids=[s6_c1]; sets reviewed_since_placement=true.
+POST {{curation_api_url}}/api/{{api_version}}/curation/decisions/{{s6_decision_id}}/accept HTTP/1.1
+Authorization: Bearer {{s6_token}}
+Content-Type: application/json
+Accept: application/json
+
+
+### S6.6 — List reviewed decisions after accept (targets the acted-on decision directly)
+# Filter reviewed_since_placement=true returns only decisions reviewed since their last placement,
+# which after S6.5 includes exactly the decision we just acted on.
+# Expected: 200; decision with id == s6_decision_id present.
+#   reviewed_since_placement == true; previous_review_count == 1
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?reviewed_since_placement=true&entity_type=ORGANISATION&limit=50 HTTP/1.1
+Authorization: Bearer {{s6_token}}
+Accept: application/json
+
+
+### S6.7 — Inject confirming ERE response (re-confirms s6_c1 as placement)
+# Effect: outcome integrator persists new decision version with reviewed_since_placement=false
+#         (new ERE placement supersedes the prior review state).
+# Expected: {"pushed": 1}
+POST {{inject_ere_response_api}}/push HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "entity_mention": {
+    "source_id": "{{s6_source}}",
+    "request_id": "{{s6_request_id}}",
+    "entity_type": "ORGANISATION"
+  },
+  "proposed_cluster_ids": ["{{s6_c1}}"]
+}
+
+
+### S6.8 — Verify lookup shows same cluster (accept did not change assignment)
+# Expected: cluster_reference.cluster_id == s6_c1
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{s6_source}}&request_id={{s6_request_id}}&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+
+# ================================================================
+# SCENARIO S7 — reviewed_since_placement lifecycle: filter, set on action, reset on re-placement
+#
+# Covers:
+#   - GET /decisions?reviewed_since_placement=false  → returns decisions awaiting review
+#   - GET /decisions?reviewed_since_placement=true   → returns decisions already reviewed
+#   - Any curation action sets reviewed_since_placement = true immediately
+#   - A new ERE placement (outcome integrator) resets reviewed_since_placement = false
+#
+# This is the primary UI workflow added in PR #121: curators filter on
+# reviewed_since_placement=false to find their work queue.
+#
+# Steps:
+#   S7.1   POST /resolve                                    → 200
+#   S7.2   POST /auth/login                                 → 200  { access_token }
+#   S7.3   POST /push (inject 2-cluster ERE seed)           → {"pushed": 1}
+#            ↳ current_placement = s7_c1, candidates = [s7_c2]
+#            ↳ outcome integrator sets reviewed_since_placement = false
+#            Note: wait briefly; outcome integrator processes asynchronously.
+#   S7.4   GET /decisions?reviewed_since_placement=false    → decision present
+#   S7.5   GET /decisions?reviewed_since_placement=true     → decision absent
+#   S7.6   POST /decisions/{id}/reject                      → 204
+#            ↳ sets reviewed_since_placement = true
+#   S7.7   GET /decisions?reviewed_since_placement=true     → decision now present
+#   S7.8   GET /decisions?reviewed_since_placement=false    → decision now absent
+#   S7.9   POST /push (fresh ERE re-placement)              → {"pushed": 1}
+#            ↳ injector generates a new SHA-256 cluster (no proposed_cluster_ids)
+#            ↳ outcome integrator resets reviewed_since_placement = false
+#            Note: wait briefly; retry S7.10 if flag still shows true.
+#   S7.10  GET /decisions?reviewed_since_placement=false    → decision present again
+#   S7.11  GET /decisions?reviewed_since_placement=true     → decision absent again
+#
+# Expected:
+#   S7.4  → decision with id == s7_decision_id present; reviewed_since_placement=false
+#   S7.5  → decision with id == s7_decision_id absent
+#   S7.7  → decision with id == s7_decision_id present; reviewed_since_placement=true
+#            previous_review_count == 1
+#   S7.8  → decision with id == s7_decision_id absent
+#   S7.10 → decision with id == s7_decision_id present; reviewed_since_placement=false
+#            previous_review_count == 1  (lifetime count; not reset by re-placement)
+#   S7.11 → decision with id == s7_decision_id absent
+# ================================================================
+
+@s7_source     = fc-cur-s7-manual
+@s7_request_id = fc-cur-s7-req-112
+@s7_c1         = mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
+@s7_c2         = nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+
+
+### S7.1 — Submit resolution request
+# @name s7_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{s7_source}}",
+      "request_id": "{{s7_request_id}}",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:org001007 a org:Organization ;\n    epo:hasLegalName \"Stadtbetriebe Münster GmbH\" ."
+  }
+}
+
+
+### S7.2 — Authenticate as admin (Curation API)
+# @name s7_login
+POST {{curation_api_url}}/api/{{api_version}}/auth/login HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "{{admin_email}}",
+  "password": "{{admin_password}}"
+}
+
+
+### S7.3 — Inject initial ERE response (sets reviewed_since_placement=false)
+# After this: current_placement = s7_c1, candidates = [s7_c2]
+# Expected: {"pushed": 1}
+# Note: wait briefly for outcome integrator to process before S7.4.
+POST {{inject_ere_response_api}}/push HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "entity_mention": {
+    "source_id": "{{s7_source}}",
+    "request_id": "{{s7_request_id}}",
+    "entity_type": "ORGANISATION"
+  },
+  "proposed_cluster_ids": ["{{s7_c1}}", "{{s7_c2}}"]
+}
+
+
+### S7.4 — Unreviewed filter: decision must appear
+# Expected: 200; decision with id == s7_decision_id is present.
+#   reviewed_since_placement == false; previous_review_count == 0
+@s7_token = {{s7_login.response.body.$.access_token}}
+@s7_decision_id = {{s7_resolve.response.body.$.canonical_entity_id}}
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?reviewed_since_placement=false&limit=50 HTTP/1.1
+Authorization: Bearer {{s7_token}}
+Accept: application/json
+
+
+### S7.5 — Reviewed filter: decision must be absent
+# Expected: 200; decision with id == s7_decision_id is NOT in results.
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?reviewed_since_placement=true&limit=50 HTTP/1.1
+Authorization: Bearer {{s7_token}}
+Accept: application/json
+
+
+### S7.6 — Reject all candidates (curation action sets reviewed_since_placement=true)
+# Expected: 204 No Content
+POST {{curation_api_url}}/api/{{api_version}}/curation/decisions/{{s7_decision_id}}/reject HTTP/1.1
+Authorization: Bearer {{s7_token}}
+Content-Type: application/json
+Accept: application/json
+
+
+### S7.7 — Reviewed filter: decision now appears after action
+# Expected: 200; decision with id == s7_decision_id is present.
+#   reviewed_since_placement == true; previous_review_count == 1
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?reviewed_since_placement=true&limit=50 HTTP/1.1
+Authorization: Bearer {{s7_token}}
+Accept: application/json
+
+
+### S7.8 — Unreviewed filter: decision now absent after action
+# Expected: 200; decision with id == s7_decision_id is NOT in results.
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?reviewed_since_placement=false&limit=50 HTTP/1.1
+Authorization: Bearer {{s7_token}}
+Accept: application/json
+
+
+### S7.9 — Inject new ERE response (re-placement resets reviewed_since_placement=false)
+# No proposed_cluster_ids → injector generates a fresh SHA-256 cluster (guaranteed new placement).
+# Effect: outcome integrator stores new decision version with reviewed_since_placement=false.
+# Expected: {"pushed": 1}
+# Note: wait briefly; retry S7.10 if reviewed_since_placement still shows true.
+POST {{inject_ere_response_api}}/push HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "entity_mention": {
+    "source_id": "{{s7_source}}",
+    "request_id": "{{s7_request_id}}",
+    "entity_type": "ORGANISATION"
+  }
+}
+
+
+### S7.10 — Unreviewed filter: decision appears again after re-placement
+# Expected: 200; decision with id == s7_decision_id is present.
+#   reviewed_since_placement == false  (reset by new ERE placement)
+#   previous_review_count == 1  (lifetime count; not reset by re-placement)
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?reviewed_since_placement=false&limit=50 HTTP/1.1
+Authorization: Bearer {{s7_token}}
+Accept: application/json
+
+
+### S7.11 — Reviewed filter: decision absent again after re-placement
+# Expected: 200; decision with id == s7_decision_id is NOT in results.
+GET {{curation_api_url}}/api/{{api_version}}/curation/decisions?reviewed_since_placement=true&limit=50 HTTP/1.1
+Authorization: Bearer {{s7_token}}
 Accept: application/json

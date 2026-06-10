@@ -36,6 +36,7 @@ from ers.request_registry.adapters.records_repository import (
 from ers.resolution_decision_store.adapters.decision_repository import MongoDecisionRepository
 from ers.users.adapters.user_repository import MongoUserRepository
 from ers.users.domain.users import User
+from scripts.backfill_cluster_sizes import _run_backfill as _backfill_cluster_sizes
 
 ENTITY_TYPES = ["ORGANISATION", "PROCEDURE"]
 ACTION_TYPES = list(UserActionType)
@@ -136,7 +137,9 @@ def _build_candidates(
     candidates = list(cluster_refs_by_mention.get(key, []))
     for _ in range(random.randint(0, 3)):
         if type_cluster_ids:
-            candidates.append(ClusterReferenceFactory.build(cluster_id=random.choice(type_cluster_ids)))
+            candidates.append(
+                ClusterReferenceFactory.build(cluster_id=random.choice(type_cluster_ids))
+            )
     return candidates or [ClusterReferenceFactory.build()]
 
 
@@ -145,7 +148,17 @@ async def _create_decisions(
     cluster_refs_by_mention: dict[str, list[Any]],
     cluster_ids_by_type: dict[str, list[str]],
     decision_repo: MongoDecisionRepository,
+    db: Any,
 ) -> list[Any]:
+    """Persist decisions and materialise the review-state primitives.
+
+    The factory-built ``Decision`` model does not carry the denormalised
+    review-state fields (``previous_review_count`` and ``reviewed_since_placement``)
+    because the domain model forbids extra fields. After ``save`` we set them
+    explicitly so seeded data matches the production shape — the curation list
+    indexes and filters can only plan against documents that actually carry the
+    field.
+    """
     decisions: list[Any] = []
     for mention in mentions:
         candidates = _build_candidates(mention, cluster_refs_by_mention, cluster_ids_by_type)
@@ -158,6 +171,10 @@ async def _create_decisions(
         )
         decisions.append(decision)
         await decision_repo.save(decision)
+        await db["decisions"].update_one(
+            {"_id": decision.id},
+            {"$set": {"reviewed_since_placement": False, "previous_review_count": 0}},
+        )
     return decisions
 
 
@@ -192,8 +209,18 @@ async def _create_users(user_repo: MongoUserRepository) -> list[User]:
 async def _create_user_actions(
     decisions: list[Any],
     action_repo: MongoUserActionCurationRepository,
+    decision_repo: MongoDecisionRepository,
     user_ids: list[str],
 ) -> int:
+    """Persist user actions and dogfood the production lifecycle writer.
+
+    After saving the action we call ``decision_repo.record_review`` — the same
+    code path used by ``UserActionService.record_*`` in production — so the
+    seeded ``reviewed_since_placement`` reflects what real curator actions
+    produce. Actions whose ``created_at`` is after the decision's placement
+    boundary flip the flag to ``True`` (the typical case here, since seeded
+    actions are minutes after decision creation).
+    """
     curated_decisions = random.sample(decisions, k=min(len(decisions) // 3, len(decisions)))
     action_count = 0
     for decision in curated_decisions:
@@ -207,6 +234,7 @@ async def _create_user_actions(
             created_at=decision.created_at + timedelta(minutes=random.randint(1, 120)),
         )
         await action_repo.save(action)
+        await decision_repo.record_review(decision.id, action.created_at)
         action_count += 1
     return action_count
 
@@ -234,8 +262,10 @@ async def seed(
         cluster_refs_by_mention,
         cluster_ids_by_type,
         decision_repo,
+        db,
     )
-    action_count = await _create_user_actions(decisions, action_repo, user_ids)
+    action_count = await _create_user_actions(decisions, action_repo, decision_repo, user_ids)
+    await _backfill_cluster_sizes(db, dry_run=False, batch_size=500)
 
     print(f"Seeded database '{config.MONGO_DATABASE_NAME}':")
     print(f"  {len(users)} users ({', '.join(u.email for u in users)})")

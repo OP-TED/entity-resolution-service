@@ -3,10 +3,10 @@ name = "ers-core"
 version = "1.1.0"
 description = "Core Python backend service for entity resolution — REST API, decision persistence, and ERE orchestration via Redis."
 authors = [
-    { name = "Meaningfy", email = "hi@meaningfy.ws" }
+    { name = "Publications Office of the European Union" }
 ]
 maintainers = [
-    { name = "Meaningfy", email = "hi@meaningfy.ws" }
+    { name = "Entity Resolution Service maintainers" }
 ]
 license = { text = "Apache-2.0" }
 requires-python = ">=3.12,<3.15"

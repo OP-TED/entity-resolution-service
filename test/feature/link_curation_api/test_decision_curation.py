@@ -55,7 +55,10 @@ def test_recommend_top_not_found():
     pass
 
 
-@scenario(FEATURE, "Recommend top candidate for a decision already curated on its current version")
+@scenario(
+    FEATURE,
+    "Recommend top candidate for a decision already curated on its current version",
+)
 def test_recommend_top_already_curated():
     pass
 
@@ -73,6 +76,19 @@ def test_recommend_rejection_not_found():
     pass
 
 
+# --- ERE re-evaluation forwarding (TEDSWS-530) ---
+
+
+@scenario(FEATURE, "Rejecting all recommendations forwards an exclusion request to ERE")
+def test_reject_forwards_exclusion_to_ere():
+    pass
+
+
+@scenario(FEATURE, "Recommending an alternative forwards a placement request to ERE")
+def test_assign_forwards_placement_to_ere():
+    pass
+
+
 # --- Recommend alternative cluster ---
 
 
@@ -86,7 +102,9 @@ def test_recommend_invalid_cluster():
     pass
 
 
-@scenario(FEATURE, "Recommend alternative cluster placement for a non-existent decision")
+@scenario(
+    FEATURE, "Recommend alternative cluster placement for a non-existent decision"
+)
 def test_recommend_alternative_not_found():
     pass
 
@@ -131,7 +149,7 @@ def decision_not_curated(
 ) -> None:
     decision = DecisionFactory.build(id="decision-1")
     decision_repository.find_by_id.return_value = decision
-    user_action_repository.has_current_action.return_value = False
+    decision_repository.record_review.return_value = True
     user_action_repository.save.return_value = None
     ctx["decision_id"] = "decision-1"
 
@@ -149,10 +167,39 @@ def decision_with_alternative(
         candidates=[ClusterReferenceFactory.build(), alt_candidate],
     )
     decision_repository.find_by_id.return_value = decision
-    user_action_repository.has_current_action.return_value = False
+    decision_repository.record_review.return_value = True
     user_action_repository.save.return_value = None
     ctx["decision_id"] = "decision-1"
     ctx["alt_cluster"] = cluster_id
+
+
+@given("a decision with a known placement and candidates exists and is uncurated")
+def decision_with_known_placement_and_candidates(
+    ctx: dict[str, Any],
+    decision_repository: AsyncMock,
+    user_action_repository: AsyncMock,
+    entity_mention_repository: AsyncMock,
+) -> None:
+    placement = ClusterReferenceFactory.build()
+    candidates = [ClusterReferenceFactory.build(), ClusterReferenceFactory.build()]
+    identifier = EntityMentionFactory.build().identifiedBy
+    decision = DecisionFactory.build(
+        id="decision-1",
+        about_entity_mention=identifier,
+        current_placement=placement,
+        candidates=candidates,
+    )
+    mention = EntityMentionFactory.build(identifiedBy=identifier)
+
+    decision_repository.find_by_id.return_value = decision
+    decision_repository.record_review.return_value = True
+    user_action_repository.save.return_value = None
+    # Mention must be found, otherwise _publish_reevaluation skips silently.
+    entity_mention_repository.find_by_identifiers.return_value = [mention]
+
+    ctx["decision_id"] = "decision-1"
+    ctx["placement_id"] = placement.cluster_id
+    ctx["candidate_ids"] = [c.cluster_id for c in candidates]
 
 
 @given("the decision has not been curated on its current version")
@@ -168,7 +215,7 @@ def decision_already_curated(
 ) -> None:
     decision = DecisionFactory.build(id="decision-1")
     decision_repository.find_by_id.return_value = decision
-    user_action_repository.has_current_action.return_value = True
+    decision_repository.record_review.return_value = False
     ctx["decision_id"] = "decision-1"
 
 
@@ -254,6 +301,20 @@ def recommend_rejection(
     ctx: dict[str, Any],
 ) -> Any:
     return client.post(f"{DECISIONS_URL}/{ctx['decision_id']}/reject")
+
+
+@when(
+    "the curator recommends placement in the first candidate cluster",
+    target_fixture="response",
+)
+def recommend_first_candidate(
+    client: TestClient,
+    ctx: dict[str, Any],
+) -> Any:
+    return client.post(
+        f"{DECISIONS_URL}/{ctx['decision_id']}/assign",
+        json={"cluster_id": ctx["candidate_ids"][0]},
+    )
 
 
 @when(
@@ -378,6 +439,34 @@ def action_recorded_for_cluster(
     user_action_repository.save.assert_called_once()
     saved_action = user_action_repository.save.call_args[0][0]
     assert saved_action.selected_cluster.cluster_id == cluster_id
+
+
+# --- ERE re-evaluation forwarding assertions (TEDSWS-530) ---
+
+
+@then("ERE receives a re-evaluation request")
+def ere_receives_request(ere_publish_service: AsyncMock) -> None:
+    ere_publish_service.publish_request.assert_awaited_once()
+
+
+@then("the request excludes the current placement and all candidates")
+def request_excludes_placement_and_candidates(
+    ere_publish_service: AsyncMock,
+    ctx: dict[str, Any],
+) -> None:
+    request = ere_publish_service.publish_request.call_args[0][0]
+    expected = {ctx["placement_id"], *ctx["candidate_ids"]}
+    assert set(request.excluded_cluster_ids) == expected
+    assert ctx["placement_id"] in request.excluded_cluster_ids
+
+
+@then("the request proposes the chosen cluster")
+def request_proposes_chosen_cluster(
+    ere_publish_service: AsyncMock,
+    ctx: dict[str, Any],
+) -> None:
+    request = ere_publish_service.publish_request.call_args[0][0]
+    assert request.proposed_cluster_ids == [ctx["candidate_ids"][0]]
 
 
 # --- Error assertions ---

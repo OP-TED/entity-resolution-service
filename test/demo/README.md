@@ -13,8 +13,7 @@ make install  # install test dependencies
 ```
 
 > **Curation step prerequisite:** The curation loop (Step 5) requires
-> `inject_ere_response.py` located in
-> [`src/scripts`](https://github.com/meaningfy-ws/entity-resolution-service/tree/develop/src/scripts)
+> `inject_ere_response.py` located in [`src/scripts`](../../src/scripts)
 > of this repository. Run with `--skip-curation` to bypass this step.
 
 ## How to run

@@ -49,6 +49,20 @@ Feature: Decision curation recommendations
     When the curator attempts to recommend rejection of all candidates for a decision that does not exist
     Then the system responds with a not found error
 
+  # --- ERE re-evaluation forwarding (TEDSWS-530) ---
+
+  Scenario: Rejecting all recommendations forwards an exclusion request to ERE
+    Given a decision with a known placement and candidates exists and is uncurated
+    When the curator recommends rejection of all candidates for the decision
+    Then ERE receives a re-evaluation request
+    And the request excludes the current placement and all candidates
+
+  Scenario: Recommending an alternative forwards a placement request to ERE
+    Given a decision with a known placement and candidates exists and is uncurated
+    When the curator recommends placement in the first candidate cluster
+    Then ERE receives a re-evaluation request
+    And the request proposes the chosen cluster
+
   # --- Recommend alternative cluster placement ---
 
   Scenario Outline: Recommend placement in an alternative cluster

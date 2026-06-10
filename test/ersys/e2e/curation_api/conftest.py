@@ -80,6 +80,8 @@ def _make_decision_doc(
         "candidates": candidates,
         "created_at": now,
         "updated_at": None,
+        "previous_review_count": 0,
+        "reviewed_since_placement": False,
     }
 
 

@@ -22,6 +22,7 @@ from ers.curation.domain.exceptions import AlreadyCuratedError
 from ers.curation.domain.models import UserActionFactory
 from ers.curation.services._pymongo_translation import translate_mongo_errors
 from ers.curation.services.canonical_entity_service import CanonicalEntityService
+from ers.resolution_decision_store.adapters.decision_repository import DecisionRepository
 from ers.users.adapters.user_repository import UserRepository
 from ers.users.domain.users import User
 
@@ -34,20 +35,73 @@ class UserActionService:
         user_action_repository: UserActionCurationRepository,
         entity_mention_repository: EntityMentionCurationRepository,
         user_repository: UserRepository,
+        decision_repository: DecisionRepository,
     ) -> None:
         self._user_action_repository = user_action_repository
         self._entity_mention_repository = entity_mention_repository
         self._user_repository = user_repository
+        self._decision_repository = decision_repository
 
-    async def _check_not_already_curated(self, decision: Decision) -> None:
-        """Raise AlreadyCuratedError if decision was already curated on its current version."""
-        if decision.updated_at is not None:
-            already_curated = await self._user_action_repository.has_current_action(
-                about_entity_mention=decision.about_entity_mention,
-                since=decision.updated_at,
-            )
-            if already_curated:
-                raise AlreadyCuratedError(decision.id)
+    async def _record_or_compensate(self, decision: Decision, user_action: UserAction) -> None:
+        """Atomically claim the placement's review slot for ``user_action``.
+
+        Save-then-claim-then-compensate sequence:
+
+        1. The caller has already saved ``user_action`` to the audit log.
+        2. We call ``decision_repository.record_review`` with the action's
+           timestamp. The repository's filter ``reviewed_since_placement !=
+           True`` makes the claim atomic at the database level.
+        3. On a successful claim, return — the decision-row counter is
+           incremented and the flag is updated.
+        4. On a lost race (``record_review`` returns ``False``), delete the
+           just-saved ``user_action`` to keep the audit log consistent with
+           the decision-row state, then raise ``AlreadyCuratedError``.
+
+        This replaces the previous read-then-write idempotency guard
+        (``has_current_action`` + later ``save``), which had a TOCTOU window
+        that allowed concurrent submissions to both pass and both record.
+
+        Raises:
+            AlreadyCuratedError: When another concurrent submission has
+                already claimed this placement's slot.
+        """
+        claimed = await self._decision_repository.record_review(decision.id, user_action.created_at)
+        if not claimed:
+            await self._user_action_repository.delete_by_id(user_action.id)
+            raise AlreadyCuratedError(decision.id)
+
+    async def _resolve_decision_filter(
+        self, filters: UserActionFilters | None
+    ) -> UserActionFilters | None:
+        """Resolve ``decision_id`` in ``filters`` to ``about_entity_mention``.
+
+        When ``filters.decision_id`` is set the service looks up the Decision to
+        obtain the entity mention identifier that links user_action documents to
+        the decision.  The returned filter has ``about_entity_mention`` populated
+        and ``decision_id`` cleared (the repository does not use ``decision_id``
+        directly — it queries by ``about_entity_mention``).
+
+        When ``decision_id`` is ``None`` the original filter is returned unchanged.
+
+        Args:
+            filters: The caller-supplied filter criteria, or ``None``.
+
+        Returns:
+            The (possibly updated) filter, or ``None`` when no filters were given.
+        """
+        if filters is None or filters.decision_id is None:
+            return filters
+        decision = await self._decision_repository.find_by_id(filters.decision_id)
+        if decision is None:
+            # Decision not found — return a filter that will yield no results
+            # (no about_entity_mention can match an absent decision).
+            return filters.model_copy(update={"decision_id": None})
+        return filters.model_copy(
+            update={
+                "decision_id": None,
+                "about_entity_mention": decision.about_entity_mention,
+            }
+        )
 
     @translate_mongo_errors
     async def list_user_actions(
@@ -55,8 +109,13 @@ class UserActionService:
         cursor_params: CursorParams,
         filters: UserActionFilters | None = None,
     ) -> CursorPage[UserActionSummary]:
-        """Return cursor-paginated user actions with optional filtering."""
-        page = await self._user_action_repository.find_with_cursor(cursor_params, filters)
+        """Return cursor-paginated user actions with optional filtering.
+
+        When ``filters.decision_id`` is set it is resolved to the corresponding
+        ``about_entity_mention`` so the repository can filter by the stored field.
+        """
+        resolved_filters = await self._resolve_decision_filter(filters)
+        page = await self._user_action_repository.find_with_cursor(cursor_params, resolved_filters)
         identifiers = [action.about_entity_mention for action in page.results]
         entity_mentions = await self._entity_mention_repository.find_by_identifiers(
             identifiers,
@@ -77,29 +136,65 @@ class UserActionService:
         )
 
     async def record_accept(self, actor: str, decision: Decision) -> None:
-        """Record an accept action in the user action trail."""
-        await self._check_not_already_curated(decision)
+        """Record an accept action in the user action trail.
+
+        Save-then-claim-then-compensate: the action is saved first as the
+        canonical audit entry, then ``record_review`` atomically claims the
+        placement's review slot on the decision row. If a concurrent caller
+        already claimed the slot, the just-saved audit row is deleted and
+        ``AlreadyCuratedError`` is raised so the HTTP layer can return 409.
+
+        Args:
+            actor: Identifier of the curator performing the action.
+            decision: The decision being curated.
+
+        Raises:
+            AlreadyCuratedError: If another concurrent submission has already
+                claimed this placement's review slot.
+        """
         user_action = UserActionFactory.create_accept(actor=actor, decision=decision)
         await self._user_action_repository.save(user_action)
+        await self._record_or_compensate(decision, user_action)
 
     async def record_reject(self, actor: str, decision: Decision) -> None:
-        """Record a reject action in the user action trail."""
-        await self._check_not_already_curated(decision)
+        """Record a reject action in the user action trail.
+
+        See ``record_accept`` for the save-then-claim-then-compensate
+        contract.
+
+        Args:
+            actor: Identifier of the curator performing the action.
+            decision: The decision being curated.
+
+        Raises:
+            AlreadyCuratedError: If another concurrent submission has already
+                claimed this placement's review slot.
+        """
         user_action = UserActionFactory.create_reject(actor=actor, decision=decision)
         await self._user_action_repository.save(user_action)
+        await self._record_or_compensate(decision, user_action)
 
     async def record_assign(self, actor: str, decision: Decision, cluster_id: str) -> None:
         """Record an assign action in the user action trail.
 
+        See ``record_accept`` for the save-then-claim-then-compensate
+        contract.
+
+        Args:
+            actor: Identifier of the curator performing the action.
+            decision: The decision being curated.
+            cluster_id: The cluster to assign the decision to.
+
         Raises:
-            AlreadyCuratedError: If decision was already curated on its current version.
+            AlreadyCuratedError: If another concurrent submission has already
+                claimed this placement's review slot.
             InvalidClusterError: If cluster_id is not in candidates.
         """
-        await self._check_not_already_curated(decision)
         user_action = UserActionFactory.create_assign(
             actor=actor, decision=decision, cluster_id=cluster_id
         )
         await self._user_action_repository.save(user_action)
+        await self._record_or_compensate(decision, user_action)
 
     async def get_selected_cluster_preview(
         self,

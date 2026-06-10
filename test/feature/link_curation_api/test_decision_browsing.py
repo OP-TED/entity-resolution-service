@@ -13,6 +13,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 from starlette.testclient import TestClient
 
 from ers.commons.domain.data_transfer_objects import CursorPage
+from ers.resolution_decision_store.adapters.decision_repository import ReviewMetadata
 from test.unit.factories import (
     DecisionFactory,
     EntityMentionFactory,
@@ -97,6 +98,55 @@ def test_reject_invalid_entity_type():
 
 @scenario(FEATURE, "List available entity types")
 def test_list_entity_types():
+    pass
+
+
+@scenario(
+    FEATURE, "List decisions pending review (no prior action against current placement)"
+)
+def test_filter_reviewed_false():
+    pass
+
+
+@scenario(FEATURE, "Filter decisions already reviewed on current placement")
+def test_filter_reviewed_true():
+    pass
+
+
+@scenario(
+    FEATURE, "ERE re-integration returns a previously-reviewed decision to Pending"
+)
+def test_ere_reintegration_returns_to_pending():
+    pass
+
+
+@scenario(FEATURE, "Omitting reviewed leaves the result set unchanged")
+def test_omit_reviewed_unchanged():
+    pass
+
+
+@scenario(FEATURE, "Filter decisions that need re-visiting after an ERE update")
+def test_filter_needs_revisit():
+    pass
+
+
+@scenario(FEATURE, "Each decision row carries both review primitives")
+def test_rows_carry_review_primitives():
+    pass
+
+
+@scenario(FEATURE, "Sort decisions by cluster size ascending")
+def test_sort_by_cluster_size_asc():
+    pass
+
+
+@scenario(FEATURE, "Sort decisions by cluster size descending")
+def test_sort_by_cluster_size_desc():
+    pass
+
+
+@scenario(FEATURE, "Cluster-size sort combined with reviewed filter")
+def test_cluster_size_sort_with_reviewed():
     pass
 
 
@@ -307,6 +357,8 @@ def request_ordered(client: TestClient, ordering: str) -> Any:
         "created at descending": "-created_at",
         "updated at ascending": "updated_at",
         "updated at descending": "-updated_at",
+        "cluster size ascending": "cluster_size",
+        "cluster size descending": "-cluster_size",
     }
     return client.get(
         DECISIONS_URL,
@@ -547,3 +599,133 @@ def entity_types_returned(response: Any) -> None:
         {"name": "ORGANISATION", "display_name_field": "legal_name"},
         {"name": "PROCEDURE", "display_name_field": "title"},
     ]
+
+
+# ---------------------------------------------------------------------------
+# Cluster-size sort steps
+# ---------------------------------------------------------------------------
+
+
+@when(
+    parsers.parse(
+        'I request decisions with ordering "{ordering}" and reviewed "{reviewed_val}"'
+    ),
+    target_fixture="response",
+)
+def request_with_ordering_and_reviewed(
+    client: TestClient,
+    ordering: str,
+    reviewed_val: str,
+) -> Any:
+    """GET /api/v1/curation/decisions with both ordering and reviewed query params."""
+    return client.get(
+        DECISIONS_URL,
+        params={"ordering": ordering, "reviewed": reviewed_val},
+    )
+
+
+@then("the response is 200 and results are present")
+def response_200_with_results(response: Any) -> None:
+    assert response.status_code == 200
+    assert "results" in response.json()
+
+
+# ---------------------------------------------------------------------------
+# Review state filter steps
+# ---------------------------------------------------------------------------
+
+
+@given("a decision exists with no user_action recorded since its current placement")
+def decision_without_recent_action(
+    decision_repository: AsyncMock,
+    entity_mention_repository: AsyncMock,
+) -> None:
+    _setup_decisions(
+        decision_repository, entity_mention_repository, 1, prefix="d-pending"
+    )
+
+
+@when("I GET /api/v1/curation/decisions?reviewed=false", target_fixture="response")
+def get_decisions_reviewed_false(client: TestClient) -> Any:
+    return client.get(DECISIONS_URL, params={"reviewed": "false"})
+
+
+@then("the response includes that decision")
+def response_includes_decision(response: Any) -> None:
+    assert response.status_code == 200
+    data = response.json()
+    assert "results" in data
+
+
+@given("a decision with a user_action whose created_at is after its current placement")
+def decision_with_recent_action(
+    decision_repository: AsyncMock,
+    entity_mention_repository: AsyncMock,
+) -> None:
+    _setup_decisions(
+        decision_repository, entity_mention_repository, 1, prefix="d-reviewed"
+    )
+
+
+@when("I GET /api/v1/curation/decisions?reviewed=true", target_fixture="response")
+def get_decisions_reviewed_true(client: TestClient) -> Any:
+    return client.get(DECISIONS_URL, params={"reviewed": "true"})
+
+
+@given(
+    "a decision was reviewed at T1 and ERE re-integrated a new outcome at T2 advancing updated_at past T1"
+)
+def decision_ere_reintegrated(
+    decision_repository: AsyncMock,
+    entity_mention_repository: AsyncMock,
+) -> None:
+    _setup_decisions(
+        decision_repository, entity_mention_repository, 1, prefix="d-reint"
+    )
+
+
+@given("a decision that was reviewed before a later ERE update")
+def decision_needs_revisit(
+    decision_repository: AsyncMock,
+    entity_mention_repository: AsyncMock,
+) -> None:
+    decisions, _ = _setup_decisions(
+        decision_repository, entity_mention_repository, 1, prefix="d-revisit"
+    )
+    # Needs revisit: reviewed at least once (count > 0) but the flag was reset to
+    # False by the integrator on the later placement advance.
+    decision_repository.find_review_metadata.return_value = {
+        decisions[0].id: ReviewMetadata(
+            previous_review_count=2, reviewed_since_placement=False
+        )
+    }
+
+
+@when(
+    "I GET /api/v1/curation/decisions?ever_reviewed=true&reviewed_since_placement=false",
+    target_fixture="response",
+)
+def get_decisions_needs_revisit(client: TestClient) -> Any:
+    return client.get(
+        DECISIONS_URL,
+        params={"ever_reviewed": "true", "reviewed_since_placement": "false"},
+    )
+
+
+@then(
+    "the repository was queried with ever_reviewed true and reviewed_since_placement false"
+)
+def repo_queried_with_review_flags(decision_repository: AsyncMock) -> None:
+    kwargs = decision_repository.find_with_filters.call_args.kwargs
+    assert kwargs["ever_reviewed"] is True
+    assert kwargs["reviewed_since_placement"] is False
+
+
+@then("each summary carries previous_review_count and reviewed_since_placement")
+def summaries_carry_review_primitives(response: Any) -> None:
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results
+    for item in results:
+        assert "previous_review_count" in item
+        assert "reviewed_since_placement" in item

@@ -8,7 +8,7 @@ from ers.commons.domain.cursor import encode_cursor
 from ers.commons.domain.data_transfer_objects import CursorParams
 from ers.curation.adapters.user_action_repository import MongoUserActionCurationRepository
 from ers.curation.domain.data_transfer_objects import BaseOrdering, UserActionFilters
-from test.unit.factories import UserActionFactory
+from test.unit.factories import EntityMentionIdentifierFactory, UserActionFactory
 
 
 def _async_iter(items: list):
@@ -48,6 +48,26 @@ def repo(collection: AsyncMock) -> MongoUserActionCurationRepository:
     db = MagicMock()
     db.__getitem__ = MagicMock(return_value=collection)
     return MongoUserActionCurationRepository(db)
+
+
+class TestHasCurrentAction:
+    async def test_uses_strict_gt_on_placement_boundary(
+        self,
+        repo: MongoUserActionCurationRepository,
+        collection: AsyncMock,
+    ) -> None:
+        """A5: the "action since placement" boundary must use ``$gt`` (strict),
+        aligned with ``find_reviewed_since_placement``. An action recorded at the
+        exact placement instant is therefore *not* counted as a current action.
+        """
+        since = datetime(2026, 6, 2, 12, 0, 0, tzinfo=UTC)
+        identifier = EntityMentionIdentifierFactory.build()
+        collection.count_documents.return_value = 0
+
+        await repo.has_current_action(identifier, since)
+
+        query = collection.count_documents.call_args[0][0]
+        assert query["created_at"] == {"$gt": since}
 
 
 class TestBuildFilterQuery:
@@ -94,6 +114,30 @@ class TestBuildFilterQuery:
         assert result["action_type"] == "REJECT_ALL"
         assert result["actor"] == "admin@test.com"
         assert result["created_at"] == {"$gte": start}
+
+    def test_about_entity_mention_filter(self) -> None:
+        """Filtering by about_entity_mention emits the correct sub-document match."""
+        identifier = EntityMentionIdentifierFactory.build()
+        filters = UserActionFilters(about_entity_mention=identifier)
+        result = MongoUserActionCurationRepository._build_filter_query(filters)
+        assert result == {"about_entity_mention": identifier.model_dump(mode="python")}
+
+    def test_about_entity_mention_filter_none_when_not_set(self) -> None:
+        """When about_entity_mention is None the query contains no such key."""
+        filters = UserActionFilters(action_type=UserActionType.ACCEPT_TOP)
+        result = MongoUserActionCurationRepository._build_filter_query(filters)
+        assert "about_entity_mention" not in result
+
+    def test_about_entity_mention_composes_with_action_type(self) -> None:
+        """about_entity_mention and action_type are ANDed together in the query."""
+        identifier = EntityMentionIdentifierFactory.build()
+        filters = UserActionFilters(
+            about_entity_mention=identifier,
+            action_type=UserActionType.REJECT_ALL,
+        )
+        result = MongoUserActionCurationRepository._build_filter_query(filters)
+        assert result["action_type"] == "REJECT_ALL"
+        assert result["about_entity_mention"] == identifier.model_dump(mode="python")
 
 
 class TestGetSortInfo:
