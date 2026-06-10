@@ -101,6 +101,12 @@ minutes; subsequent starts are much faster.
 > so the database is populated with sample data on startup. The Webapp will have
 > something to display right away. You do not need to change anything in `.env`.
 
+> **Rebuilding with a clean cache:** If you have upgraded the source or made changes to
+> the Docker image and need to discard cached layers, run:
+> ```bash
+> make rebuild-clean
+> ```
+
 ### Verify
 
 Open these URLs in a browser — you should see a JSON response with
@@ -395,6 +401,12 @@ services:
 make infra-up
 ```
 
+> **Rebuilding with a clean cache:** To force a full rebuild of the ERE Docker image
+> without cached layers, run instead:
+> ```bash
+> make infra-rebuild-clean
+> ```
+
 ### Verify
 
 ```bash
@@ -435,11 +447,11 @@ The `.env` file has one variable:
 
 | Variable | Default | What it controls |
 |----------|---------|------------------|
-| `API_BACKEND_URL` | `http://curation-api:8000` | Address of the Curation API |
+| `API_BACKEND_URL` | `curation-api:8000` | Address of the Curation API (host and port only — no protocol prefix) |
 
 > The default value uses the Docker container name (`curation-api`) and works
-> as-is when the Webapp runs on the `ersys-local` network. Do not change it
-> unless you are running the Curation API on a different host.
+> as-is when the Webapp runs on the `ersys-local` network. The value must be
+> `host:port` only — without a protocol prefix. 
 
 ### Start the service
 
@@ -636,7 +648,8 @@ you commented out the `ersys-redis` and `redisinsight` services in ERE's
 
 **Webapp shows API errors** — Confirm the Curation API is running by opening
 `http://localhost:8000/health`. If it works, check that `API_BACKEND_URL` in the
-Webapp's `.env` is set to `http://curation-api:8000`.
+Webapp's `.env` is set to `curation-api:8000` (host and port only, no `http://`
+prefix — Nginx adds the protocol when proxying requests).
 
 **ERE processes nothing** — This is normal if no entity mentions have been
 submitted. ERE only processes messages when ERS publishes them. Submit an entity
@@ -645,3 +658,15 @@ mention through the ERS REST API or the Webapp to trigger resolution.
 **Resolution never completes** — Verify ERE is running and connected to the same
 Redis instance. Check that `REDIS_PASSWORD` and queue names match between ERS
 and ERE `.env` files (see [Configuration reference](#configuration-reference)).
+
+**Entity schema changes cause errors** — If you have modified the entity type
+configuration (`src/config/rdf_mention_config.yaml`) and the database was already
+initialised with the previous schema, you may see errors on startup or during
+request processing. Remove the data volumes and restart to start fresh:
+
+```bash
+make down-volumes   # stop services and delete all data volumes
+make up
+```
+
+All previously ingested data will be lost. This is expected when the schema changes.

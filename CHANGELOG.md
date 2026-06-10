@@ -5,7 +5,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [unreleased]
 
-## [1.1.0] - 2026-05-15
+## [1.1.0-rc.3] - 2026-06-10
+
+### Added
+* Curation decisions are now sorted by cluster size — clusters with more entities surface first in browsing responses
+* `cluster_size` and `reviewed_since_placement` fields on decision rows — enables per-cluster review-progress display and filtering by review status
+* Review counter in decision summary responses — reports how many decisions in each request set have been reviewed since placement
+* Cluster-size index: a materialised index tracking the size of every cluster, updated atomically on accept/reject actions
+* Decision browsing filter by `reviewed_since_placement` status
+* User-action idempotency: repeated curator actions on the same decision are detected and silently ignored
+* Reject action now excludes the current cluster placement from the candidate set
+* Operational scripts: `backfill_cluster_sizes` and `verify_cluster_sizes` for upgrading existing deployments; `backfill_previous_review_count` for the review-counter backfill; all scripts documented in `INSTALL.md` and `Makefile`
+
+### Fixed
+* Decision store: decision document is now rewritten on any material outcome change, preventing stale decisions surviving ERE re-evaluation rounds
+* Decision store: `$addFields` stage in cluster-size aggregation pipeline now runs before the cursor predicate (query correctness fix)
+* Curation: TOCTOU race condition on concurrent curator actions closed via atomic claim
+* Cluster-size index: entries with a zero count are deleted rather than stored
+* Backfill script: `reviewed_since_placement` is derived from the maximum action date during backfill
+* Seed script: `seed_db` now populates `cluster_sizes` after seeding decisions
+
+### Changed
+* Removed Meaningfy contact references and attributions from source files, documentation, and licence
+
+## [1.1.0-rc.2] - 2026-05-15
 ### Added
 * Immediate provisional mode: setting `ERS_COORDINATOR_SINGLE_REQUEST_TIME_BUDGET=0` returns a provisional identifier without waiting for ERE
 * Stateless multi-instance deployment via Redis Pub/Sub cross-instance notification — coordinators on separate instances signal each other when a resolution outcome arrives
