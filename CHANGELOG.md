@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [unreleased]
 
+
+## [1.1.0-rc.4] - 2026-06-30
+
+### Changed
+* Dockerfile updated to use fully qualified Docker Hub reference for the Python base image
+
+
 ## [1.1.0-rc.3] - 2026-06-10
 
 ### Added
