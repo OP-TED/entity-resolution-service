@@ -3,7 +3,7 @@ ARG ENVIRONMENT=production
 # =============================================================================
 # Builder stage: install dependencies
 # =============================================================================
-FROM python:3.14-slim AS builder
+FROM docker.io/library/python:3.14-slim AS builder
 
 ARG ENVIRONMENT
 
@@ -39,7 +39,7 @@ RUN if [ "$ENVIRONMENT" = "development" ]; then \
 # =============================================================================
 # Runtime stage: minimal image
 # =============================================================================
-FROM python:3.14-slim AS runtime
+FROM docker.io/library/python:3.14-slim AS runtime
 
 ARG ENVIRONMENT
 
