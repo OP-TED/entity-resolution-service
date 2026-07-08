@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [unreleased]
 
 
+## [1.0.0-rc.2] - 2026-06-30
+
+### Added
+* Filtering by decision status (TEDSWS-524)
+* Curator review indicators in the decision list and decision details view (TEDSWS-522)
+* Support for sending rejection decisions to the ERE (TEDSWS-530)
+
+### Changed
+* ERSys installation instructions and related documentation improved (TEDSWS-520)
+* Meaningfy-specific references removed from the source code repositories (TEDSWS-528)
+
+### Fixed
+* Decision status persistence after browser refresh (TEDSWS-512)
+
+
 ## [1.1.0-rc.4] - 2026-06-30
 
 ### Changed
