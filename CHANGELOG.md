@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 * Faulty healthcheck command in docker compose and CI scripts (TEDSWS-516)
+* Review recording compatibility with Amazon DocumentDB
 
 ### Removed
 * SonarCloud integration, as it depended on contractor-specific configuration (TEDSWS-528)
