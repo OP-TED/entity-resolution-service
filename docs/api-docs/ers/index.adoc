@@ -1,0 +1,1208 @@
+= ERS REST API
+0.1.0
+:toc: left
+:numbered:
+:toclevels: 4
+:source-highlighter: highlightjs
+:keywords: openapi, rest, ERS REST API
+:app-name: ERS REST API
+
+== Introduction
+The Entity Resolution Service (ERS) REST API provides endpoints for resolving entity mentions to canonical cluster identifiers, looking up existing cluster assignments, and synchronising assignment deltas. It serves as the primary integration point for external systems that need to resolve, deduplicate, or track entity mentions across multiple sources.
+
+
+== Endpoints
+
+
+[.Health]
+=== Health
+
+
+[.healthGet]
+==== GET /health
+
+Health
+
+===== Description
+
+Returns service liveness status and the entity types supported by this ERS instance.
+
+
+===== Parameters
+
+
+
+
+
+
+
+===== Return Type
+
+<<HealthResponse,HealthResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Successful Response
+| <<HealthResponse,HealthResponse>>
+
+|===
+
+
+
+[.Lookup]
+=== Lookup
+
+
+[.apiV1LookupGet]
+==== GET /api/v1/lookup
+
+Lookup
+
+===== Description
+
+Retrieve current cluster assignment for a mention triad.
+
+
+===== Parameters
+
+
+
+
+
+
+[cols="2,3,1,1,1"]
+.Query Parameters
+|===
+|Name| Description| Required| Default| Pattern
+
+| source_id
+| Source system identifier 
+| X
+| null
+| 
+
+| request_id
+| Request identifier 
+| X
+| null
+| 
+
+| entity_type
+| Entity type 
+| X
+| null
+| 
+
+|===
+
+
+===== Return Type
+
+<<LookupResponse,LookupResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Current cluster assignment for the requested mention.
+| <<LookupResponse,LookupResponse>>
+
+
+| 400
+| Validation error
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 404
+| Mention not found
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.bulkApiV1LookupBulkPost]
+==== POST /api/v1/lookup-bulk
+
+Lookup Bulk
+
+===== Description
+
+Look up cluster assignments for multiple entity mentions in a single batch.
+
+
+===== Parameters
+
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| BulkLookupRequest
+|  <<BulkLookupRequest,BulkLookupRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+<<BulkLookupResponse,BulkLookupResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Cluster assignments for all requested mentions.
+| <<BulkLookupResponse,BulkLookupResponse>>
+
+
+| 400
+| Validation error
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.bulkApiV1RefreshBulkPost]
+==== POST /api/v1/refresh-bulk
+
+Refresh Bulk
+
+===== Description
+
+Retrieve delta of changed assignments since last synchronisation.
+
+
+===== Parameters
+
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| RefreshBulkRequest
+|  <<RefreshBulkRequest,RefreshBulkRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+<<RefreshBulkResponse,RefreshBulkResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Delta of cluster assignment changes since the last synchronisation cursor.
+| <<RefreshBulkResponse,RefreshBulkResponse>>
+
+
+| 400
+| Validation error
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.Resolution]
+=== Resolution
+
+
+[.apiV1ResolvePost]
+==== POST /api/v1/resolve
+
+Resolve
+
+===== Description
+
+Resolve an entity mention and return canonical or provisional cluster ID.
+
+
+===== Parameters
+
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| EntityMentionResolutionRequest
+|  <<EntityMentionResolutionRequest,EntityMentionResolutionRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+<<EntityMentionResolutionResult,EntityMentionResolutionResult>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| Canonical resolution
+| <<EntityMentionResolutionResult,EntityMentionResolutionResult>>
+
+
+| 202
+| Provisional resolution
+| -
+
+
+| 400
+| Validation error
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 503
+| Backend service unavailable (MongoDB, Redis, or messaging channel)
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[.bulkApiV1ResolveBulkPost]
+==== POST /api/v1/resolve-bulk
+
+Resolve Bulk
+
+===== Description
+
+Resolve multiple entity mentions in a single batch.
+
+
+===== Parameters
+
+
+
+[cols="2,3,1,1,1"]
+.Body Parameter
+|===
+|Name| Description| Required| Default| Pattern
+
+| BulkResolveRequest
+|  <<BulkResolveRequest,BulkResolveRequest>>
+| X
+| 
+| 
+
+|===
+
+
+
+
+
+===== Return Type
+
+<<BulkResolveResponse,BulkResolveResponse>>
+
+
+===== Content Type
+
+* application/json
+
+===== Responses
+
+.HTTP Response Codes
+[cols="2,3,1"]
+|===
+| Code | Message | Datatype
+
+
+| 200
+| All canonical
+| <<BulkResolveResponse,BulkResolveResponse>>
+
+
+| 202
+| All provisional
+| -
+
+
+| 207
+| Mixed outcomes
+| -
+
+
+| 400
+| Validation error
+| <<ErrorResponse,ErrorResponse>>
+
+
+| 503
+| Backend service unavailable (MongoDB, Redis, or messaging channel)
+| <<ErrorResponse,ErrorResponse>>
+
+|===
+
+
+
+[#models]
+== Models
+
+
+[#BulkLookupRequest]
+=== BulkLookupRequest
+
+Request body for POST /lookup-bulk.
+
+
+[.fields-BulkLookupRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| mentions
+| X
+| 
+|  `List` of <<LookupRequest,LookupRequest>>
+| One or more mention triads to look up in a single batch.
+|     
+
+|===
+
+
+
+[#BulkLookupResponse]
+=== BulkLookupResponse
+
+Response body for POST /lookup-bulk.
+
+
+[.fields-BulkLookupResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| results
+| X
+| 
+|  `List` of <<BulkLookupResult,BulkLookupResult>>
+| Per-mention results, one for each item in the request.
+|     
+
+|===
+
+
+
+[#BulkLookupResult]
+=== BulkLookupResult
+
+Result of looking up a single entity mention in a bulk batch.
+
+Each item is either a success (cluster_reference + last_updated present)
+or an error (error present), never both.
+
+
+[.fields-BulkLookupResult]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| identified_by
+| X
+| 
+| <<EntityMentionIdentifierOutput,EntityMentionIdentifier>>
+| Triad identifying the entity mention this result refers to.
+|     
+
+| cluster_reference
+| 
+| X
+| <<ClusterReference,ClusterReference>>
+| Current canonical cluster assignment for the mention.
+|     
+
+| last_updated
+| 
+| X
+|  `Date`
+| Timestamp of the most recent assignment update.
+| date-time    
+
+| context
+| 
+| X
+|  `String`
+| Optional context originally submitted with the resolution request.
+|     
+
+| error
+| 
+| X
+| <<ErrorResponse,ErrorResponse>>
+| Error response with a code and description.
+|     
+
+|===
+
+
+
+[#BulkResolveRequest]
+=== BulkResolveRequest
+
+Request body for POST /resolveBulk.
+
+
+[.fields-BulkResolveRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| mentions
+| X
+| 
+|  `List` of <<EntityMentionResolutionRequest,EntityMentionResolutionRequest>>
+| One or more entity mentions to resolve in a single batch.
+|     
+
+|===
+
+
+
+[#BulkResolveResponse]
+=== BulkResolveResponse
+
+Response body for POST /resolveBulk.
+
+
+[.fields-BulkResolveResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| results
+| X
+| 
+|  `List` of <<EntityMentionResolutionResult,EntityMentionResolutionResult>>
+| Per-mention results, one for each item in the request.
+|     
+
+|===
+
+
+
+[#ClusterReference]
+=== ClusterReference
+
+A reference to a cluster to which an entity is deemed to belong, with an associated confidence and similarity scores.
+
+A cluster is a set of entity mentions that have been determined to refer to the same real-world entity.
+Each cluster has a unique clusterId.
+
+A cluster reference is used to report the association between an entity mention and a cluster 
+of equivalence.
+
+
+[.fields-ClusterReference]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| cluster_id
+| X
+| 
+|  `String`
+| The identifier of the cluster/canonical entity that is considered equivalent to the subject entity mention that an &#x60;EntityMentionResolutionResponse&#x60; refers to. 
+|     
+
+| confidence_score
+| X
+| 
+|  `BigDecimal`
+| A 0-1 value of how confident the ERE is about the equivalence between the subject entity mention and the target canonical entity. 
+|     
+
+| similarity_score
+| X
+| 
+|  `BigDecimal`
+| A 0-1 score representing the pairwise comparison between a mention and a cluster (likely based on a representative representation). 
+|     
+
+|===
+
+
+
+[#EntityMention]
+=== EntityMention
+
+An entity mention is a representation of a real-world entity, as provided by the ERS.
+It contains the entity data, along with metadata like type and format.
+
+
+[.fields-EntityMention]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| object_description
+| 
+| X
+|  `String`
+| Optional descriptive text for the model instance.
+|     
+
+| identifiedBy
+| X
+| 
+| <<EntityMentionIdentifierInput,EntityMentionIdentifier>>
+| The identification triad of the entity mention. 
+|     
+
+| content_type
+| X
+| 
+|  `String`
+| A string about the MIME format of &#x60;content&#x60; (e.g. text/turtle, application/ld+json) 
+|     
+
+| content
+| X
+| 
+|  `String`
+| A code string representing the entity mention details (eg, RDF or XML description). 
+|     
+
+| parsed_representation
+| 
+| X
+|  `String`
+| JSON representation of the parsed entity data. 
+|     
+
+| context
+| 
+| X
+|  `String`
+| Optional context reference (e.g. notice or document ID). 
+|     
+
+|===
+
+
+
+[#EntityMentionIdentifierInput]
+=== EntityMentionIdentifier
+
+A container that groups the attributes needed to identify an entity mention in a resolution request
+or response.
+
+As per ERS architectural decision, in the whole ERS and ERE systems, there is always a deterministic
+method to build a canonical identifier from the combination of &#x60;sourceId&#x60;, &#x60;requestId&#x60; and &#x60;entityType&#x60;
+(eg, string concatenation plus some prefix). Similarly, a cluster ID (mentioned in various places in 
+in this hereby ERE service schema) can be built from an entity that is initially the only cluster member.
+
+
+[.fields-EntityMentionIdentifierInput]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| object_description
+| 
+| X
+|  `String`
+| Optional descriptive text for the model instance.
+|     
+
+| source_id
+| X
+| 
+|  `String`
+| The ID or URI of the ERS client that originated the request. This identifies an application or a  person accessing the ERS system. 
+|     
+
+| request_id
+| X
+| 
+|  `String`
+| A string representing the unique ID of the request made to the ERS system. In general, this is unique only within the scope of the source and the entity type, ie, within &#x60;sourceId&#x60; and &#x60;entityType&#x60;.   Moreover, this is **not** the same as &#x60;ereRequestId&#x60;, which instead, is internal to the ERE and is  used to match responses to requests. 
+|     
+
+| entity_type
+| X
+| 
+|  `String`
+| A string representing the entity type (based on CET). This is typically a URI.  Note that this is at this level, and not at &#x60;EntityMention&#x60;, since, as said above,  it&#39;s needed to identify the entity, even when its content is not present. For the same reason, it&#39;s used both for &#x60;EREResolutionRequest&#x60; and &#x60;EREResolutionResponse&#x60; messages., 
+|     
+
+|===
+
+
+
+[#EntityMentionIdentifierOutput]
+=== EntityMentionIdentifier
+
+A container that groups the attributes needed to identify an entity mention in a resolution request
+or response.
+
+As per ERS architectural decision, in the whole ERS and ERE systems, there is always a deterministic
+method to build a canonical identifier from the combination of &#x60;sourceId&#x60;, &#x60;requestId&#x60; and &#x60;entityType&#x60;
+(eg, string concatenation plus some prefix). Similarly, a cluster ID (mentioned in various places in 
+in this hereby ERE service schema) can be built from an entity that is initially the only cluster member.
+
+
+[.fields-EntityMentionIdentifierOutput]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| source_id
+| X
+| 
+|  `String`
+| The ID or URI of the ERS client that originated the request. This identifies an application or a  person accessing the ERS system. 
+|     
+
+| request_id
+| X
+| 
+|  `String`
+| A string representing the unique ID of the request made to the ERS system. In general, this is unique only within the scope of the source and the entity type, ie, within &#x60;sourceId&#x60; and &#x60;entityType&#x60;.   Moreover, this is **not** the same as &#x60;ereRequestId&#x60;, which instead, is internal to the ERE and is  used to match responses to requests. 
+|     
+
+| entity_type
+| X
+| 
+|  `String`
+| A string representing the entity type (based on CET). This is typically a URI.  Note that this is at this level, and not at &#x60;EntityMention&#x60;, since, as said above,  it&#39;s needed to identify the entity, even when its content is not present. For the same reason, it&#39;s used both for &#x60;EREResolutionRequest&#x60; and &#x60;EREResolutionResponse&#x60; messages., 
+|     
+
+|===
+
+
+
+[#EntityMentionResolutionRequest]
+=== EntityMentionResolutionRequest
+
+Request body for POST /resolve (and each item in a bulk batch).
+
+
+[.fields-EntityMentionResolutionRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| mention
+| X
+| 
+| <<EntityMention,EntityMention>>
+| The entity mention to resolve.
+|     
+
+|===
+
+
+
+[#EntityMentionResolutionResult]
+=== EntityMentionResolutionResult
+
+Result of resolving a single entity mention.
+
+Used as the API response for POST /resolve, as the internal coordinator
+return value, and as the per-item result in bulk resolve responses.
+
+For single /resolve, this is always a success (errors become ErrorResponse
+via exception handlers).  In bulk context, individual items may carry
+error_code + detail instead of success fields.
+
+If the coordinator later needs to carry extra metadata, extract a
+dedicated internal model at that point.
+
+
+[.fields-EntityMentionResolutionResult]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| identified_by
+| X
+| 
+| <<EntityMentionIdentifierOutput,EntityMentionIdentifier>>
+| Triad identifying the entity mention this result refers to.
+|     
+
+| canonical_entity_id
+| 
+| X
+|  `String`
+| Cluster identifier assigned to the mention.
+|     
+
+| status
+| 
+| X
+| <<ResolutionOutcome,ResolutionOutcome>>
+| Whether the resolution is canonical or provisional.
+|    CANONICAL, PROVISIONAL,  
+
+| error
+| 
+| X
+| <<ErrorResponse,ErrorResponse>>
+| Error response with a code a description.
+|     
+
+|===
+
+
+
+[#EntityTypeInfo]
+=== EntityTypeInfo
+
+A supported entity type exposed by this ERS instance.
+
+
+[.fields-EntityTypeInfo]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| name
+| X
+| 
+|  `String`
+| Human-readable name of the entity type (e.g. &#39;person&#39;, &#39;organization&#39;).
+|     
+
+| rdf_type
+| X
+| 
+|  `String`
+| RDF class URI mapped to this entity type.
+|     
+
+|===
+
+
+
+[#ErrorCode]
+=== ErrorCode
+
+Machine-readable error codes returned in error responses.
+
+
+
+
+[.fields-ErrorCode]
+[cols="1"]
+|===
+| Enum Values
+
+| VALIDATION_ERROR
+| IDEMPOTENCY_CONFLICT
+| PARSING_FAILED
+| MENTION_NOT_FOUND
+| SOURCE_NOT_FOUND
+| SERVICE_ERROR
+| SERVICE_TIMEOUT
+| APPLICATION_ERROR
+| SERVICE_UNAVAILABLE
+
+|===
+
+
+[#ErrorResponse]
+=== ErrorResponse
+
+Standard error response body returned by all ERS REST API endpoints.
+
+The &#x60;&#x60;request_id&#x60;&#x60; field carries the ERS business UUID set by the request
+middleware (&#x60;&#x60;set_request_id&#x60;&#x60; in &#x60;&#x60;ers.commons.adapters.tracing&#x60;&#x60;). It is
+populated only by handlers that have access to that context — primarily the
+&#x60;&#x60;Exception&#x60;&#x60; (HTTP 500) handler — and is &#x60;&#x60;None&#x60;&#x60; on responses produced
+before the middleware ran or by handlers that do not need correlation.
+
+
+[.fields-ErrorResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| error_code
+| X
+| 
+| <<ErrorCode,ErrorCode>>
+| 
+|    VALIDATION_ERROR, IDEMPOTENCY_CONFLICT, PARSING_FAILED, MENTION_NOT_FOUND, SOURCE_NOT_FOUND, SERVICE_ERROR, SERVICE_TIMEOUT, APPLICATION_ERROR, SERVICE_UNAVAILABLE,  
+
+| message
+| X
+| 
+|  `String`
+| Human-readable explanation of the error.
+|     
+
+| request_id
+| 
+| X
+|  `String`
+| ERS business request UUID for log/trace correlation. Populated by handlers that run after the request-id middleware.
+|     
+
+|===
+
+
+
+[#HTTPValidationError]
+=== HTTPValidationError
+
+
+
+
+[.fields-HTTPValidationError]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| detail
+| 
+| 
+|  `List` of <<ValidationError,ValidationError>>
+| 
+|     
+
+|===
+
+
+
+[#HealthResponse]
+=== HealthResponse
+
+Response model for the health endpoint.
+
+
+[.fields-HealthResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| status
+| X
+| 
+|  `String`
+| Service liveness status; always &#39;ok&#39; when the service is up.
+|     
+
+| supported_entity_types
+| X
+| 
+|  `List` of <<EntityTypeInfo,EntityTypeInfo>>
+| List of entity types this ERS instance is configured to resolve.
+|     
+
+|===
+
+
+
+[#LocationElement]
+=== LocationElement
+
+
+
+
+[.fields-LocationElement]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+|===
+
+
+
+[#LookupRequest]
+=== LookupRequest
+
+Query parameters for GET /lookup.
+
+
+[.fields-LookupRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| identified_by
+| X
+| 
+| <<EntityMentionIdentifierInput,EntityMentionIdentifier>>
+| Triad identifying the entity mention to look up.
+|     
+
+|===
+
+
+
+[#LookupResponse]
+=== LookupResponse
+
+Current cluster assignment for an entity mention.
+
+Used as the response body for GET /lookup (single mention) and as
+each item inside RefreshBulkResponse (delta synchronisation).
+
+
+[.fields-LookupResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| identified_by
+| X
+| 
+| <<EntityMentionIdentifierOutput,EntityMentionIdentifier>>
+| Triad identifying the entity mention.
+|     
+
+| cluster_reference
+| X
+| 
+| <<ClusterReference,ClusterReference>>
+| Current canonical cluster assignment for the mention.
+|     
+
+| last_updated
+| X
+| 
+|  `Date`
+| Timestamp of the most recent assignment update.
+| date-time    
+
+| context
+| 
+| X
+|  `String`
+| Optional context originally submitted with the resolution request.
+|     
+
+|===
+
+
+
+[#RefreshBulkRequest]
+=== RefreshBulkRequest
+
+Request body for POST /refreshBulk.
+
+
+[.fields-RefreshBulkRequest]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| source_id
+| X
+| 
+|  `String`
+| Source system whose deltas to retrieve.
+|     
+
+| limit
+| 
+| 
+|  `Integer`
+| Maximum number of delta assignments to return per page.
+|     
+
+| continuation_cursor
+| 
+| X
+|  `String`
+| Opaque cursor returned by a previous response for pagination.
+|     
+
+|===
+
+
+
+[#RefreshBulkResponse]
+=== RefreshBulkResponse
+
+Response body for POST /refreshBulk.
+
+
+[.fields-RefreshBulkResponse]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| deltas
+| 
+| 
+|  `List` of <<LookupResponse,LookupResponse>>
+| Changed assignments since the last synchronisation snapshot.
+|     
+
+| has_more
+| X
+| 
+|  `Boolean`
+| Whether additional pages of deltas are available.
+|     
+
+| continuation_cursor
+| 
+| X
+|  `String`
+| Cursor to pass in the next request to retrieve the next page.
+|     
+
+|===
+
+
+
+[#ResolutionOutcome]
+=== ResolutionOutcome
+
+Possible outcomes of a single entity mention resolution.
+
+CANONICAL — the assignment was produced by the Entity Resolution Engine,
+    or an existing decision is being replayed (the stored answer is
+    authoritative regardless of how it was originally written).
+PROVISIONAL — the cluster ID was issued by ERS as a deterministic draft
+    identifier because ERE did not respond within the execution window.
+    This is a short-lived state; ERE will process the mention
+    asynchronously and may supersede it via the delta-sync channel.
+
+
+
+
+[.fields-ResolutionOutcome]
+[cols="1"]
+|===
+| Enum Values
+
+| CANONICAL
+| PROVISIONAL
+
+|===
+
+
+[#ValidationError]
+=== ValidationError
+
+
+
+
+[.fields-ValidationError]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+| loc
+| X
+| 
+|  `List` of <<LocationElement,LocationElement>>
+| 
+|     
+
+| msg
+| X
+| 
+|  `String`
+| 
+|     
+
+| type
+| X
+| 
+|  `String`
+| 
+|     
+
+| input
+| 
+| X
+|  `oas_any_type_not_mapped`
+| 
+|     
+
+| ctx
+| 
+| 
+|  `Object`
+| 
+|     
+
+|===
+
+

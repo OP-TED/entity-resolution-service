@@ -1,0 +1,57 @@
+Feature: Parse RDF Entity Mention into JSON Representation
+  As a service layer consumer of the RDF Mention Parser,
+  I want valid RDF content parsed and configured fields extracted into a JSON representation,
+  So that downstream components work with structured data regardless of the RDF serialisation format.
+
+  Background:
+    Given the parser is configured for ORGANISATION with 7 field mappings
+    And the entity type is "ORGANISATION"
+
+  Scenario Outline: Extract configured fields from valid RDF content
+    Given an RDF payload in "<content_type>" format describing an Organisation with <present_count> of 7 configured fields present
+    When the mention is parsed
+    Then a JSON representation is returned with <present_count> extracted fields
+    And the remaining <absent_count> configured fields are absent
+
+    Examples:
+      | content_type        | present_count | absent_count |
+      | text/turtle         | 7             | 0            |
+      | application/rdf+xml | 7             | 0            |
+      | text/turtle         | 2             | 5            |
+      | text/turtle         | 1             | 6            |
+
+  Scenario: Ignore RDF triples not declared in the configuration
+    Given an RDF Turtle payload describing an Organisation with all 7 configured fields and 3 additional properties not in the configuration
+    When the mention is parsed
+    Then a JSON representation is returned with 7 extracted fields
+    And no additional fields beyond the configured mappings appear in the result
+
+  Scenario: Extract fields from multi-hop property paths where intermediate nodes exist but leaf is absent
+    Given an RDF Turtle payload where the Organisation has a registered address node but the post code property is absent
+    When the mention is parsed
+    Then a JSON representation is returned
+    And the post_code field is absent from the result
+    And the other address fields that are present are correctly extracted
+
+  Scenario Outline: Handle content size boundaries
+    Given an RDF Turtle payload whose byte size is "<size_description>"
+    When the mention is parsed
+    Then "<outcome>"
+
+    Examples:
+      | size_description       | outcome                          |
+      | exactly 1 MB           | a JSON representation is returned |
+      | 1 byte over 1 MB       | a content_too_large error is raised |
+
+  Scenario Outline: Reject invalid input with the appropriate error
+    Given "<invalid_input>"
+    When the mention is parsed for entity type "<entity_type>"
+    Then a "<error_type>" error is raised
+
+    Examples:
+      | invalid_input                                                                        | entity_type  | error_type               |
+      | a payload with content type "application/json"                                        | ORGANISATION | unsupported_content_type |
+      | an RDF Turtle payload with malformed syntax                                           | ORGANISATION | malformed_rdf            |
+      | a valid RDF Turtle payload describing a Person, not an Organisation                   | ORGANISATION | entity_type_mismatch     |
+      | a valid Organisation RDF but with none of the 7 configured fields present             | ORGANISATION | empty_extraction         |
+      | a valid RDF Turtle payload describing an Organisation                                 | UNKNOWN_TYPE | unsupported_entity_type  |

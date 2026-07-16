@@ -1,0 +1,46 @@
+[#models]
+== Models
+
+{{#models}}
+    {{#model}}
+
+[#{{classname}}]
+=== {{#title}}{{title}}{{/title}}{{^title}}{{classname}}{{/title}}
+
+{{unescapedDescription}}
+
+
+{{^allowableValues}}
+[.fields-{{classname}}]
+[cols="2,1,1,2,4,1"]
+|===
+| Field Name| Required| Nullable | Type| Description | Format
+
+{{#vars}}
+| {{baseName}}
+| {{#required}}X{{/required}}
+| {{#isNullable}}X{{/isNullable}}
+| {{#isModel}}<<{{ dataType }}>>{{/isModel}}{{^isModel}}{{^isContainer}}{{^allowableValues}} `{{ dataType }}`{{/allowableValues}}{{#allowableValues}}{{^allowableValues.empty}}<<{{ dataType }}>>{{/allowableValues.empty}}{{/allowableValues}}{{/isContainer}}{{/isModel}}{{#isContainer}} `{{dataType}}` of <<{{complexType}}>>{{/isContainer}}
+| {{description}}
+| {{{dataFormat}}} {{#isEnum}}_Enum:_ {{#_enum}}{{this}}, {{/_enum}}{{/isEnum}} {{^isEnum}}{{^container}}{{^allowableValues.empty}} {{#allowableValues.values}}{{this}}, {{/allowableValues.values}} {{/allowableValues.empty}}{{/container}}{{/isEnum}}
+
+{{/vars}}
+|===
+{{/allowableValues}}
+
+{{#allowableValues}}
+
+[.fields-{{classname}}]
+[cols="1"]
+|===
+| Enum Values
+
+{{#allowableValues.values}}
+| {{this}}
+{{/allowableValues.values}}
+
+|===
+{{/allowableValues}}
+
+    {{/model}}
+{{/models}}

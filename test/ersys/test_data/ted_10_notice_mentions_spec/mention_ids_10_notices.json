@@ -1,0 +1,538 @@
+[
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_38958272-060e-4ec3-b06b-9a6f2e800d5e_Organization_ORG-0001",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "114809-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_38958272-060e-4ec3-b06b-9a6f2e800d5e_Organization_ORG-0002",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "114809-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_38958272-060e-4ec3-b06b-9a6f2e800d5e_Organization_ORG-0004",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "114809-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_38958272-060e-4ec3-b06b-9a6f2e800d5e_Organization_ORG-0005",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "114809-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_38958272-060e-4ec3-b06b-9a6f2e800d5e_Procedure_MnX8qyREnFMNLeS5MJAX9K",
+      "entity_type": "PROCEDURE"
+    },
+    "context": "114809-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_32e0c897-7c03-4f9e-995d-69a2d6303423_Organization_ORG-0001",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "224149-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_32e0c897-7c03-4f9e-995d-69a2d6303423_Procedure_MnX8qyREnFMNLeS5MJAX9K",
+      "entity_type": "PROCEDURE"
+    },
+    "context": "224149-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_42b67ec3-409b-4c26-a24c-c181b50c4cf7_Organization_ORG-0001",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "475632-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_42b67ec3-409b-4c26-a24c-c181b50c4cf7_Organization_ORG-0002",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "475632-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_42b67ec3-409b-4c26-a24c-c181b50c4cf7_Organization_ORG-0003",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "475632-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_42b67ec3-409b-4c26-a24c-c181b50c4cf7_Organization_ORG-0004",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "475632-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_42b67ec3-409b-4c26-a24c-c181b50c4cf7_Organization_ORG-0005",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "475632-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_42b67ec3-409b-4c26-a24c-c181b50c4cf7_Procedure_6dcsBnuV4FTNoRpTZHckqN",
+      "entity_type": "PROCEDURE"
+    },
+    "context": "475632-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_825e418f-896e-41e4-9c32-4948f5a663fe_Organization_ORG-0000",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "49602-2026"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_825e418f-896e-41e4-9c32-4948f5a663fe_Organization_ORG-0001",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "49602-2026"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_825e418f-896e-41e4-9c32-4948f5a663fe_Organization_ORG-0002",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "49602-2026"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_825e418f-896e-41e4-9c32-4948f5a663fe_Organization_ORG-0003",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "49602-2026"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_825e418f-896e-41e4-9c32-4948f5a663fe_Procedure_iNVWPykMuHh9p4AY3uzvA2",
+      "entity_type": "PROCEDURE"
+    },
+    "context": "49602-2026"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_70a254d5-81a1-43e8-8930-163789a42d0b_Organization_ORG-0001",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "501455-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_70a254d5-81a1-43e8-8930-163789a42d0b_Organization_ORG-0002",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "501455-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_70a254d5-81a1-43e8-8930-163789a42d0b_Organization_ORG-0003",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "501455-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_70a254d5-81a1-43e8-8930-163789a42d0b_Organization_ORG-0005",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "501455-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_70a254d5-81a1-43e8-8930-163789a42d0b_Organization_ORG-0004",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "501455-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_70a254d5-81a1-43e8-8930-163789a42d0b_Procedure_6dcsBnuV4FTNoRpTZHckqN",
+      "entity_type": "PROCEDURE"
+    },
+    "context": "501455-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0002",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0003",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0004",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0005",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0006",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0007",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0008",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0009",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0010",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0011",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0012",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0013",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0014",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0015",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0016",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0017",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0018",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0019",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0020",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0021",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0022",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0023",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0024",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0025",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0026",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Organization_ORG-0001",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_95b01565-b8bb-479c-bd66-3e108ae9d8f3_Procedure_MnX8qyREnFMNLeS5MJAX9K",
+      "entity_type": "PROCEDURE"
+    },
+    "context": "526987-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_15130856-7085-4643-b4ae-dbae9c593a01_Organization_ORG-0000",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "65030-2026"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_15130856-7085-4643-b4ae-dbae9c593a01_Organization_ORG-0002",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "65030-2026"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_15130856-7085-4643-b4ae-dbae9c593a01_Organization_ORG-0001",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "65030-2026"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_15130856-7085-4643-b4ae-dbae9c593a01_Organization_ORG-0003",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "65030-2026"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_15130856-7085-4643-b4ae-dbae9c593a01_Procedure_6dcsBnuV4FTNoRpTZHckqN",
+      "entity_type": "PROCEDURE"
+    },
+    "context": "65030-2026"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_77b65698-f066-4378-9d4e-97f449b51310_Organization_ORG-0002",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "716740-2023"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_77b65698-f066-4378-9d4e-97f449b51310_Organization_TPO-0001",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "716740-2023"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_77b65698-f066-4378-9d4e-97f449b51310_Organization_ORG-0001",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "716740-2023"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_77b65698-f066-4378-9d4e-97f449b51310_Procedure_6dcsBnuV4FTNoRpTZHckqN",
+      "entity_type": "PROCEDURE"
+    },
+    "context": "716740-2023"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_38a7f2fb-60bd-49c8-b67d-db600aa2dd5d_Organization_ORG-0002",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "795893-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_38a7f2fb-60bd-49c8-b67d-db600aa2dd5d_Organization_ORG-0001",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "795893-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_38a7f2fb-60bd-49c8-b67d-db600aa2dd5d_Procedure_iNVWPykMuHh9p4AY3uzvA2",
+      "entity_type": "PROCEDURE"
+    },
+    "context": "795893-2024"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_2fe9758e-1357-49ae-8fab-92625c123b38_Organization_ORG-0100",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "824688-2025"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_2fe9758e-1357-49ae-8fab-92625c123b38_Organization_ORG-9999",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "824688-2025"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_2fe9758e-1357-49ae-8fab-92625c123b38_Organization_ORG-0001",
+      "entity_type": "ORGANISATION"
+    },
+    "context": "824688-2025"
+  },
+  {
+    "entity_mention": {
+      "source_id": "TEDSWS",
+      "request_id": "http://data.europa.eu/a4g/resource/id_2fe9758e-1357-49ae-8fab-92625c123b38_Procedure_iNVWPykMuHh9p4AY3uzvA2",
+      "entity_type": "PROCEDURE"
+    },
+    "context": "824688-2025"
+  }
+]
