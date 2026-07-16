@@ -64,7 +64,7 @@ RUN if [ "$ENVIRONMENT" != "development" ]; then \
     fi
 
 # Container entrypoint
-COPY --chmod=755 src/infra/entrypoint.sh /entrypoint.sh
+COPY --chown=appuser:appuser --chmod=755 src/infra/entrypoint.sh /entrypoint.sh
 
 USER appuser
 
