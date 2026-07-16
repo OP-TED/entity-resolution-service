@@ -667,8 +667,8 @@ class MongoDecisionRepository(
 
         # Fallback path: either the action is stale (predates the boundary) or
         # the flag is already True (lost race / absent document). The guard
-        # ``$ne: True`` distinguishes them — a stale action still claims a slot
-        # and increments the counter without flipping the flag; a lost race
+        # ``$ne: True`` distinguishes them — a stale action is still counted
+        # (counter incremented) without consuming the slot (flag not set); a lost race
         # matches nothing.
         stale = await self._collection.update_one(
             {
