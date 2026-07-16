@@ -593,93 +593,112 @@ async def test_average_cluster_size_returns_zero_when_no_decisions(
 # ── record_review ─────────────────────────────────────────────────────────────
 
 
+def _result(modified_count):
+    return MagicMock(modified_count=modified_count)
+
+
 @pytest.mark.asyncio
-async def test_record_review_issues_aggregation_pipeline_update(repo, mock_collection):
-    """record_review uses an aggregation-update pipeline (list of stages)."""
-    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
+async def test_record_review_uses_classic_update_not_pipeline(repo, mock_collection):
+    """The write must use classic update operators (a ``dict``), never an
+    aggregation-update pipeline (a ``list``) — DocumentDB 5.0 does not support
+    pipeline-form updates. This is the regression lock for TEDSWS-524-1 §D."""
+    mock_collection.update_one = AsyncMock(return_value=_result(1))
     action_ts = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
 
     await repo.record_review("decision-abc", action_ts)
 
-    args, _ = mock_collection.update_one.call_args
-    filter_doc, update_arg = args
+    filter_doc, update_doc = mock_collection.update_one.call_args.args
     assert filter_doc["_id"] == "decision-abc"
-    assert isinstance(update_arg, list), "update must be a pipeline (list of stages)"
-    assert len(update_arg) == 1
-    assert "$set" in update_arg[0]
-    set_stage = update_arg[0]["$set"]
-    assert "previous_review_count" in set_stage
-    assert "reviewed_since_placement" in set_stage
+    assert isinstance(update_doc, dict), "update must be classic operators, not a pipeline list"
+    assert update_doc["$inc"] == {"previous_review_count": 1}
+    assert update_doc["$set"] == {"reviewed_since_placement": True}
 
 
 @pytest.mark.asyncio
-async def test_record_review_filter_includes_concurrency_guard(repo, mock_collection):
-    """The filter must require ``reviewed_since_placement != True`` so a concurrent
-    second caller hits ``modified_count == 0`` (closes the TOCTOU race)."""
-    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
-
-    await repo.record_review("decision-abc", datetime(2026, 6, 5, tzinfo=UTC))
-
-    filter_doc = mock_collection.update_one.call_args.args[0]
-    assert filter_doc.get("reviewed_since_placement") == {"$ne": True}, (
-        "filter must gate the claim on ``reviewed_since_placement != True``"
-    )
-
-
-@pytest.mark.asyncio
-async def test_record_review_returns_true_when_claim_succeeds(repo, mock_collection):
-    """Modified one document → claim succeeded → return True."""
-    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
+async def test_record_review_fresh_action_claims_in_single_write(repo, mock_collection):
+    """A fresh action (after the placement boundary) is claimed by the first
+    update alone — the stale fallback write is never issued."""
+    mock_collection.update_one = AsyncMock(return_value=_result(1))
 
     result = await repo.record_review("decision-abc", datetime(2026, 6, 5, tzinfo=UTC))
 
     assert result is True
+    assert mock_collection.update_one.call_count == 1
 
 
 @pytest.mark.asyncio
-async def test_record_review_returns_false_when_race_lost(repo, mock_collection):
-    """Modified zero documents → another concurrent caller won the claim → return False."""
-    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=0))
-
-    result = await repo.record_review("decision-abc", datetime(2026, 6, 5, tzinfo=UTC))
-
-    assert result is False
-
-
-@pytest.mark.asyncio
-async def test_record_review_returns_false_when_document_missing(repo, mock_collection):
-    """Missing decision → ``modified_count == 0`` → return False (no upsert)."""
-    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=0))
-
-    result = await repo.record_review(
-        "nonexistent-id", datetime(2026, 6, 5, tzinfo=UTC)
-    )
-
-    assert result is False
-    # And no upsert was attempted.
-    assert mock_collection.update_one.call_args.kwargs.get("upsert", False) is False
-
-
-@pytest.mark.asyncio
-async def test_record_review_pipeline_compares_action_timestamp_to_placement_boundary(
+async def test_record_review_fresh_filter_compares_action_to_placement_boundary(
     repo, mock_collection
 ):
-    """The $cond inside the pipeline compares action_created_at against
-    ``$ifNull(updated_at, created_at)`` — the stored placement boundary."""
-    mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
+    """The fresh-path filter encodes ``action > boundary`` as a flat ``$or`` on
+    the stored boundary (``updated_at`` if present else ``created_at``) — the
+    exact DocumentDB-safe shape used by ``_execute_update``."""
+    mock_collection.update_one = AsyncMock(return_value=_result(1))
     action_ts = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
 
     await repo.record_review("decision-abc", action_ts)
 
-    pipeline = mock_collection.update_one.call_args.args[1]
-    flag_expr = pipeline[0]["$set"]["reviewed_since_placement"]
-    assert "$cond" in flag_expr
-    cond_branches = flag_expr["$cond"]
-    # First element of $cond is the predicate; we expect a $gt against $ifNull.
-    predicate = cond_branches[0]
-    assert "$gt" in predicate
-    assert predicate["$gt"][0] == action_ts
-    assert predicate["$gt"][1] == {"$ifNull": ["$updated_at", "$created_at"]}
+    filter_doc = mock_collection.update_one.call_args.args[0]
+    assert filter_doc["reviewed_since_placement"] == {"$ne": True}
+    assert filter_doc["$or"] == [
+        {"updated_at": {"$lt": action_ts}},
+        {"updated_at": None, "created_at": {"$lt": action_ts}},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_record_review_stale_action_increments_without_setting_flag(
+    repo, mock_collection
+):
+    """A stale action (not after the boundary) misses the fresh filter, so the
+    fallback write increments the counter but does NOT set the flag — the slot
+    stays unclaimed. Returns True (the action was still counted)."""
+    mock_collection.update_one = AsyncMock(side_effect=[_result(0), _result(1)])
+
+    result = await repo.record_review("decision-abc", datetime(2026, 6, 5, tzinfo=UTC))
+
+    assert result is True
+    assert mock_collection.update_one.call_count == 2
+    fallback_filter, fallback_update = mock_collection.update_one.call_args_list[1].args
+    assert fallback_filter == {"_id": "decision-abc", "reviewed_since_placement": {"$ne": True}}
+    assert fallback_update == {"$inc": {"previous_review_count": 1}}
+    assert "$set" not in fallback_update
+
+
+@pytest.mark.asyncio
+async def test_record_review_both_filters_gate_on_concurrency_guard(repo, mock_collection):
+    """Both writes require ``reviewed_since_placement != True`` so a concurrent
+    caller that already flipped the flag hits ``modified_count == 0``."""
+    mock_collection.update_one = AsyncMock(side_effect=[_result(0), _result(1)])
+
+    await repo.record_review("decision-abc", datetime(2026, 6, 5, tzinfo=UTC))
+
+    for call in mock_collection.update_one.call_args_list:
+        assert call.args[0]["reviewed_since_placement"] == {"$ne": True}
+
+
+@pytest.mark.asyncio
+async def test_record_review_returns_false_when_race_lost(repo, mock_collection):
+    """Flag already True → neither the fresh nor the fallback write matches →
+    both report ``modified_count == 0`` → return False."""
+    mock_collection.update_one = AsyncMock(side_effect=[_result(0), _result(0)])
+
+    result = await repo.record_review("decision-abc", datetime(2026, 6, 5, tzinfo=UTC))
+
+    assert result is False
+    assert mock_collection.update_one.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_record_review_returns_false_when_document_missing(repo, mock_collection):
+    """Missing decision → both writes match nothing → return False, no upsert."""
+    mock_collection.update_one = AsyncMock(side_effect=[_result(0), _result(0)])
+
+    result = await repo.record_review("nonexistent-id", datetime(2026, 6, 5, tzinfo=UTC))
+
+    assert result is False
+    for call in mock_collection.update_one.call_args_list:
+        assert call.kwargs.get("upsert", False) is False
 
 
 # ── find_review_metadata ──────────────────────────────────────────────────────

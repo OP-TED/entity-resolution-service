@@ -370,3 +370,105 @@ Coverage added:
 - Integration: cluster_size ASC/DESC pagination-across-pages tests (the test
   class that would have caught C1 originally), plus a non-under-fill page-size
   invariant test.
+
+---
+
+## Update — 2026-07-15 — D. `record_review` breaks on Amazon DocumentDB 5.0
+
+Client-reported during the D4 redelivery: curator actions fail against the
+production engine (Amazon DocumentDB 5.0) while passing every test against the
+FerretDB testcontainer. Root cause traced to the `record_review` write
+introduced by TEDSWS-524-2 milestone 1 (commit `dd01ce8`, 2026-06-05).
+
+### D1 — Defect
+
+`MongoDecisionRepository.record_review`
+(`resolution_decision_store/adapters/decision_repository.py`) performs an
+**aggregation-pipeline update** — `update_one(filter, [{"$set": {...}}])` using
+`$cond`, `$ifNull`, `$add`, `$gt`. DocumentDB 5.0 does not support the
+pipeline form of update; the write fails at runtime. The single statement does
+three things atomically:
+
+- increments `previous_review_count` (initialising from absent via `$ifNull`);
+- sets `reviewed_since_placement = True` **iff** `action_created_at >
+  (updated_at ?? created_at)`, else preserves the current value (`$cond`);
+- claims the slot via the filter guard `reviewed_since_placement != True`.
+
+### D2 — Why CI did not catch it (the real failure)
+
+Integration tests run against a **FerretDB** testcontainer; production is
+**Amazon DocumentDB 5.0**. FerretDB *accepts* pipeline updates, DocumentDB
+does not — so the suite is green while production breaks. A2 in this spec was
+marked *"Resolved — proven on the production engine"*, but the "production
+engine" under test was FerretDB, not DocumentDB. The DocumentDB-portable
+operator subset is enforced by human vigilance and inline comments, **not** by
+CI. This is the primary lesson, independent of the code fix.
+
+### D3 — Blast radius (gitnexus, upstream)
+
+**LOW.** `record_review` sits behind the `DecisionRepository` port; the sole
+production caller is `UserActionService._record_or_compensate`, whose entire
+contract is the `bool` return (`True` = slot claimed, `False` = lost race /
+absent doc → compensate + `AlreadyCuratedError`). Also called by
+`scripts/seed_db.py`. The fix must preserve the signature and the `bool`
+semantics exactly; it is internal to the adapter.
+
+### D4 — Semantic simplification (enables a classic-operator fix)
+
+The filter already guarantees `reviewed_since_placement != True`, so the
+`$cond` else-branch (`$ifNull[flag, False]`) **always** evaluates to `False`.
+The new flag value therefore reduces to `action_created_at > (updated_at ??
+created_at)` — a comparison of an app-supplied constant against a stored
+boundary. The counter half is a plain `$inc` (absent → 0 for free). Nothing in
+the operation intrinsically requires a pipeline.
+
+The current design also has a subtlety any fix must preserve: a **stale**
+action (predating the boundary) still increments the counter and returns
+`True`, but does **not** consume the slot (flag stays not-`True`) — only a
+**fresh** action flips the flag and consumes the slot.
+
+### D5 — Data-layer audit (all repository adapters)
+
+Full sweep of every repository adapter's DB interactions confirms
+`record_review` is the **only** DocumentDB incompatibility. Every other
+operation is deliberately written to the portable operator subset, with an
+inline rationale at each decision point:
+
+| Adapter / operation | DocumentDB posture |
+|---|---|
+| `decision_repo._execute_insert/_update` | Flat `$or` stale-guard; explicit note *no nested `$and/$or`, no `$exists:false`* |
+| **`decision_repo.record_review`** | **Aggregation-pipeline update — the sole break** |
+| `decision_repo` read aggs (`$lookup`/`$addFields`/`$ifNull`/`$arrayElemAt`) | Supported |
+| `decision_repo` delta index `partialFilterExpression={updated_at:{$exists:true}}` | `$exists:true`-only — within DocumentDB 5.0 partial-index limits |
+| `cluster_size_index.shift` (`bulk_write` `$inc`/`$set`/`$setOnInsert` + delete-on-zero) | Classic operators |
+| `statistics_repo` distribution (`$group`/`$push`, median/p95 in Python) | Explicit note: dodges `$percentile` (Mongo 7+) |
+| `user_action_repo` keyset pagination (`$or` in `$and`, `count_documents`) | Query-level `$and/$or` nesting is supported |
+| `entity_mention_repo` / `user_repo` search (`$regex`, `$options:i`) | Explicit note: no `$text`/text indexes on DocumentDB |
+| `mongo_client` indexes (plain + `unique`, no text index) | Explicit note |
+
+**Conclusion.** The data layer is DocumentDB-disciplined throughout; this is a
+single isolated lapse, not a systemic problem. `record_review` is also the one
+write that needed a *computed conditional field set*, which is why it reached
+for pipeline-update sugar the rest of the codebase avoids.
+
+### D6 — DB interaction patterns (reference)
+
+1. **Filter-guarded atomic writes** — the precondition lives in the query
+   filter of a single write; `modified_count`/returned-doc decides win/lose
+   (`_execute_update` stale-guard, `record_review` claim-guard, delete-on-zero).
+   The dominant write pattern.
+2. **Monotonic-marker ordering** — latest-wins on `updated_at`.
+3. **Read-time derived projections** — `$lookup`+`$addFields` for `cluster_size`
+   rather than denormalising onto the decision row.
+4. **Python-side compute** to dodge engine-specific aggregation operators.
+5. **Keyset (cursor) pagination** — uniform `(sort_field, _id)` `$or` predicate.
+6. **Portability-first operator choices** — `$regex` over `$text`,
+   `$exists:true`-only, flat `$or`, partial-index filter using only `$exists`.
+
+### D7 — Scope (developer decision, 2026-07-15)
+
+Surgical: fix `record_review` in the adapter + a simple unit test asserting the
+DocumentDB-safe (non-pipeline) write shape and the fresh / stale / lost-race
+behaviour. **No** DocumentDB-in-CI and **no** new E2E in this hotfix; a simple
+test is enough. The FerretDB-vs-DocumentDB CI divergence (D2) is acknowledged
+and left as a follow-up. Fix options are under evaluation and not yet baked in.
