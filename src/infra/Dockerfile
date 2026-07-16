@@ -52,19 +52,19 @@ RUN groupadd --gid 1000 appuser && \
 
 WORKDIR /app
 
-# Core application
-COPY --from=builder /app/.venv .venv
-COPY --from=builder /app/ers ers/
-COPY --from=builder /app/test test/
+# Core application — chown to appuser so non-root process can read
+COPY --from=builder --chown=appuser:appuser /app/.venv .venv
+COPY --from=builder --chown=appuser:appuser /app/ers ers/
+COPY --from=builder --chown=appuser:appuser /app/test test/
 
 # Development extras: seed script (used by entrypoint when SEED_DB=true)
-COPY --from=builder /app/scripts scripts/
+COPY --from=builder --chown=appuser:appuser /app/scripts scripts/
 RUN if [ "$ENVIRONMENT" != "development" ]; then \
       rm -rf scripts; \
     fi
 
 # Container entrypoint
-COPY --chmod=755 src/infra/entrypoint.sh /entrypoint.sh
+COPY --chown=appuser:appuser --chmod=755 src/infra/entrypoint.sh /entrypoint.sh
 
 USER appuser
 

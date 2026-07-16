@@ -3,14 +3,7 @@
 # Runs on push to develop and on PRs targeting develop.
 #
 # Jobs:
-#   1. quality — Install, lint, typecheck, test, architecture, SonarCloud
-#   2. trigger-staging-deploy — on push to develop only, triggers the
-#      Deploy ERSys Staging workflow on enity-resolution-ops via the
-#      GitHub workflow_dispatch API
-#
-# Required secrets:
-#   - SONAR_TOKEN: SonarCloud authentication token
-#   - CI_GH_TOKEN: org-level PAT for cross-repo workflow dispatch
+#   1. quality — Install, lint, typecheck, test, architecture
 
 name: CI
 
@@ -50,7 +43,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U ci_user"
+          --health-cmd "pg_isready -U ci_user -d postgres"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -153,36 +146,3 @@ jobs:
             exit 1
           fi
 
-      # SonarCloud
-      - name: Check for SonarCloud Token
-        id: sonar_check
-        run: |
-          if [ -n "${{ secrets.SONAR_TOKEN }}" ]; then
-            echo "has_token=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_token=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: SonarCloud scan
-        if: always() && steps.sonar_check.outputs.has_token == 'true'
-        uses: SonarSource/sonarqube-scan-action@v7
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-  trigger-staging-deploy:
-    name: Trigger staging deploy
-    needs: quality
-    if: github.event_name == 'push' && github.repository_owner == 'meaningfy-ws'
-    runs-on: ubuntu-latest
-    env:
-      OPS_REPO: meaningfy-ws/enity-resolution-ops
-      DEPLOY_WORKFLOW: deploy-staging.yml
-      DEPLOY_REF: develop
-    steps:
-      - name: Trigger deploy workflow on ops repo
-        run: |
-          curl -sf -X POST \
-            -H "Authorization: token ${{ secrets.CI_GH_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${OPS_REPO}/actions/workflows/${DEPLOY_WORKFLOW}/dispatches" \
-            -d '{"ref":"${{ env.DEPLOY_REF }}","inputs":{"repo":"${{ github.repository }}","sha":"${{ github.sha }}"}}'

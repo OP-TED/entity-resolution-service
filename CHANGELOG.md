@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [unreleased]
 
 
+## [1.1.0-rc.6] - 2026-07-16
+
+### Fixed
+* Faulty healthcheck command in docker compose and CI scripts (TEDSWS-516)
+* Review recording compatibility with Amazon DocumentDB
+
+### Removed
+* SonarCloud integration, as it depended on contractor-specific configuration (TEDSWS-528)
+
+
 ## [1.0.0-rc.2] - 2026-06-30
 
 ### Added
@@ -15,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 * ERSys installation instructions and related documentation improved (TEDSWS-520)
-* Meaningfy-specific references removed from the source code repositories (TEDSWS-528)
+* Contractor-specific references removed from the source code repositories (TEDSWS-528)
 
 ### Fixed
 * Decision status persistence after browser refresh (TEDSWS-512)
@@ -48,7 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 * Seed script: `seed_db` now populates `cluster_sizes` after seeding decisions
 
 ### Changed
-* Removed Meaningfy contact references and attributions from source files, documentation, and licence
+* Removed contractor contact references and attributions from source files, documentation, and licence
 
 ## [1.1.0-rc.2] - 2026-05-15
 ### Added

@@ -139,5 +139,5 @@ summaries, explanations), use this abbreviated checklist:
 ---
 
 *Based on [Clarity Gate v2.1](https://github.com/frmoretto/clarity-gate) by
-Francesco Marinoni Moretto. Adapted for Meaningfy AI-assisted coding workflow.
+Francesco Marinoni Moretto. Adapted for a custom AI-assisted coding workflow.
 License: CC-BY-4.0.*
