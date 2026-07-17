@@ -597,30 +597,33 @@ class MongoDecisionRepository(
     async def record_review(self, decision_id: str, action_created_at: datetime) -> bool:
         """Atomically claim a curator-action slot for the current placement.
 
-        Single ``update_one`` against the decision row using an aggregation-
-        update pipeline. The filter requires ``reviewed_since_placement`` to
-        not already be ``True`` — this is the concurrency guard that makes
-        the call serializable at the database level.
+        Two classic-operator ``update_one`` writes (no aggregation-update
+        pipeline — Amazon DocumentDB 5.0 does not support the pipeline form).
+        Both filters require ``reviewed_since_placement != True``, the
+        concurrency guard that serialises the claim at the database level.
 
-        On a successful claim (filter matched), the write atomically:
+        1. **Fresh path.** When ``action_created_at`` is strictly after the
+           stored placement boundary (``updated_at`` if non-null, else
+           ``created_at``), the first write increments
+           ``previous_review_count`` and sets ``reviewed_since_placement =
+           True`` — consuming the slot. The boundary comparison is encoded in
+           the filter as the same flat ``$or`` used by ``_execute_update``.
+        2. **Fallback path.** When the first write matches nothing, a second
+           write (guarded only by ``$ne: True``) increments the counter without
+           setting the flag. This covers a **stale** action (predates the
+           boundary — delayed/out-of-order delivery): it is still counted and
+           returns ``True``, but does **not** consume the slot, so a later fresh
+           action can still flip the flag. When the flag is already ``True``
+           (lost race) or the document is absent, this write also matches
+           nothing.
 
-        - Increments ``previous_review_count`` (initialising from 0 when the
-          field is absent on legacy documents).
-        - Sets ``reviewed_since_placement = True`` **only** when
-          ``action_created_at`` is strictly after the stored placement boundary
-          (``updated_at`` if non-null, else ``created_at``). When the action
-          predates the current placement (delayed/out-of-order delivery), the
-          flag is preserved at its current value via ``$cond`` — stale actions
-          never regress a flag that the integrator has already reset.
+        On a lost race or missing document, both writes report
+        ``modified_count == 0`` and the method returns ``False``. Callers MUST
+        treat ``False`` as "this placement is already curated" — typically by
+        rolling back the just-saved ``user_action`` row and raising
+        ``AlreadyCuratedError`` at the service layer.
 
-        On a lost race (filter did not match — flag is already ``True``) **or**
-        a missing document, ``modified_count`` is 0 and the method returns
-        ``False``. Callers MUST treat ``False`` as "this placement is already
-        curated" and react accordingly — typically by rolling back the
-        just-saved ``user_action`` row and raising ``AlreadyCuratedError`` at
-        the service layer.
-
-        The filter ``{"$ne": True}`` matches ``false``, ``null``, and absent
+        The guard ``{"$ne": True}`` matches ``false``, ``null``, and absent
         values — covering legacy documents that pre-date the materialisation
         of ``reviewed_since_placement``. No upsert is performed; the action
         save in ``user_actions`` is the canonical write, and the materialised
@@ -629,55 +632,52 @@ class MongoDecisionRepository(
         Args:
             decision_id: The ``_id`` of the decision document to update.
             action_created_at: ``UserAction.created_at`` of the action being
-                recorded. Compared against the stored placement boundary by the
-                aggregation pipeline.
+                recorded. Compared against the stored placement boundary in the
+                fresh-path filter.
 
         Returns:
-            ``True`` iff the slot was claimed (document matched and was
-            updated). ``False`` iff another concurrent caller already claimed
-            this placement's slot, or the decision document does not exist.
+            ``True`` iff the slot was claimed or the action was counted (either
+            write matched). ``False`` iff another concurrent caller already
+            claimed this placement's slot, or the decision document does not
+            exist.
         """
-        result = await self._collection.update_one(
+        # Fresh path: the action is strictly after the placement boundary
+        # (``updated_at`` if present, else ``created_at``). The comparison is
+        # encoded in the filter as the same flat ``$or`` used by
+        # ``_execute_update`` — classic operators only, DocumentDB-safe.
+        fresh = await self._collection.update_one(
+            {
+                "_id": decision_id,
+                _FIELD_REVIEWED_SINCE_PLACEMENT: {"$ne": True},
+                "$or": [
+                    {_FIELD_UPDATED_AT: {"$lt": action_created_at}},
+                    {
+                        _FIELD_UPDATED_AT: None,
+                        _FIELD_CREATED_AT: {"$lt": action_created_at},
+                    },
+                ],
+            },
+            {
+                "$inc": {_FIELD_PREVIOUS_REVIEW_COUNT: 1},
+                "$set": {_FIELD_REVIEWED_SINCE_PLACEMENT: True},
+            },
+        )
+        if fresh.modified_count > 0:
+            return True
+
+        # Fallback path: either the action is stale (predates the boundary) or
+        # the flag is already True (lost race / absent document). The guard
+        # ``$ne: True`` distinguishes them — a stale action is still counted
+        # (counter incremented) without consuming the slot (flag not set); a lost race
+        # matches nothing.
+        stale = await self._collection.update_one(
             {
                 "_id": decision_id,
                 _FIELD_REVIEWED_SINCE_PLACEMENT: {"$ne": True},
             },
-            [
-                {
-                    "$set": {
-                        _FIELD_PREVIOUS_REVIEW_COUNT: {
-                            "$add": [
-                                {"$ifNull": [f"${_FIELD_PREVIOUS_REVIEW_COUNT}", 0]},
-                                1,
-                            ]
-                        },
-                        _FIELD_REVIEWED_SINCE_PLACEMENT: {
-                            "$cond": [
-                                {
-                                    "$gt": [
-                                        action_created_at,
-                                        {
-                                            "$ifNull": [
-                                                f"${_FIELD_UPDATED_AT}",
-                                                f"${_FIELD_CREATED_AT}",
-                                            ]
-                                        },
-                                    ]
-                                },
-                                True,
-                                {
-                                    "$ifNull": [
-                                        f"${_FIELD_REVIEWED_SINCE_PLACEMENT}",
-                                        False,
-                                    ]
-                                },
-                            ]
-                        },
-                    }
-                }
-            ],
+            {"$inc": {_FIELD_PREVIOUS_REVIEW_COUNT: 1}},
         )
-        return result.modified_count > 0
+        return stale.modified_count > 0
 
     async def find_review_metadata(self, decision_ids: list[str]) -> dict[str, ReviewMetadata]:
         """Return materialised review state for the given decision IDs.
