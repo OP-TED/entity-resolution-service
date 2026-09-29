@@ -1,0 +1,23 @@
+@prefix epd: <http://data.europa.eu/a4g/resource/> .
+@prefix epo: <http://data.europa.eu/a4g/ontology#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+epd:id_2023-S-210-663262_Procedure_faF7Q5dyoGpXu3Ru4RGg73 a epo:Procedure ;
+    epo:hasAdditionalInformation "Zadavateli není známo, zda se jedná o malý či střední podnik."@cs ;
+    epo:hasDescription "Předmětem plnění veřejné zakázky na uzavření rámcové dohody, která bude v rámci zadávacího řízení uzavřena na dobu trvání 48 měsíců se šesti účastníky, je poskytování služeb dle zadávací dokumentace a jejích příloh. Na základě rámcové dohody bude zadavatel jejím účastníkům zadávat jednotlivé dílčí zakázky na služby spočívající v provádění stavebního dozoru na stavbách pozemních komunikací, včetně výkonu koordinátora BOZP, včetně související technické pomoci, a to dle aktuálních potřeb zadavatele."@cs ;
+    epo:hasID epd:id_2023-S-210-663262_ProcedureIdentifier_faF7Q5dyoGpXu3Ru4RGg73 ;
+    epo:hasLegalBasis <http://publications.europa.eu/resource/authority/legal-basis/32014L0024> ;
+    epo:hasProcedureType <http://publications.europa.eu/resource/authority/procurement-procedure-type/open> ;
+    epo:hasProcurementScopeDividedIntoLot epd:id_2023-S-210-663262_Lot_DgNm7RuiSQ47VBTvdrHsRv ;
+    epo:hasPurpose epd:id_2023-S-210-663262_ProcedurePurpose_faF7Q5dyoGpXu3Ru4RGg73 ;
+    epo:hasTitle "Rámcová dohoda na výkon stavebního dozoru a koordinátora BOZP pro malé stavby-2022"@cs ;
+    epo:isCoveredByGPA true ;
+    epo:isSubjectToProcedureSpecificTerm epd:id_2023-S-210-663262_FrameworkAgreementTerm_C5nS5y4XErvUqzRNMARW8r ;
+    epo:usesTechnique epd:id_2023-S-210-663262_FrameworkAgreementTechniqueUsage_C5nS5y4XErvUqzRNMARW8r .
+
+epd:id_2023-S-210-663262_ProcedureIdentifier_faF7Q5dyoGpXu3Ru4RGg73 a epo:Identifier;
+  epo:hasIdentifierValue "01PU-005734" .
+
+epd:id_2023-S-210-663262_ProcedurePurpose_faF7Q5dyoGpXu3Ru4RGg73 a epo:Purpose;
+  epo:hasContractNatureType <http://publications.europa.eu/resource/authority/contract-nature/services>;
+  epo:hasMainClassification <http://data.europa.eu/cpv/cpv/71315400> .

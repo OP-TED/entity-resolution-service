@@ -1,0 +1,72 @@
+ARG ENVIRONMENT=production
+
+# =============================================================================
+# Builder stage: install dependencies
+# =============================================================================
+FROM docker.io/library/python:3.14-slim AS builder
+
+ARG ENVIRONMENT
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    POETRY_VERSION=2.3.1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=true \
+    POETRY_NO_INTERACTION=1
+
+RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
+
+WORKDIR /app
+
+COPY src/pyproject.toml src/poetry.lock LICENSE ./
+
+RUN if [ "$ENVIRONMENT" = "development" ]; then \
+      poetry install --no-root; \
+    else \
+      poetry install --no-root --only main; \
+    fi
+
+COPY src/ers ers/
+COPY src/scripts scripts/
+COPY test/ test/
+
+RUN if [ "$ENVIRONMENT" = "development" ]; then \
+      poetry install; \
+    else \
+      poetry install --only main; \
+    fi
+
+
+# =============================================================================
+# Runtime stage: minimal image
+# =============================================================================
+FROM docker.io/library/python:3.14-slim AS runtime
+
+ARG ENVIRONMENT
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:${PATH}"
+
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
+
+WORKDIR /app
+
+# Core application — chown to appuser so non-root process can read
+COPY --from=builder --chown=appuser:appuser /app/.venv .venv
+COPY --from=builder --chown=appuser:appuser /app/ers ers/
+COPY --from=builder --chown=appuser:appuser /app/test test/
+
+# Development extras: seed script (used by entrypoint when SEED_DB=true)
+COPY --from=builder --chown=appuser:appuser /app/scripts scripts/
+RUN if [ "$ENVIRONMENT" != "development" ]; then \
+      rm -rf scripts; \
+    fi
+
+# Container entrypoint
+COPY --chown=appuser:appuser --chmod=755 src/infra/entrypoint.sh /entrypoint.sh
+
+USER appuser
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["curation"]

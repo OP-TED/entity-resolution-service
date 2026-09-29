@@ -1,0 +1,28 @@
+@prefix cccev: <http://data.europa.eu/m8g/> .
+@prefix epd: <http://data.europa.eu/a4g/resource/> .
+@prefix epo: <http://data.europa.eu/a4g/ontology#> .
+@prefix locn: <http://www.w3.org/ns/locn#> .
+@prefix org: <http://www.w3.org/ns/org#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+epd:id_2023-S-210-661238_ReviewerOrganisation_LLhJHMi9mby8ixbkfyGoWj a org:Organization ;
+    epo:hasLegalName "Комисия за защита на конкуренцията"@bg ;
+    epo:hasPrimaryContactPoint epd:id_2023-S-210-661238_ReviewerContactPoint_LLhJHMi9mby8ixbkfyGoWj ;
+    cccev:registeredAddress epd:id_2023-S-210-661238_ReviewerOrganisationAddress_LLhJHMi9mby8ixbkfyGoWj ;
+    owl:sameAs <http://data.europa.eu/a4g/resource/ReviewerOrganisation/2023-S-018-050232/de2507f9-ae25-37c8-809c-0109efe10669>,
+        <http://data.europa.eu/a4g/resource/ReviewerOrganisation/2023-S-049-143077/bdZjimbzCaRXbeYeBmF94j>,
+        <http://data.europa.eu/a4g/resource/ReviewerOrganisation/2023-S-078-233767/bdZjimbzCaRXbeYeBmF94j>,
+        epd:id_2023-S-113-353030_ReviewerOrganisation_bdZjimbzCaRXbeYeBmF94j .
+
+epd:id_2023-S-210-661238_ReviewerContactPoint_LLhJHMi9mby8ixbkfyGoWj a cccev:ContactPoint;
+  epo:hasFax "+359 29807315";
+  epo:hasInternetAddress "http://www.cpc.bg"^^xsd:anyURI;
+  cccev:email "delovodstvo@cpc.bg";
+  cccev:telephone "+359 29356113" .
+
+epd:id_2023-S-210-661238_ReviewerOrganisationAddress_LLhJHMi9mby8ixbkfyGoWj a locn:Address;
+  epo:hasCountryCode <http://publications.europa.eu/resource/authority/country/BGR>;
+  locn:postCode "1000";
+  locn:postName "София";
+  locn:thoroughfare "бул. Витоша № 18" .

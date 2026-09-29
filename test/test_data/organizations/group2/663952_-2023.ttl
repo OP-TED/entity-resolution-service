@@ -1,0 +1,22 @@
+@prefix cccev: <http://data.europa.eu/m8g/> .
+@prefix epd: <http://data.europa.eu/a4g/resource/> .
+@prefix epo: <http://data.europa.eu/a4g/ontology#> .
+@prefix locn: <http://www.w3.org/ns/locn#> .
+@prefix org: <http://www.w3.org/ns/org#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+epd:id_2023-S-210-663952_ReviewerOrganisation_bdZjimbzCaRXbeYeBmF94j a org:Organization ;
+    epo:hasLegalName "tribunal administratif Paris"@fr ;
+    epo:hasPrimaryContactPoint epd:id_2023-S-210-663952_ReviewerContactPoint_bdZjimbzCaRXbeYeBmF94j ;
+    cccev:registeredAddress epd:id_2023-S-210-663952_ReviewerOrganisationAddress_bdZjimbzCaRXbeYeBmF94j ;
+    owl:sameAs <http://data.europa.eu/a4g/resource/ReviewProcedureInformationProviderOrganisation/2023-S-036-105505/eP5uWDhd4iYABCZbaj8dzQ> .
+
+epd:id_2023-S-210-663952_ReviewerContactPoint_bdZjimbzCaRXbeYeBmF94j a cccev:ContactPoint;
+  cccev:email "greffe.ta-paris@juradm.fr";
+  cccev:telephone "+33 144594400" .
+
+epd:id_2023-S-210-663952_ReviewerOrganisationAddress_bdZjimbzCaRXbeYeBmF94j a locn:Address;
+  epo:hasCountryCode <http://publications.europa.eu/resource/authority/country/FRA>;
+  locn:postCode "75181";
+  locn:postName "Paris";
+  locn:thoroughfare "7 rue de Jouy" .

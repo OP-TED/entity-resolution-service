@@ -1,0 +1,615 @@
+# ================================================================
+# Feature:  full_cycle/resolution_cycle.feature (adversarial)
+# Purpose:  Edge-case and malicious input testing for the ERS API.
+#           Each group targets a distinct attack surface or boundary.
+#
+# Prerequisites:
+#   - Full stack running:  make up
+#   - httpyac CLI:  httpyac --env local tests/manual/full_cycle/resolution_cycle_edge_cases.http
+#
+# Expected outcomes are stated per request — look for the comment
+# directly above each ### block.
+#
+# NOTE on file structure: comments and variable definitions for a
+# request must appear AFTER the ### separator but BEFORE the HTTP
+# method line.  Anything placed between a body's closing } and the
+# next ### is sent as part of the HTTP body, breaking JSON parsing.
+# ================================================================
+
+# ================================================================
+# GROUP A — Input Validation Boundary
+# ================================================================
+
+###
+# A1 — whitespace-only source_id
+# Passes Pydantic min_length=1 (length is 1) but is semantically empty.
+# Expected: 400 or stored as " " (reveals whether whitespace is sanitised).
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": " ",
+      "request_id": "mal-a1-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ."
+  }
+}
+
+###
+# A2 — Very long source_id (200 chars shown; extend to 10 000 to stress-test storage)
+# Expected: 200 (no max-length constraint in code) — but worth confirming.
+@a2_source = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{a2_source}}",
+      "request_id": "mal-a2-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ."
+  }
+}
+
+###
+# A3 / A4 — content size boundary (exactly at / 1 byte over 1 048 576 bytes)
+# Moved to resolution_cycle_big_payload.http — requires httpyac to generate
+# the exact-sized body dynamically via a pre-request {{ }} script block.
+
+###
+# A5 — content_type with wrong case: "TEXT/TURTLE"
+# The allowlist uses exact string match {"text/turtle": "turtle"}.
+# Expected: 400 VALIDATION_ERROR
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-a5",
+      "request_id": "mal-a5-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "TEXT/TURTLE",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ."
+  }
+}
+
+###
+# A6 — content_type with media-type parameter: "text/turtle; charset=utf-8"
+# Expected: 400 VALIDATION_ERROR
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-a6",
+      "request_id": "mal-a6-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle; charset=utf-8",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ."
+  }
+}
+
+# ================================================================
+# GROUP B — Invalid / Unsupported Entity Type
+# ================================================================
+
+###
+# B1 — Unknown entity type
+# Expected: 400 PARSING_FAILED
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-b1",
+      "request_id": "mal-b1-req-001",
+      "entity_type": "PERSON"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ."
+  }
+}
+
+###
+# B2 — Lowercase entity type: "organisation" instead of "ORGANISATION"
+# Config keys are uppercase strings; case-sensitive lookup expected.
+# Expected: 400 PARSING_FAILED
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-b2",
+      "request_id": "mal-b2-req-001",
+      "entity_type": "organisation"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ."
+  }
+}
+
+###
+# B3 — Trailing space in entity type: "ORGANISATION "
+# Expected: 400 PARSING_FAILED
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-b3",
+      "request_id": "mal-b3-req-001",
+      "entity_type": "ORGANISATION "
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ."
+  }
+}
+
+# ================================================================
+# GROUP C — Malformed / Adversarial RDF Content
+# ================================================================
+
+###
+# C1 — Syntactically invalid Turtle (missing period, bad prefix)
+# Expected: 400 PARSING_FAILED
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-c1",
+      "request_id": "mal-c1-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "THIS IS NOT VALID TURTLE @@@"
+  }
+}
+
+###
+# C2 — Valid Turtle syntax but empty graph (no triples)
+# Expected: 400 PARSING_FAILED
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-c2",
+      "request_id": "mal-c2-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> ."
+  }
+}
+
+###
+# C3 — XXE injection via application/rdf+xml
+# Attempts to read /etc/passwd via XML external entity.
+# Expected: 400 PARSING_FAILED
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-c3",
+      "request_id": "mal-c3-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "application/rdf+xml",
+    "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:org=\"http://www.w3.org/ns/org#\"><org:Organization rdf:about=\"http://data.europa.eu/a4g/resource/xxe-test\"><org:name>&xxe;</org:name></org:Organization></rdf:RDF>"
+  }
+}
+
+# ================================================================
+# GROUP D — Idempotency Edge Cases
+# ================================================================
+
+###
+# D1a — First submission (establishes the triad)
+# Expected: 200 with canonical_entity_id
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-d1",
+      "request_id": "mal-d1-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ."
+  }
+}
+
+###
+# D1b — Same triad, content differing by exactly 1 character (trailing X)
+# Expected: 422 IDEMPOTENCY_CONFLICT
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-d1",
+      "request_id": "mal-d1-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KGX\" ."
+  }
+}
+
+###
+# D2a — First submission for whitespace-diff test
+# Expected: 200
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-d2",
+      "request_id": "mal-d2-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ."
+  }
+}
+
+###
+# D2b — Same triad, content differs only by trailing whitespace
+# Expected: 422 IDEMPOTENCY_CONFLICT (content stored verbatim, not normalised)
+#           OR 200 if the service normalises whitespace before hash comparison.
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-d2",
+      "request_id": "mal-d2-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" .   "
+  }
+}
+
+# ================================================================
+# GROUP F — Refresh-bulk Boundary
+# ================================================================
+
+###
+# F1 — limit = 0 (violates gt=0 Pydantic constraint)
+# Expected: 400 VALIDATION_ERROR
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "mal-d2",
+  "limit": 0,
+  "continuation_cursor": null
+}
+
+###
+# F2 — limit = -1
+# Expected: 400 VALIDATION_ERROR
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "mal-d2",
+  "limit": -1,
+  "continuation_cursor": null
+}
+
+###
+# F3 — limit = 1001 (violates le=1000 Pydantic constraint)
+# Expected: 400 VALIDATION_ERROR
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "mal-d2",
+  "limit": 1001,
+  "continuation_cursor": null
+}
+
+###
+# F4 — limit = 1 (minimum valid value)
+# Expected: 200 with at most 1 mention in the response
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "mal-d2",
+  "limit": 1,
+  "continuation_cursor": null
+}
+
+###
+# F5 — invalid continuation_cursor (random garbage string)
+# Expected: 400 VALIDATION_ERROR
+POST {{ers_api_url}}/api/{{api_version}}/refresh-bulk HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "mal-d2",
+  "limit": 100,
+  "continuation_cursor": "INVALID_CURSOR_VALUE_xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+}
+
+# ================================================================
+# GROUP G — HTTP Protocol Abuse
+# ================================================================
+
+###
+# G1 — GET /resolve (wrong method — POST required)
+# Expected: 405 Method Not Allowed
+GET {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Accept: application/json
+
+###
+# G2 — POST /lookup (wrong method — GET required)
+# Expected: 405 Method Not Allowed
+POST {{ers_api_url}}/api/{{api_version}}/lookup HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "source_id": "mal-g2",
+  "request_id": "mal-g2-req-001",
+  "entity_type": "ORGANISATION"
+}
+
+
+###
+# G4 — POST /resolve with Content-Type: text/plain (not application/json)
+# Expected: 422 VALIDATION_ERROR
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Accept: application/json
+Content-Type: text/plain
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-g3",
+      "request_id": "mal-g3-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> . \n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n\n\n<http://example.com/e> a org:Organization ; \n    epo:hasLegalName \"Die Fahrd Schulbusse Sonnenschein GmbH\" .   "
+  }
+}
+
+
+###
+# G5 — Valid JSON body but completely wrong structure
+# Expected: 422 VALIDATION_ERROR (missing required "mention" field)
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "foo": "bar",
+  "baz": 42
+}
+
+###
+# G6 — Extra unknown fields alongside the valid structure
+# Pydantic v2 ignores extra fields by default.
+# Expected: 2xx (extra fields silently ignored)
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-g6",
+      "request_id": "mal-g6-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ."
+  },
+  "injected_field": "should_be_ignored",
+  "admin": true
+}
+
+# ================================================================
+# GROUP H — RDF Serialization Formats
+# All requests carry semantically equivalent content for the same
+# entity (Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG).
+# ================================================================
+
+###
+# H1 — text/turtle (reference — in allowlist)
+# Expected: 200
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-h1",
+      "request_id": "mal-h1-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix cccev: <http://data.europa.eu/m8g/> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix locn: <http://www.w3.org/ns/locn#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ;\n    cccev:registeredAddress [\n        epo:hasCountryCode \"DEU\" ;\n        epo:hasNutsCode \"DE942\" ;\n        locn:postCode \"27751\" ;\n        locn:postName \"Delmenhorst\" ;\n        locn:thoroughfare \"Nordenhamer Str. 65\"\n    ] ."
+  }
+}
+
+###
+# H2 — application/rdf+xml (in allowlist)
+# Expected: 200
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-h2",
+      "request_id": "mal-h2-req-002",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "application/rdf+xml",
+    "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"\n         xmlns:org=\"http://www.w3.org/ns/org#\"\n         xmlns:epo=\"http://data.europa.eu/a4g/ontology#\"\n         xmlns:cccev=\"http://data.europa.eu/m8g/\"\n         xmlns:locn=\"http://www.w3.org/ns/locn#\">\n  <org:Organization rdf:about=\"http://data.europa.eu/a4g/resource/entd000062\">\n    <epo:hasLegalName>Die Fahrdienste Schulbusse Sonnenschein GmbH &amp; Co.KG</epo:hasLegalName>\n    <cccev:registeredAddress>\n      <rdf:Description>\n        <epo:hasCountryCode>DEU</epo:hasCountryCode>\n        <epo:hasNutsCode>DE942</epo:hasNutsCode>\n        <locn:postCode>27751</locn:postCode>\n        <locn:postName>Delmenhorst</locn:postName>\n        <locn:thoroughfare>Nordenhamer Str. 65</locn:thoroughfare>\n      </rdf:Description>\n    </cccev:registeredAddress>\n  </org:Organization>\n</rdf:RDF>"
+  }
+}
+
+###
+# H3 — application/ld+json  (JSON-LD — RDF serialisation, NOT in allowlist)
+# Expected: 400 VALIDATION_ERROR
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-h3",
+      "request_id": "mal-h3-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "application/ld+json",
+    "content": "{\"@context\": {\"org\": \"http://www.w3.org/ns/org#\", \"epo\": \"http://data.europa.eu/a4g/ontology#\", \"cccev\": \"http://data.europa.eu/m8g/\", \"locn\": \"http://www.w3.org/ns/locn#\"}, \"@id\": \"http://data.europa.eu/a4g/resource/entd000062\", \"@type\": \"org:Organization\", \"epo:hasLegalName\": \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\", \"cccev:registeredAddress\": {\"epo:hasCountryCode\": \"DEU\", \"epo:hasNutsCode\": \"DE942\", \"locn:postCode\": \"27751\", \"locn:postName\": \"Delmenhorst\", \"locn:thoroughfare\": \"Nordenhamer Str. 65\"}}"
+  }
+}
+
+###
+# H4 — text/n3  (Notation3 — RDF superset of Turtle, NOT in allowlist)
+# Expected: 400 VALIDATION_ERROR
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-h4",
+      "request_id": "mal-h4-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/n3",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix cccev: <http://data.europa.eu/m8g/> .\n@prefix locn: <http://www.w3.org/ns/locn#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" ;\n    cccev:registeredAddress [ epo:hasCountryCode \"DEU\" ; locn:postName \"Delmenhorst\" ] ."
+  }
+}
+
+###
+# H5 — application/n-triples  (N-Triples — RDF, NOT in allowlist)
+# Expected: 400 UnsupportedContentTypeError
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-h5",
+      "request_id": "mal-h5-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "application/n-triples",
+    "content": "<http://data.europa.eu/a4g/resource/entd000062> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/org#Organization> .\n<http://data.europa.eu/a4g/resource/entd000062> <http://data.europa.eu/a4g/ontology#hasLegalName> \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" .\n_:b0 <http://data.europa.eu/a4g/ontology#hasCountryCode> \"DEU\" .\n_:b0 <http://www.w3.org/ns/locn#postName> \"Delmenhorst\" .\n<http://data.europa.eu/a4g/resource/entd000062> <http://data.europa.eu/m8g/registeredAddress> _:b0 ."
+  }
+}
+
+###
+# H6 — application/trig  (TriG — named graphs extension of Turtle, NOT in allowlist)
+# Expected: 400 UnsupportedContentTypeError
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-h6",
+      "request_id": "mal-h6-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "application/trig",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\n<http://data.europa.eu/a4g/resource/graph1> {\n  epd:entd000062 a org:Organization ;\n    epo:hasLegalName \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\" .\n}"
+  }
+}
+
+###
+# H7 — application/json  (plain JSON — NOT RDF)
+# Expected: 400 UnsupportedContentTypeError
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-h7",
+      "request_id": "mal-h7-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "application/json",
+    "content": "{\"id\": \"entd000062\", \"type\": \"Organization\", \"legalName\": \"Die Fahrdienste Schulbusse Sonnenschein GmbH & Co.KG\", \"registeredAddress\": {\"countryCode\": \"DEU\", \"nutsCode\": \"DE942\", \"postCode\": \"27751\", \"city\": \"Delmenhorst\", \"street\": \"Nordenhamer Str. 65\"}}"
+  }
+}
+
+###
+# H8 — application/xml  (plain XML — NOT RDF/XML)
+# Expected: 400 UnsupportedContentTypeError
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "mal-h8",
+      "request_id": "mal-h8-req-001",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "application/xml",
+    "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Organization><id>entd000062</id><legalName>Die Fahrdienste Schulbusse Sonnenschein GmbH &amp; Co.KG</legalName><registeredAddress><countryCode>DEU</countryCode><nutsCode>DE942</nutsCode><postCode>27751</postCode><city>Delmenhorst</city><street>Nordenhamer Str. 65</street></registeredAddress></Organization>"
+  }
+}

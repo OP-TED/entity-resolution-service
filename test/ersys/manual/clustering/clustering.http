@@ -1,0 +1,214 @@
+# ================================================================
+# Feature:  clustering/clustering
+# Purpose:  Demonstrate 2-cluster formation from the org-tiny dataset
+# (distributed with ere-basic: https://github.com/OP-TED/entity-resolution-engine-basic/blob/develop/demo/data/org-tiny.json).
+#           6 mentions across 2 countries resolve into exactly 2 clusters.
+#           Blocking rule prevents cross-country candidate generation.
+#
+# Prerequisites:
+#   - Full stack running:  make up
+#   - Environment active:  local  (Ctrl+Alt+E in VS Code)
+#   - httpyac CLI:         httpyac --env local tests/manual/clustering/clustering.http
+#
+# Data:  repos/entity-resolution-engine-basic/demo/data/org-tiny.json
+#        "TED organizations - tiny dataset"
+#        2 countries (DEU / FRA), 6 mentions, expected 2 clusters
+#
+# Note on re-runs:
+#   The ERSys resolution API is idempotent per (source_id, request_id, entity_type) triad.
+#   To start fresh, change @cluster_source below or wipe state with:
+#   make down-volumes && make up
+#
+# Scenarios covered:
+#   1. Submit  — POST all 6 mentions for resolution
+#   2. Verify  — GET lookup for each; confirm cluster convergence
+#                Expected: m1/m2/m5 → cluster A (DEU),  m3/m4/m6 → cluster B (FRA)
+# ================================================================
+
+
+# ================================================================
+# SCENARIO 1 — Submit all 6 mentions for resolution
+#
+# Steps:
+#   1.1  POST /resolve  m1 — Stadt Osnabrück                              (DEU, seed of cluster A)
+#   1.2  POST /resolve  m2 — Stadt Osnabrück — Fachdienst Öffentliche Aufträge  (DEU, JW~0.82 vs m1)
+#   1.3  POST /resolve  m3 — Conseil départemental Haute-Garonne          (FRA, seed of cluster B)
+#   1.4  POST /resolve  m4 — Conseil départemental Haute-Garonne Service Public (FRA, JW~0.88 vs m3)
+#   1.5  POST /resolve  m5 — Stadt Osnabrück, Zentrale                    (DEU, JW~0.89 vs m2)
+#   1.6  POST /resolve  m6 — Conseil Haute-Garonne                        (FRA, JW~0.78 vs m3/m4)
+# ================================================================
+
+@cluster_source = demo-org-tiny
+
+
+### 1.1 — Submit m1: Stadt Osnabrück (seed of DEU cluster)
+# @name m1_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{cluster_source}}",
+      "request_id": "m1",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix cccev: <http://data.europa.eu/m8g/> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix locn: <http://www.w3.org/ns/locn#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:m1 a org:Organization ;\n    epo:hasLegalName \"Stadt Osnabrück\" ;\n    cccev:registeredAddress [\n        epo:hasCountryCode \"DEU\" ;\n        epo:hasNutsCode \"DE944\" ;\n        locn:postCode \"49074\" ;\n        locn:postName \"Osnabrück\" ;\n        locn:thoroughfare \"Krahnstraße 10\"\n    ] .",
+    "context": "demo-org-tiny"
+  }
+}
+
+
+### 1.2 — Submit m2: Stadt Osnabrück — Fachdienst Öffentliche Aufträge (JW~0.82 vs m1, same cluster expected)
+# @name m2_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{cluster_source}}",
+      "request_id": "m2",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix cccev: <http://data.europa.eu/m8g/> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix locn: <http://www.w3.org/ns/locn#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:m2 a org:Organization ;\n    epo:hasLegalName \"Stadt Osnabrück — Fachdienst Öffentliche Aufträge\" ;\n    cccev:registeredAddress [\n        epo:hasCountryCode \"DEU\" ;\n        epo:hasNutsCode \"DE944\" ;\n        locn:postCode \"49074\" ;\n        locn:postName \"Osnabrück\" ;\n        locn:thoroughfare \"Krahnstraße 10\"\n    ] .",
+    "context": "demo-org-tiny"
+  }
+}
+
+
+### 1.3 — Submit m3: Conseil départemental Haute-Garonne (seed of FRA cluster)
+# @name m3_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{cluster_source}}",
+      "request_id": "m3",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix cccev: <http://data.europa.eu/m8g/> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix locn: <http://www.w3.org/ns/locn#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:m3 a org:Organization ;\n    epo:hasLegalName \"Conseil départemental Haute-Garonne\" ;\n    cccev:registeredAddress [\n        epo:hasCountryCode \"FRA\" ;\n        epo:hasNutsCode \"FRJ23\" ;\n        locn:postCode \"31090\" ;\n        locn:postName \"Toulouse\" ;\n        locn:thoroughfare \"Boulevard de Strasbourg\"\n    ] .",
+    "context": "demo-org-tiny"
+  }
+}
+
+
+### 1.4 — Submit m4: Conseil départemental Haute-Garonne Service Public (JW~0.88 vs m3, same cluster expected)
+# @name m4_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{cluster_source}}",
+      "request_id": "m4",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix cccev: <http://data.europa.eu/m8g/> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix locn: <http://www.w3.org/ns/locn#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:m4 a org:Organization ;\n    epo:hasLegalName \"Conseil départemental Haute-Garonne Service Public\" ;\n    cccev:registeredAddress [\n        epo:hasCountryCode \"FRA\" ;\n        epo:hasNutsCode \"FRJ23\" ;\n        locn:postCode \"31090\" ;\n        locn:postName \"Toulouse\" ;\n        locn:thoroughfare \"Boulevard de Strasbourg\"\n    ] .",
+    "context": "demo-org-tiny"
+  }
+}
+
+
+### 1.5 — Submit m5: Stadt Osnabrück, Zentrale (JW~0.89 vs m2, extends DEU cluster)
+# @name m5_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{cluster_source}}",
+      "request_id": "m5",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix cccev: <http://data.europa.eu/m8g/> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix locn: <http://www.w3.org/ns/locn#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:m5 a org:Organization ;\n    epo:hasLegalName \"Stadt Osnabrück, Zentrale\" ;\n    cccev:registeredAddress [\n        epo:hasCountryCode \"DEU\" ;\n        epo:hasNutsCode \"DE944\" ;\n        locn:postCode \"49074\" ;\n        locn:postName \"Osnabrück\" ;\n        locn:thoroughfare \"Krahnstraße 10\"\n    ] .",
+    "context": "demo-org-tiny"
+  }
+}
+
+
+### 1.6 — Submit m6: Conseil Haute-Garonne (JW~0.78 vs m3/m4, extends FRA cluster)
+# @name m6_resolve
+POST {{ers_api_url}}/api/{{api_version}}/resolve HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+
+{
+  "mention": {
+    "identifiedBy": {
+      "source_id": "{{cluster_source}}",
+      "request_id": "m6",
+      "entity_type": "ORGANISATION"
+    },
+    "content_type": "text/turtle",
+    "content": "@prefix org: <http://www.w3.org/ns/org#> .\n@prefix cccev: <http://data.europa.eu/m8g/> .\n@prefix epo: <http://data.europa.eu/a4g/ontology#> .\n@prefix locn: <http://www.w3.org/ns/locn#> .\n@prefix epd: <http://data.europa.eu/a4g/resource/> .\n\nepd:m6 a org:Organization ;\n    epo:hasLegalName \"Conseil Haute-Garonne\" ;\n    cccev:registeredAddress [\n        epo:hasCountryCode \"FRA\" ;\n        epo:hasNutsCode \"FRJ23\" ;\n        locn:postCode \"31090\" ;\n        locn:postName \"Toulouse\" ;\n        locn:thoroughfare \"Boulevard de Strasbourg\"\n    ] .",
+    "context": "demo-org-tiny"
+  }
+}
+
+
+
+# ================================================================
+# SCENARIO 2 — Verify cluster convergence
+#
+# Steps:
+#   2.1  GET /lookup  m1  → cluster_id == cluster_A  (DEU cluster)
+#   2.2  GET /lookup  m2  → cluster_id == cluster_A
+#   2.3  GET /lookup  m5  → cluster_id == cluster_A
+#   2.4  GET /lookup  m3  → cluster_id == cluster_B  (FRA cluster, different from A)
+#   2.5  GET /lookup  m4  → cluster_id == cluster_B
+#   2.6  GET /lookup  m6  → cluster_id == cluster_B
+#
+# Expected:
+#   - m1, m2, m5 share the same cluster_id  (Cluster A — DEU)
+#   - m3, m4, m6 share the same cluster_id  (Cluster B — FRA)
+#   - cluster_A ≠ cluster_B
+# ================================================================
+
+### 2.1 — Lookup m1 (expect: DEU cluster_id)
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{cluster_source}}&request_id=m1&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+### 2.2 — Lookup m2 (expect: same cluster_id as m1)
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{cluster_source}}&request_id=m2&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+### 2.3 — Lookup m5 (expect: same cluster_id as m1 and m2)
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{cluster_source}}&request_id=m5&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+### 2.4 — Lookup m3 (expect: FRA cluster_id, different from m1/m2/m5)
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{cluster_source}}&request_id=m3&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+### 2.5 — Lookup m4 (expect: same cluster_id as m3)
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{cluster_source}}&request_id=m4&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+### 2.6 — Lookup m6 (expect: same cluster_id as m3 and m4)
+GET {{ers_api_url}}/api/{{api_version}}/lookup?source_id={{cluster_source}}&request_id=m6&entity_type=ORGANISATION HTTP/1.1
+Accept: application/json
+
+
+# ================================================================
+# Expected lookup response structure: the six mentions are grouped
+# into two clusters.

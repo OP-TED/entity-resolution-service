@@ -1,0 +1,17 @@
+@prefix epd: <http://data.europa.eu/a4g/resource/> .
+@prefix epo: <http://data.europa.eu/a4g/ontology#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+epd:id_2023-S-210-664733_Procedure_faF7Q5dyoGpXu3Ru4RGg73 a epo:Procedure ;
+    epo:hasDescription "Servicii de exploatare forestiera"@ro ;
+    epo:hasID epd:id_2023-S-210-664733_ProcedureIdentifier_faF7Q5dyoGpXu3Ru4RGg73 ;
+    epo:hasLegalBasis <http://publications.europa.eu/resource/authority/legal-basis/32014L0024> ;
+    epo:hasProcedureType <http://publications.europa.eu/resource/authority/procurement-procedure-type/neg-wo-call> ;
+    epo:hasProcurementScopeDividedIntoLot epd:id_2023-S-210-664733_Lot_DgNm7RuiSQ47VBTvdrHsRv ;
+    epo:hasPurpose epd:id_2023-S-210-664733_ProcedurePurpose_faF7Q5dyoGpXu3Ru4RGg73 ;
+    epo:hasTitle "Servicii de exploatare forestiera Negociere 10 - 2023 dssv"@ro ;
+    epo:isCoveredByGPA false ;
+    epo:isSubjectToProcedureSpecificTerm epd:id_2023-S-210-664733_DirectAwardTerm_C5nS5y4XErvUqzRNMARW8r .
+
+epd:id_2023-S-210-664733_ContractIdentifier_Q2stfyFrZKsVi566NWBwe8 a epo:Identifier;
+  epo:hasIdentifierValue "26623" .

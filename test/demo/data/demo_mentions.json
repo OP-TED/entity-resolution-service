@@ -1,0 +1,78 @@
+{
+  "name": "ERE demo — 6 synthetic organisations, 2 cluster groups",
+  "description": "Group 1 (demo-org-1..3): German district authority variants (Landratsamt Regensburg with department suffixes) — should cluster together. Group 2 (demo-org-4..6): French regional council variants — should form a separate cluster. Both groups share country-level blocking, so cross-group candidates are suppressed.",
+  "mentions": [
+    {
+      "request_id": "demo-org-1",
+      "source_id": "demo-source-001",
+      "entity_type": "ORGANISATION",
+      "legal_name": "Landratsamt Regensburg — Bürgeramt",
+      "country_code": "DEU",
+      "nuts_code": "DE232",
+      "post_code": "93047",
+      "post_name": "Regensburg",
+      "thoroughfare": "Altmühlstraße 3",
+      "description": "Group 1 — Same authority, citizen services department (JW~0.94 with demo-org-2)"
+    },
+    {
+      "request_id": "demo-org-2",
+      "source_id": "demo-source-001",
+      "entity_type": "ORGANISATION",
+      "legal_name": "Landratsamt Regensburg — Vergabeamt",
+      "country_code": "DEU",
+      "nuts_code": "DE232",
+      "post_code": "93047",
+      "post_name": "Regensburg",
+      "thoroughfare": "Altmühlstraße 3",
+      "description": "Group 1 — Same authority with procurement department suffix (JW~0.83)"
+    },
+    {
+      "request_id": "demo-org-3",
+      "source_id": "demo-source-001",
+      "entity_type": "ORGANISATION",
+      "legal_name": "Landratsamt Regensburg, Hauptamt",
+      "country_code": "DEU",
+      "nuts_code": "DE232",
+      "post_code": "93047",
+      "post_name": "Regensburg",
+      "thoroughfare": "Altmühlstraße 3",
+      "description": "Group 1 — Same authority with main office suffix (JW~0.87)"
+    },
+    {
+      "request_id": "demo-org-4",
+      "source_id": "demo-source-001",
+      "entity_type": "ORGANISATION",
+      "legal_name": "Département de la Gironde",
+      "country_code": "FRA",
+      "nuts_code": "FRI12",
+      "post_code": "33000",
+      "post_name": "Bordeaux",
+      "thoroughfare": "Esplanade Charles de Gaulle",
+      "description": "Group 2 — French département authority, initial mention"
+    },
+    {
+      "request_id": "demo-org-5",
+      "source_id": "demo-source-001",
+      "entity_type": "ORGANISATION",
+      "legal_name": "Département de la Gironde — Services Marchés",
+      "country_code": "FRA",
+      "nuts_code": "FRI12",
+      "post_code": "33000",
+      "post_name": "Bordeaux",
+      "thoroughfare": "Esplanade Charles de Gaulle",
+      "description": "Group 2 — Same authority with procurement service suffix (JW~0.82)"
+    },
+    {
+      "request_id": "demo-org-6",
+      "source_id": "demo-source-001",
+      "entity_type": "ORGANISATION",
+      "legal_name": "Conseil de la Gironde",
+      "country_code": "FRA",
+      "nuts_code": "FRI12",
+      "post_code": "33000",
+      "post_name": "Bordeaux",
+      "thoroughfare": "Esplanade Charles de Gaulle",
+      "description": "Group 2 — Alternative naming for same entity (JW~0.78)"
+    }
+  ]
+}
