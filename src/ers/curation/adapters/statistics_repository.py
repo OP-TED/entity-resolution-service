@@ -161,17 +161,29 @@ class MongoStatisticsRepository(StatisticsRepository):
         if filters.entity_type is not None:
             decision_filter["about_entity_mention.entity_type"] = filters.entity_type
 
-        distinct_clusters = await self._decisions.distinct(
-            "current_placement.cluster_id",
-            decision_filter,
+        cluster_pipeline: list[dict] = []
+        if decision_filter:
+            cluster_pipeline.append({"$match": decision_filter})
+        cluster_pipeline.extend(
+            [
+                {"$group": {"_id": "$current_placement.cluster_id"}},
+                {"$count": "count"},
+            ]
         )
-        total_canonical_entities = len(distinct_clusters)
+        cluster_counts = await (await self._decisions.aggregate(cluster_pipeline)).to_list()
+        total_canonical_entities = cluster_counts[0]["count"] if cluster_counts else 0
 
-        distinct_requests = await self._resolution_requests.distinct(
-            "identifiedBy.request_id",
-            entity_filter,
+        request_pipeline: list[dict] = []
+        if entity_filter:
+            request_pipeline.append({"$match": entity_filter})
+        request_pipeline.extend(
+            [
+                {"$group": {"_id": "$identifiedBy.request_id"}},
+                {"$count": "count"},
+            ]
         )
-        resolution_requests = len(distinct_requests)
+        request_counts = await (await self._resolution_requests.aggregate(request_pipeline)).to_list()
+        resolution_requests = request_counts[0]["count"] if request_counts else 0
 
         avg, median, p95, size_max, singletons = await self._get_cluster_distribution()
 
