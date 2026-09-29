@@ -200,8 +200,41 @@ class TestGetRegistryStatistics:
         resolution_requests: int = 10,
     ) -> None:
         requests_col.count_documents.return_value = total_mentions
-        decisions_col.distinct.return_value = distinct_clusters or []
-        requests_col.distinct.return_value = [f"r{i}" for i in range(resolution_requests)]
+        decisions_col.aggregate.return_value = _MockAsyncAggregationCursor(
+            [{"count": len(distinct_clusters or [])}]
+        )
+        requests_col.aggregate.return_value = _MockAsyncAggregationCursor(
+            [{"count": resolution_requests}]
+        )
+
+    async def test_uses_aggregation_for_distinct_counts_with_entity_filter(self):
+        repo, decisions_col, _, requests_col, cluster_sizes_col = _make_repo()
+        self._setup_decisions_and_requests(
+            decisions_col,
+            requests_col,
+            distinct_clusters=["c1", "c2"],
+            resolution_requests=3,
+        )
+        self._setup_cluster_sizes_col(cluster_sizes_col, [1, 2, 3])
+
+        await repo.get_registry_statistics(StatisticsFilters(entity_type="ORGANISATION"))
+
+        decisions_col.aggregate.assert_awaited_once_with(
+            [
+                {"$match": {"about_entity_mention.entity_type": "ORGANISATION"}},
+                {"$group": {"_id": "$current_placement.cluster_id"}},
+                {"$count": "count"},
+            ]
+        )
+        requests_col.aggregate.assert_awaited_once_with(
+            [
+                {"$match": {"identifiedBy.entity_type": "ORGANISATION"}},
+                {"$group": {"_id": "$identifiedBy.request_id"}},
+                {"$count": "count"},
+            ]
+        )
+        decisions_col.distinct.assert_not_awaited()
+        requests_col.distinct.assert_not_awaited()
 
     async def test_no_filters(self):
         repo, decisions_col, _, requests_col, cluster_sizes_col = _make_repo()
@@ -233,8 +266,13 @@ class TestGetRegistryStatistics:
         # cluster_sizes_col must be queried for distribution stats
         cluster_sizes_col.count_documents.assert_awaited_once()
         cluster_sizes_col.aggregate.assert_called_once()
-        # decisions collection must NOT be used for distribution (only distinct clusters)
-        decisions_col.aggregate.assert_not_called()
+        # The decisions collection is used for canonical entity counts, not distribution.
+        decisions_col.aggregate.assert_awaited_once_with(
+            [
+                {"$group": {"_id": "$current_placement.cluster_id"}},
+                {"$count": "count"},
+            ]
+        )
 
     async def test_all_singletons(self):
         """All-singleton registry: [1, 1, 1, 1]."""
@@ -293,8 +331,8 @@ class TestGetRegistryStatistics:
         """Empty cluster_sizes collection → all distribution fields are zero."""
         repo, decisions_col, _, requests_col, cluster_sizes_col = _make_repo()
         requests_col.count_documents.return_value = 0
-        decisions_col.distinct.return_value = []
-        requests_col.distinct.return_value = []
+        decisions_col.aggregate.return_value = _MockAsyncAggregationCursor([])
+        requests_col.aggregate.return_value = _MockAsyncAggregationCursor([])
         # Empty cluster_sizes: reuse helper with empty list
         self._setup_cluster_sizes_col(cluster_sizes_col, [])
 
